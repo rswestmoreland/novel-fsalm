@@ -135,7 +135,11 @@ pub fn build_markov_trace_tokens_v1(
     let mut out: Vec<MarkovTokenV1> = Vec::with_capacity(
         plan.items.len()
             + if did_append_q { 1 } else { 0 }
-            + if opener_preface_choice.is_some() { 1 } else { 0 },
+            + if opener_preface_choice.is_some() {
+                1
+            } else {
+                0
+            },
     );
 
     if let Some(cid) = opener_preface_choice {

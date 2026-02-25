@@ -19,18 +19,18 @@
 //! - meta_codes are reserved for later stages and are empty in v1.
 
 use crate::artifact::ArtifactStore;
+use crate::cache::Cache2Q;
 use crate::evidence_bundle::{
     EvidenceBundleV1, EvidenceItemDataV1, EvidenceItemV1, EvidenceLimitsV1, FrameRowRefV1,
     FrameRowSketchV1, TermTfV1,
 };
 use crate::frame::FrameRowV1;
-use crate::cache::Cache2Q;
 use crate::frame_segment::FrameSegmentV1;
 use crate::frame_store::{get_frame_segment_v1, get_frame_segment_v1_cached, FrameStoreError};
-use std::sync::Arc;
 use crate::hash::Hash32;
 use crate::index_query::SearchHit;
 use crate::retrieval_control::RetrievalControlV1;
+use std::sync::Arc;
 
 /// Byte size of the fixed EvidenceBundleV1 header.
 ///
@@ -56,7 +56,11 @@ pub struct EvidenceSketchCfgV1 {
 impl EvidenceSketchCfgV1 {
     /// Conservative default sketch configuration.
     pub fn new() -> EvidenceSketchCfgV1 {
-        EvidenceSketchCfgV1 { enable: true, max_terms: 16, max_entities: 16 }
+        EvidenceSketchCfgV1 {
+            enable: true,
+            max_terms: 16,
+            max_entities: 16,
+        }
     }
 }
 
@@ -141,7 +145,11 @@ pub fn build_evidence_bundle_v1_from_hits<S: ArtifactStore>(
     // Pass 1: normalize to unique (segment_id, row_ix) keeping the highest score.
     let mut flat: Vec<(Hash32, u32, i64)> = Vec::with_capacity(hits.len());
     for h in hits.iter() {
-        let score_i64 = if h.score > (i64::MAX as u64) { i64::MAX } else { h.score as i64 };
+        let score_i64 = if h.score > (i64::MAX as u64) {
+            i64::MAX
+        } else {
+            h.score as i64
+        };
         flat.push((h.frame_seg, h.row_ix, score_i64));
     }
 
@@ -170,13 +178,19 @@ pub fn build_evidence_bundle_v1_from_hits<S: ArtifactStore>(
         last_key = Some(key);
         items.push(EvidenceItemV1 {
             score,
-            data: EvidenceItemDataV1::Frame(FrameRowRefV1 { segment_id: seg, row_ix, sketch: None }),
+            data: EvidenceItemDataV1::Frame(FrameRowRefV1 {
+                segment_id: seg,
+                row_ix,
+                sketch: None,
+            }),
         });
     }
 
     let mut bundle = EvidenceBundleV1::new(query_id, snapshot_id, limits, score_model_id);
     bundle.items = items;
-    bundle.canonicalize_in_place().map_err(|e| EvidenceBuildError::Store(e.to_string()))?;
+    bundle
+        .canonicalize_in_place()
+        .map_err(|e| EvidenceBuildError::Store(e.to_string()))?;
 
     if bundle.limits.max_items != 0 && bundle.items.len() > (bundle.limits.max_items as usize) {
         bundle.items.truncate(bundle.limits.max_items as usize);
@@ -185,7 +199,9 @@ pub fn build_evidence_bundle_v1_from_hits<S: ArtifactStore>(
     // Pass 2: verify references and optionally attach sketches.
     if cfg.verify_refs || cfg.sketch.enable {
         attach_sketches_and_verify(store, &mut bundle, cfg)?;
-        bundle.canonicalize_in_place().map_err(|e| EvidenceBuildError::Store(e.to_string()))?;
+        bundle
+            .canonicalize_in_place()
+            .map_err(|e| EvidenceBuildError::Store(e.to_string()))?;
     }
 
     Ok(bundle)
@@ -234,7 +250,15 @@ pub fn build_evidence_bundle_v1_from_hits_with_control<S: ArtifactStore>(
     control: Option<&RetrievalControlV1>,
 ) -> Result<EvidenceBundleV1, EvidenceBuildError> {
     let _ = control;
-    build_evidence_bundle_v1_from_hits(store, query_id, snapshot_id, limits, score_model_id, hits, cfg)
+    build_evidence_bundle_v1_from_hits(
+        store,
+        query_id,
+        snapshot_id,
+        limits,
+        score_model_id,
+        hits,
+        cfg,
+    )
 }
 
 /// Build a canonical EvidenceBundleV1 from ranked SearchHits, using a warm FrameSegment cache.
@@ -271,7 +295,11 @@ pub fn build_evidence_bundle_v1_from_hits_cached<S: ArtifactStore>(
     // Pass 1: normalize to unique (segment_id, row_ix) keeping the highest score.
     let mut flat: Vec<(Hash32, u32, i64)> = Vec::with_capacity(hits.len());
     for h in hits.iter() {
-        let score_i64 = if h.score > (i64::MAX as u64) { i64::MAX } else { h.score as i64 };
+        let score_i64 = if h.score > (i64::MAX as u64) {
+            i64::MAX
+        } else {
+            h.score as i64
+        };
         flat.push((h.frame_seg, h.row_ix, score_i64));
     }
 
@@ -300,13 +328,19 @@ pub fn build_evidence_bundle_v1_from_hits_cached<S: ArtifactStore>(
         last_key = Some(key);
         items.push(EvidenceItemV1 {
             score,
-            data: EvidenceItemDataV1::Frame(FrameRowRefV1 { segment_id: seg, row_ix, sketch: None }),
+            data: EvidenceItemDataV1::Frame(FrameRowRefV1 {
+                segment_id: seg,
+                row_ix,
+                sketch: None,
+            }),
         });
     }
 
     let mut bundle = EvidenceBundleV1::new(query_id, snapshot_id, limits, score_model_id);
     bundle.items = items;
-    bundle.canonicalize_in_place().map_err(|e| EvidenceBuildError::Store(e.to_string()))?;
+    bundle
+        .canonicalize_in_place()
+        .map_err(|e| EvidenceBuildError::Store(e.to_string()))?;
 
     if bundle.limits.max_items != 0 && bundle.items.len() > (bundle.limits.max_items as usize) {
         bundle.items.truncate(bundle.limits.max_items as usize);
@@ -315,12 +349,13 @@ pub fn build_evidence_bundle_v1_from_hits_cached<S: ArtifactStore>(
     // Pass 2: verify references and optionally attach sketches.
     if cfg.verify_refs || cfg.sketch.enable {
         attach_sketches_and_verify_cached(store, frame_cache, &mut bundle, cfg)?;
-        bundle.canonicalize_in_place().map_err(|e| EvidenceBuildError::Store(e.to_string()))?;
+        bundle
+            .canonicalize_in_place()
+            .map_err(|e| EvidenceBuildError::Store(e.to_string()))?;
     }
 
     Ok(bundle)
 }
-
 
 fn attach_sketches_and_verify<S: ArtifactStore>(
     store: &S,
@@ -443,7 +478,6 @@ fn get_or_load_segment_cached<'a, S: ArtifactStore>(
     Ok(local[idx].1.as_ref())
 }
 
-
 fn get_or_load_segment<'a, S: ArtifactStore>(
     store: &S,
     cache: &'a mut Vec<(Hash32, crate::frame_segment::FrameSegmentV1)>,
@@ -464,7 +498,6 @@ fn get_or_load_segment<'a, S: ArtifactStore>(
     Ok(&cache[idx].1)
 }
 
-
 fn fold_u64_to_u32(x: u64) -> u32 {
     (x as u32) ^ ((x >> 32) as u32)
 }
@@ -473,13 +506,13 @@ fn row_to_sketch(row: &FrameRowV1, cfg: &EvidenceSketchCfgV1) -> FrameRowSketchV
     let mut entity_ids: Vec<u32> = Vec::new();
 
     if let Some(who) = row.who {
-        entity_ids.push(fold_u64_to_u32(who.0.0));
+        entity_ids.push(fold_u64_to_u32(who.0 .0));
     }
     if let Some(what) = row.what {
-        entity_ids.push(fold_u64_to_u32(what.0.0));
+        entity_ids.push(fold_u64_to_u32(what.0 .0));
     }
     for e in row.entity_ids.iter() {
-        entity_ids.push(fold_u64_to_u32(e.0.0));
+        entity_ids.push(fold_u64_to_u32(e.0 .0));
     }
     entity_ids.sort_unstable();
     entity_ids.dedup();
@@ -492,7 +525,7 @@ fn row_to_sketch(row: &FrameRowV1, cfg: &EvidenceSketchCfgV1) -> FrameRowSketchV
         if t.tf == 0 {
             continue;
         }
-        let term_u64 = t.term.0.0;
+        let term_u64 = t.term.0 .0;
         let sig = fold_u64_to_u32(term_u64);
         tmp_terms.push((sig, t.tf, term_u64));
     }
@@ -526,7 +559,11 @@ fn row_to_sketch(row: &FrameRowV1, cfg: &EvidenceSketchCfgV1) -> FrameRowSketchV
     }
 
     // meta_codes reserved for later stages.
-    FrameRowSketchV1 { terms, entity_ids, meta_codes: Vec::new() }
+    FrameRowSketchV1 {
+        terms,
+        entity_ids,
+        meta_codes: Vec::new(),
+    }
 }
 
 fn sketch_extra_bytes(sk: &FrameRowSketchV1) -> usize {
@@ -579,42 +616,85 @@ mod tests {
         let e2 = EntityId(derive_id64(b"ent\0", b"bob"));
         r0.who = Some(e1);
         r0.what = Some(e2);
-        let tc = TokenizerCfg { max_token_bytes: 32 };
-        r0.terms.push(crate::frame::TermFreq { term: term_id_from_token("hello", tc), tf: 1 });
-        r0.terms.push(crate::frame::TermFreq { term: term_id_from_token("world", tc), tf: 3 });
-        r0.terms.sort_unstable_by_key(|t| t.term.0.0);
+        let tc = TokenizerCfg {
+            max_token_bytes: 32,
+        };
+        r0.terms.push(crate::frame::TermFreq {
+            term: term_id_from_token("hello", tc),
+            tf: 1,
+        });
+        r0.terms.push(crate::frame::TermFreq {
+            term: term_id_from_token("world", tc),
+            tf: 3,
+        });
+        r0.terms.sort_unstable_by_key(|t| t.term.0 .0);
         r0.doc_len = 4;
 
         let mut r1 = FrameRowV1::new(doc_id, source_id);
         // More terms so the sketch is larger.
-        r1.terms.push(crate::frame::TermFreq { term: term_id_from_token("alpha", tc), tf: 1 });
-        r1.terms.push(crate::frame::TermFreq { term: term_id_from_token("beta", tc), tf: 1 });
-        r1.terms.push(crate::frame::TermFreq { term: term_id_from_token("gamma", tc), tf: 1 });
-        r1.terms.push(crate::frame::TermFreq { term: term_id_from_token("delta", tc), tf: 1 });
-        r1.terms.push(crate::frame::TermFreq { term: term_id_from_token("epsilon", tc), tf: 1 });
-        r1.terms.push(crate::frame::TermFreq { term: term_id_from_token("zeta", tc), tf: 1 });
+        r1.terms.push(crate::frame::TermFreq {
+            term: term_id_from_token("alpha", tc),
+            tf: 1,
+        });
+        r1.terms.push(crate::frame::TermFreq {
+            term: term_id_from_token("beta", tc),
+            tf: 1,
+        });
+        r1.terms.push(crate::frame::TermFreq {
+            term: term_id_from_token("gamma", tc),
+            tf: 1,
+        });
+        r1.terms.push(crate::frame::TermFreq {
+            term: term_id_from_token("delta", tc),
+            tf: 1,
+        });
+        r1.terms.push(crate::frame::TermFreq {
+            term: term_id_from_token("epsilon", tc),
+            tf: 1,
+        });
+        r1.terms.push(crate::frame::TermFreq {
+            term: term_id_from_token("zeta", tc),
+            tf: 1,
+        });
 
-        r1.terms.sort_unstable_by_key(|t| t.term.0.0);
+        r1.terms.sort_unstable_by_key(|t| t.term.0 .0);
         r1.doc_len = 6;
 
         let seg = FrameSegmentV1::from_rows(&[r0.clone(), r1.clone()], 1024).unwrap();
         let seg_hash = put_frame_segment_v1(&store, &seg).unwrap();
 
         let hits = vec![
-            SearchHit { frame_seg: seg_hash, row_ix: 0, score: 10 },
-            SearchHit { frame_seg: seg_hash, row_ix: 0, score: 12 },
-            SearchHit { frame_seg: seg_hash, row_ix: 1, score: 8 },
+            SearchHit {
+                frame_seg: seg_hash,
+                row_ix: 0,
+                score: 10,
+            },
+            SearchHit {
+                frame_seg: seg_hash,
+                row_ix: 0,
+                score: 12,
+            },
+            SearchHit {
+                frame_seg: seg_hash,
+                row_ix: 1,
+                score: 8,
+            },
         ];
 
         // Base bytes with 2 items and no sketches:
         // header(86) + 2 * item_base(46) = 178.
         // Budget leaves room for only the first sketch.
-        let limits = EvidenceLimitsV1 { segments_touched: 0, max_items: 2, max_bytes: 220 };
+        let limits = EvidenceLimitsV1 {
+            segments_touched: 0,
+            max_items: 2,
+            max_bytes: 220,
+        };
         let mut cfg = EvidenceBuildCfgV1::new();
         cfg.sketch.max_terms = 4;
         cfg.sketch.max_entities = 8;
 
-        let b = build_evidence_bundle_v1_from_hits(&store, h(1), h(2), limits, 7, &hits, &cfg).unwrap();
+        let b =
+            build_evidence_bundle_v1_from_hits(&store, h(1), h(2), limits, 7, &hits, &cfg).unwrap();
         assert_eq!(b.items.len(), 2);
 
         // Dedup keeps the higher score for row 0.

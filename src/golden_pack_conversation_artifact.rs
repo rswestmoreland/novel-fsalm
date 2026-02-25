@@ -83,8 +83,8 @@ pub fn get_golden_pack_conversation_report_v1<S: ArtifactStore>(
 mod tests {
     use super::*;
     use crate::artifact::FsArtifactStore;
-    use crate::golden_pack_conversation::GOLDEN_PACK_CONVERSATION_REPORT_V1_VERSION;
     use crate::golden_pack::{GoldenPackReportV1, GOLDEN_PACK_REPORT_V1_VERSION};
+    use crate::golden_pack_conversation::GOLDEN_PACK_CONVERSATION_REPORT_V1_VERSION;
     use crate::golden_pack_turn_pairs::{
         GoldenPackTurnPairsReportV1, GOLDEN_PACK_TURN_PAIRS_REPORT_V1_VERSION,
     };

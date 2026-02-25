@@ -123,7 +123,6 @@ where
     true
 }
 
-
 /// Decide whether an index artifact should be decoded for an OR-style query (any term may match).
 ///
 /// This is conservative:
@@ -420,5 +419,4 @@ mod tests {
         assert_eq!(stats.bloom_maybe, 1);
         assert_eq!(stats.entries_skipped_sig, 0);
     }
-
 }

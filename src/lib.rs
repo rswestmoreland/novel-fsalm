@@ -60,10 +60,10 @@ pub mod index_store;
 /// IndexSnapshot manifest linking FrameSegment hashes to IndexSegment hashes.
 pub mod index_snapshot;
 
-/// IndexSnapshot persistence helpers.
-pub mod index_snapshot_store;
 /// Query-time index lookup and scoring.
 pub mod index_query;
+/// IndexSnapshot persistence helpers.
+pub mod index_snapshot_store;
 
 /// Canonical retrieval hit list artifact.
 pub mod hit_list;
@@ -145,8 +145,8 @@ pub mod planner_hints;
 
 /// Forecast schema.
 pub mod forecast;
-pub mod planner_hints_artifact;
 pub mod forecast_artifact;
+pub mod planner_hints_artifact;
 
 /// Markov/PPM hints schema.
 pub mod markov_hints;
@@ -226,7 +226,6 @@ pub mod evidence_set_artifact;
 /// EvidenceSet verifiers.
 pub mod evidence_set_verify;
 
-
 /// Evidence builder.
 pub mod evidence_builder;
 
@@ -236,9 +235,9 @@ pub mod tokenizer;
 /// Metaphonetic preprocessor.
 pub mod metaphone;
 
+pub mod pragmatics_extract;
 /// Pragmatics control-signal schema.
 pub mod pragmatics_frame;
-pub mod pragmatics_extract;
 /// PragmaticsFrame persistence helpers.
 pub mod pragmatics_frame_store;
 

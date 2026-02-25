@@ -29,7 +29,9 @@ pub struct TokenizerCfg {
 
 impl Default for TokenizerCfg {
     fn default() -> Self {
-        TokenizerCfg { max_token_bytes: 64 }
+        TokenizerCfg {
+            max_token_bytes: 64,
+        }
     }
 }
 
@@ -129,7 +131,11 @@ pub fn term_id_from_token(token: &str, cfg: TokenizerCfg) -> TermId {
         }
         used += 1;
 
-        let nb = if (b'A'..=b'Z').contains(b) { b + 32 } else { *b };
+        let nb = if (b'A'..=b'Z').contains(b) {
+            b + 32
+        } else {
+            *b
+        };
         buf[nbuf] = nb;
         nbuf += 1;
         if nbuf == buf.len() {
@@ -162,7 +168,7 @@ pub fn term_freqs_from_text(text: &str, cfg: TokenizerCfg) -> Vec<TermFreq> {
     let mut ids: Vec<u64> = Vec::new();
     for sp in TokenIter::new(text) {
         let tok = &text[sp.start..sp.end];
-        let id = term_id_from_token(tok, cfg).0.0;
+        let id = term_id_from_token(tok, cfg).0 .0;
         ids.push(id);
     }
 
@@ -182,12 +188,18 @@ pub fn term_freqs_from_text(text: &str, cfg: TokenizerCfg) -> Vec<TermFreq> {
                 cnt += 1;
             }
         } else {
-            out.push(TermFreq { term: TermId(Id64(cur)), tf: cnt });
+            out.push(TermFreq {
+                term: TermId(Id64(cur)),
+                tf: cnt,
+            });
             cur = x;
             cnt = 1;
         }
     }
-    out.push(TermFreq { term: TermId(Id64(cur)), tf: cnt });
+    out.push(TermFreq {
+        term: TermId(Id64(cur)),
+        tf: cnt,
+    });
 
     out
 }

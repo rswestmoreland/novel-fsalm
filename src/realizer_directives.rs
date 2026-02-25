@@ -18,13 +18,8 @@
 use crate::codec::{ByteReader, ByteWriter, DecodeError, EncodeError};
 
 use crate::pragmatics_frame::{
-    PragmaticsFrameV1,
-    RhetoricModeV1,
-    INTENT_FLAG_HAS_CODE,
-    INTENT_FLAG_HAS_CONSTRAINTS,
-    INTENT_FLAG_HAS_MATH,
-    INTENT_FLAG_HAS_QUESTION,
-    INTENT_FLAG_HAS_REQUEST,
+    PragmaticsFrameV1, RhetoricModeV1, INTENT_FLAG_HAS_CODE, INTENT_FLAG_HAS_CONSTRAINTS,
+    INTENT_FLAG_HAS_MATH, INTENT_FLAG_HAS_QUESTION, INTENT_FLAG_HAS_REQUEST,
     INTENT_FLAG_SAFETY_SENSITIVE,
 };
 
@@ -184,11 +179,15 @@ impl core::fmt::Display for RealizerDirectivesError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             RealizerDirectivesError::BadVersion => f.write_str("bad realizer directives version"),
-            RealizerDirectivesError::UnknownFormatFlags => f.write_str("unknown realizer directives format flags"),
+            RealizerDirectivesError::UnknownFormatFlags => {
+                f.write_str("unknown realizer directives format flags")
+            }
             RealizerDirectivesError::TooManyRationaleCodes => {
                 f.write_str("too many realizer directives rationale codes")
             }
-            RealizerDirectivesError::RationaleNotCanonical => f.write_str("rationale codes not canonical"),
+            RealizerDirectivesError::RationaleNotCanonical => {
+                f.write_str("rationale codes not canonical")
+            }
         }
     }
 }

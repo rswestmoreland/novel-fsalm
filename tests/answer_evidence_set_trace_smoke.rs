@@ -8,7 +8,6 @@ use fsa_lm::artifact::{ArtifactStore, FsArtifactStore};
 use fsa_lm::evidence_bundle::EvidenceBundleV1;
 use fsa_lm::evidence_set::EvidenceSetV1;
 use fsa_lm::forecast::ForecastV1;
-use fsa_lm::markov_trace::MarkovTraceV1;
 use fsa_lm::frame::{DocId, FrameRowV1, Id64, SourceId};
 use fsa_lm::frame_segment::FrameSegmentV1;
 use fsa_lm::frame_store::put_frame_segment_v1;
@@ -17,12 +16,15 @@ use fsa_lm::index_segment::IndexSegmentV1;
 use fsa_lm::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
 use fsa_lm::index_snapshot_store::put_index_snapshot_v1;
 use fsa_lm::index_store::put_index_segment_v1;
+use fsa_lm::markov_trace::MarkovTraceV1;
+use fsa_lm::planner_hints::PlannerHintsV1;
+use fsa_lm::pragmatics_frame::{
+    PragmaticsFrameV1, RhetoricModeV1, INTENT_FLAG_HAS_CODE, PRAGMATICS_FRAME_V1_VERSION,
+};
+use fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1;
 use fsa_lm::prompt_artifact::put_prompt_pack;
 use fsa_lm::prompt_pack::{Message, PromptIds, PromptLimits, PromptPack, Role};
 use fsa_lm::replay::ReplayLog;
-use fsa_lm::planner_hints::PlannerHintsV1;
-use fsa_lm::pragmatics_frame::{PragmaticsFrameV1, RhetoricModeV1, INTENT_FLAG_HAS_CODE, PRAGMATICS_FRAME_V1_VERSION};
-use fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1;
 use fsa_lm::tokenizer::{term_freqs_from_text, TokenizerCfg};
 
 fn tmp_root(name: &str) -> PathBuf {
@@ -147,7 +149,11 @@ fn answer_emits_replay_log_and_evidence_set_artifacts() {
         .output()
         .unwrap();
 
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let answer_text = std::fs::read_to_string(&out_path).unwrap();
     let answer_hash = blake3_hash(answer_text.as_bytes());
@@ -155,7 +161,10 @@ fn answer_emits_replay_log_and_evidence_set_artifacts() {
     // Find the ReplayLog artifact and validate its deterministic links.
     let (replay_hash, replay_bytes, replay) = find_answer_replay_log(&root);
 
-    let stored_replay = store.get(&replay_hash).unwrap().expect("replay log artifact");
+    let stored_replay = store
+        .get(&replay_hash)
+        .unwrap()
+        .expect("replay log artifact");
     assert_eq!(stored_replay, replay_bytes);
 
     //: planner guidance steps are recorded alongside answer.
@@ -238,7 +247,10 @@ fn answer_emits_replay_log_and_evidence_set_artifacts() {
         .expect("evidence set hash in outputs");
 
     // Planner hints artifact exists and decodes.
-    let ph_bytes = store.get(&ph_hash).unwrap().expect("planner hints artifact");
+    let ph_bytes = store
+        .get(&ph_hash)
+        .unwrap()
+        .expect("planner hints artifact");
     let _ph = PlannerHintsV1::decode(&ph_bytes).unwrap();
     assert!(ph_step.inputs.contains(&ev_hash));
 
@@ -263,7 +275,10 @@ fn answer_emits_replay_log_and_evidence_set_artifacts() {
     assert!(!mt.tokens.is_empty());
 
     // Evidence set artifact exists, decodes, and points to the bundle.
-    let set_bytes = store.get(&set_hash).unwrap().expect("evidence set artifact");
+    let set_bytes = store
+        .get(&set_hash)
+        .unwrap()
+        .expect("evidence set artifact");
     let set = EvidenceSetV1::decode(&set_bytes).unwrap();
     assert_eq!(set.evidence_bundle_id, ev_hash);
     assert_eq!(set.items.len(), 1);
@@ -370,7 +385,11 @@ fn answer_with_pragmatics_emits_directives_and_guidance_steps_and_verifies_trace
         ])
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let answer_text = std::fs::read_to_string(&out_path).unwrap();
     let answer_hash = blake3_hash(answer_text.as_bytes());

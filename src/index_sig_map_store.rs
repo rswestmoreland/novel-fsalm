@@ -96,8 +96,6 @@ pub fn get_index_sig_map_v1_cached<S: ArtifactStore>(
     Ok(Some(arc))
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -153,10 +151,15 @@ mod tests {
         let m = sample_map();
         let hh = put_index_sig_map_v1(&store, &m).unwrap();
 
-        let mut cache: Cache2Q<Hash32, Arc<IndexSigMapV1>> = Cache2Q::new(CacheCfgV1::new(1_000_000));
+        let mut cache: Cache2Q<Hash32, Arc<IndexSigMapV1>> =
+            Cache2Q::new(CacheCfgV1::new(1_000_000));
 
-        let a1 = get_index_sig_map_v1_cached(&store, &mut cache, &hh).unwrap().unwrap();
-        let a2 = get_index_sig_map_v1_cached(&store, &mut cache, &hh).unwrap().unwrap();
+        let a1 = get_index_sig_map_v1_cached(&store, &mut cache, &hh)
+            .unwrap()
+            .unwrap();
+        let a2 = get_index_sig_map_v1_cached(&store, &mut cache, &hh)
+            .unwrap()
+            .unwrap();
 
         assert!(Arc::ptr_eq(&a1, &a2));
     }

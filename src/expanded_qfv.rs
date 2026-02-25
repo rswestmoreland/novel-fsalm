@@ -170,7 +170,8 @@ impl ExpandedQfvV1 {
         if !self.is_canonical() {
             let mut ok_req = true;
             for i in 1..self.required.len() {
-                if cmp_canon(&self.required[i - 1], &self.required[i]) != core::cmp::Ordering::Less {
+                if cmp_canon(&self.required[i - 1], &self.required[i]) != core::cmp::Ordering::Less
+                {
                     ok_req = false;
                     break;
                 }
@@ -334,7 +335,10 @@ mod tests {
         let q = ExpandedQfvV1 {
             version: EXPANDED_QFV_V1_VERSION,
             tie_control_id: Id64(7),
-            required: vec![item(ExpansionKindV1::Lex, 10, 50000), item(ExpansionKindV1::Meta, 3, 40000)],
+            required: vec![
+                item(ExpansionKindV1::Lex, 10, 50000),
+                item(ExpansionKindV1::Meta, 3, 40000),
+            ],
             optional: vec![item(ExpansionKindV1::Lex, 11, 20000)],
         };
         assert!(q.is_canonical());

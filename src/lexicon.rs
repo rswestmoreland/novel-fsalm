@@ -23,7 +23,6 @@ use crate::frame::{derive_id64, Id64, MetaCodeId};
 /// Lexicon schema version (v1).
 pub const LEXICON_SCHEMA_V1: u16 = 1;
 
-
 /// Domain separator for exact lemma id derivation.
 const DOMAIN_LEMMA_ID: &[u8] = b"lex\0lemma\0";
 
@@ -278,7 +277,14 @@ impl LemmaRowV1 {
         if r.remaining() != 0 {
             return Err(DecodeError::new("trailing bytes"));
         }
-        Ok(Self { version, lemma_id, lemma_key_id, lemma_text_id, pos_mask, flags })
+        Ok(Self {
+            version,
+            lemma_id,
+            lemma_key_id,
+            lemma_text_id,
+            pos_mask,
+            flags,
+        })
     }
 }
 
@@ -324,14 +330,26 @@ impl SenseRowV1 {
         if r.remaining() != 0 {
             return Err(DecodeError::new("trailing bytes"));
         }
-        Ok(Self { version, sense_id, lemma_id, sense_rank, gloss_text_id, labels_mask })
+        Ok(Self {
+            version,
+            sense_id,
+            lemma_id,
+            sense_rank,
+            gloss_text_id,
+            labels_mask,
+        })
     }
 }
 
 impl RelationEdgeRowV1 {
     /// Create a new relation edge row with schema version set.
     pub fn new(from: RelFromId, rel_type_id: RelTypeId, to_lemma_id: LemmaId) -> Self {
-        Self { version: LEXICON_SCHEMA_V1, from, rel_type_id, to_lemma_id }
+        Self {
+            version: LEXICON_SCHEMA_V1,
+            from,
+            rel_type_id,
+            to_lemma_id,
+        }
     }
 
     /// Encode this row to canonical bytes.
@@ -377,7 +395,12 @@ impl RelationEdgeRowV1 {
         if r.remaining() != 0 {
             return Err(DecodeError::new("trailing bytes"));
         }
-        Ok(Self { version, from, rel_type_id, to_lemma_id })
+        Ok(Self {
+            version,
+            from,
+            rel_type_id,
+            to_lemma_id,
+        })
     }
 }
 
@@ -388,7 +411,13 @@ impl PronunciationRowV1 {
         meta_codes.sort_by_key(|m| m.0 .0);
         meta_codes.dedup_by_key(|m| m.0 .0);
         let ipa_text_id = derive_text_id(ipa);
-        Self { version: LEXICON_SCHEMA_V1, lemma_id, ipa_text_id, meta_codes, flags }
+        Self {
+            version: LEXICON_SCHEMA_V1,
+            lemma_id,
+            ipa_text_id,
+            meta_codes,
+            flags,
+        }
     }
 
     /// Encode this row to canonical bytes.
@@ -437,7 +466,13 @@ impl PronunciationRowV1 {
         if !meta_codes_are_sorted_unique(&meta_codes) {
             return Err(DecodeError::new("meta_codes not canonical"));
         }
-        Ok(Self { version, lemma_id, ipa_text_id, meta_codes, flags })
+        Ok(Self {
+            version,
+            lemma_id,
+            ipa_text_id,
+            meta_codes,
+            flags,
+        })
     }
 }
 

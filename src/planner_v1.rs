@@ -15,7 +15,9 @@
 //!
 //! ASCII-only comments.
 
-use crate::answer_plan::{AnswerPlanItemKindV1, AnswerPlanItemV1, AnswerPlanV1, AnswerPlanValidateError};
+use crate::answer_plan::{
+    AnswerPlanItemKindV1, AnswerPlanItemV1, AnswerPlanV1, AnswerPlanValidateError,
+};
 use crate::evidence_bundle::EvidenceBundleV1;
 use crate::hash::Hash32;
 
@@ -137,13 +139,12 @@ pub fn plan_from_evidence_bundle_v1(
     Ok(plan)
 }
 
-
 use crate::forecast::{
     ForecastIntentKindV1, ForecastIntentV1, ForecastQuestionV1, ForecastV1, FC_FLAG_HAS_PRAGMATICS,
 };
 use crate::frame::Id64;
 use crate::planner_hints::{
-    PlannerHintKindV1, PlannerHintItemV1, PlannerFollowupV1, PlannerHintsV1, PlannerHintsFlagsV1,
+    PlannerFollowupV1, PlannerHintItemV1, PlannerHintKindV1, PlannerHintsFlagsV1, PlannerHintsV1,
     PH_FLAG_PREFER_CAVEATS, PH_FLAG_PREFER_CLARIFY, PH_FLAG_PREFER_DIRECT, PH_FLAG_PREFER_STEPS,
 };
 use crate::pragmatics_frame::{
@@ -281,7 +282,8 @@ fn build_planner_hints_v1(
     let evidence_n = evidence.items.len();
 
     // Prefer clarify when we have very little evidence or a follow-up question.
-    let prefer_clarify = evidence_n == 0 || (has_question && is_follow_up) || (has_question && evidence_n < 2);
+    let prefer_clarify =
+        evidence_n == 0 || (has_question && is_follow_up) || (has_question && evidence_n < 2);
     if prefer_clarify {
         flags |= PH_FLAG_PREFER_CLARIFY;
     }
@@ -411,7 +413,8 @@ fn build_planner_hints_v1(
 
     // Enforce canonical caps deterministically.
     if out.hints.len() > crate::planner_hints::PLANNER_HINTS_V1_MAX_HINTS {
-        out.hints.truncate(crate::planner_hints::PLANNER_HINTS_V1_MAX_HINTS);
+        out.hints
+            .truncate(crate::planner_hints::PLANNER_HINTS_V1_MAX_HINTS);
     }
     if out.followups.len() > crate::planner_hints::PLANNER_HINTS_V1_MAX_FOLLOWUPS {
         out.followups
@@ -454,7 +457,9 @@ fn sort_and_dedupe_forecast_intents(mut items: Vec<ForecastIntentV1>) -> Vec<For
     out
 }
 
-fn sort_and_dedupe_forecast_questions(mut items: Vec<ForecastQuestionV1>) -> Vec<ForecastQuestionV1> {
+fn sort_and_dedupe_forecast_questions(
+    mut items: Vec<ForecastQuestionV1>,
+) -> Vec<ForecastQuestionV1> {
     items.sort_by(|a, b| {
         let o = b.score.cmp(&a.score);
         if o != core::cmp::Ordering::Equal {
@@ -622,10 +627,12 @@ fn build_forecast_v1(
     };
 
     if out.intents.len() > crate::forecast::FORECAST_V1_MAX_INTENTS {
-        out.intents.truncate(crate::forecast::FORECAST_V1_MAX_INTENTS);
+        out.intents
+            .truncate(crate::forecast::FORECAST_V1_MAX_INTENTS);
     }
     if out.questions.len() > crate::forecast::FORECAST_V1_MAX_QUESTIONS {
-        out.questions.truncate(crate::forecast::FORECAST_V1_MAX_QUESTIONS);
+        out.questions
+            .truncate(crate::forecast::FORECAST_V1_MAX_QUESTIONS);
     }
 
     if out.validate().is_err() {
@@ -801,10 +808,13 @@ mod tests {
         assert_eq!(cfg.validate(), Err(PlannerCfgError::BadMaxPlanItems));
     }
 
-
-    fn sample_prag(flags: crate::pragmatics_frame::IntentFlagsV1) -> crate::pragmatics_frame::PragmaticsFrameV1 {
+    fn sample_prag(
+        flags: crate::pragmatics_frame::IntentFlagsV1,
+    ) -> crate::pragmatics_frame::PragmaticsFrameV1 {
         use crate::frame::Id64;
-        use crate::pragmatics_frame::{PragmaticsFrameV1, PRAGMATICS_FRAME_V1_VERSION, RhetoricModeV1};
+        use crate::pragmatics_frame::{
+            PragmaticsFrameV1, RhetoricModeV1, PRAGMATICS_FRAME_V1_VERSION,
+        };
 
         PragmaticsFrameV1 {
             version: PRAGMATICS_FRAME_V1_VERSION,
@@ -870,8 +880,10 @@ mod tests {
         let cfg = PlannerCfgV1::default_v1();
         let prag = sample_prag(crate::pragmatics_frame::INTENT_FLAG_HAS_REQUEST);
 
-        let o1 = plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
-        let o2 = plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
+        let o1 =
+            plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
+        let o2 =
+            plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
         assert_eq!(o1, o2);
         assert!(o1.hints.validate().is_ok());
         assert!(o1.forecast.validate().is_ok());
@@ -885,8 +897,12 @@ mod tests {
         let cfg = PlannerCfgV1::default_v1();
         let prag = sample_prag(crate::pragmatics_frame::INTENT_FLAG_HAS_CONSTRAINTS);
 
-        let o = plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
-        assert_ne!(o.hints.flags & crate::planner_hints::PH_FLAG_PREFER_STEPS, 0);
+        let o =
+            plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
+        assert_ne!(
+            o.hints.flags & crate::planner_hints::PH_FLAG_PREFER_STEPS,
+            0
+        );
 
         // If summary-first is present, steps will begin after the summary.
         let mut saw_step = false;
@@ -906,7 +922,10 @@ mod tests {
         let cfg = PlannerCfgV1::default_v1();
 
         let o = plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, None).unwrap();
-        assert_ne!(o.hints.flags & crate::planner_hints::PH_FLAG_PREFER_CLARIFY, 0);
+        assert_ne!(
+            o.hints.flags & crate::planner_hints::PH_FLAG_PREFER_CLARIFY,
+            0
+        );
         assert_eq!(o.plan.items.len(), 1);
         assert_eq!(o.plan.items[0].kind, AnswerPlanItemKindV1::Summary);
     }

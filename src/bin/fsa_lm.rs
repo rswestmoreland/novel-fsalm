@@ -10,54 +10,62 @@
 // artifact exchange server/client for experimentation.
 
 use fsa_lm::artifact::{ArtifactStore, FsArtifactStore};
-use fsa_lm::hash::{blake3_hash, hex32, Hash32};
-use fsa_lm::prompt_pack::{Message, PromptIds, PromptLimits, PromptPack, Role};
-use fsa_lm::prompt_artifact::{get_prompt_pack, put_prompt_pack};
-use fsa_lm::replay::{ReplayLog, ReplayStep};
-use fsa_lm::replay_artifact::{append_prompt_step, get_replay_log, put_replay_log};
-use fsa_lm::replay_steps::{
-    step_from_slices, STEP_ANSWER_V1, STEP_BUILD_EVIDENCE_V1, STEP_RETRIEVE_V1,
-    STEP_REALIZER_DIRECTIVES_V1, STEP_PLANNER_HINTS_V1, STEP_FORECAST_V1,
-    STEP_MARKOV_HINTS_V1, STEP_MARKOV_TRACE_V1,
-};
-use fsa_lm::frame::{DocId, FrameRowV1, Id64, SourceId};
-use fsa_lm::frame_segment::FrameSegmentV1;
-use fsa_lm::frame_segment::FRAME_SEGMENT_MAGIC;
-use fsa_lm::index_segment::IndexSegmentV1;
-use fsa_lm::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
-use fsa_lm::index_query::{query_terms_from_text, search_snapshot, search_snapshot_cached, search_snapshot_gated, search_snapshot_cached_gated, QueryTermsCfg, SearchCfg};
-use fsa_lm::retrieval_control::RetrievalControlV1;
-use fsa_lm::retrieval_policy::{apply_retrieval_policy_from_text_v1, RetrievalPolicyCfgV1};
-use fsa_lm::planner_v1::{plan_from_evidence_bundle_v1_with_guidance, PlannerCfgV1, PlannerOutputV1};
-use fsa_lm::planner_hints_artifact::put_planner_hints_v1;
-use fsa_lm::forecast_artifact::put_forecast_v1;
-use fsa_lm::quality_gate_v1::{
-    build_markov_trace_tokens_v1, derive_directives_opt,
-    derive_markov_hints_opener_preface_opt, realize_with_quality_gate_v1,
-};
-use fsa_lm::shard_manifest::{ShardEntryV1, ShardManifestV1, ShardOutputV1, SHARD_MANIFEST_V1_VERSION};
-use fsa_lm::shard_manifest_artifact::{get_shard_manifest_v1, put_shard_manifest_v1};
-use fsa_lm::sharding_v1::{ShardCfgV1, SHARD_MAPPING_DOC_ID_HASH32_V1};
-use fsa_lm::reduce_index::{reduce_index_v1, ReduceIndexResultV1};
-use fsa_lm::realizer_v1::{
-    RealizerCfgV1,
-};
-use fsa_lm::markov_hints::MarkovHintsV1;
-use fsa_lm::markov_hints_artifact::put_markov_hints_v1;
-use fsa_lm::markov_model::MarkovTokenV1;
-use fsa_lm::markov_trace::{MarkovTraceV1, MARKOV_TRACE_V1_VERSION};
-use fsa_lm::markov_model_artifact::{get_markov_model_v1, put_markov_model_v1};
-use fsa_lm::markov_trace_artifact::{get_markov_trace_v1, put_markov_trace_v1};
-use fsa_lm::markov_train::{markov_corpus_hash_v1, MarkovTrainCfgV1, MarkovTrainerV1};
-use fsa_lm::evidence_builder::{build_evidence_bundle_v1_from_hits, build_evidence_bundle_v1_from_hits_cached, EvidenceBuildCfgV1};
-use fsa_lm::evidence_bundle::EvidenceLimitsV1;
+use fsa_lm::cache::{Cache2Q, CacheCfgV1, CacheStatsV1};
 use fsa_lm::evidence_artifact::put_evidence_bundle_v1;
+use fsa_lm::evidence_builder::{
+    build_evidence_bundle_v1_from_hits, build_evidence_bundle_v1_from_hits_cached,
+    EvidenceBuildCfgV1,
+};
+use fsa_lm::evidence_bundle::EvidenceLimitsV1;
 use fsa_lm::evidence_set::{EvidenceRowRefV1, EvidenceSetItemV1, EvidenceSetV1};
 use fsa_lm::evidence_set_artifact::put_evidence_set_v1;
 use fsa_lm::evidence_set_verify::verify_evidence_set_v1;
+use fsa_lm::forecast_artifact::put_forecast_v1;
+use fsa_lm::frame::{DocId, FrameRowV1, Id64, SourceId};
+use fsa_lm::frame_segment::FrameSegmentV1;
+use fsa_lm::frame_segment::FRAME_SEGMENT_MAGIC;
+use fsa_lm::hash::{blake3_hash, hex32, Hash32};
 use fsa_lm::hit_list::{HitListV1, HitV1};
 use fsa_lm::hit_list_artifact::put_hit_list_v1;
-use fsa_lm::cache::{Cache2Q, CacheCfgV1, CacheStatsV1};
+use fsa_lm::index_query::{
+    query_terms_from_text, search_snapshot, search_snapshot_cached, search_snapshot_cached_gated,
+    search_snapshot_gated, QueryTermsCfg, SearchCfg,
+};
+use fsa_lm::index_segment::IndexSegmentV1;
+use fsa_lm::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
+use fsa_lm::markov_hints::MarkovHintsV1;
+use fsa_lm::markov_hints_artifact::put_markov_hints_v1;
+use fsa_lm::markov_model::MarkovTokenV1;
+use fsa_lm::markov_model_artifact::{get_markov_model_v1, put_markov_model_v1};
+use fsa_lm::markov_trace::{MarkovTraceV1, MARKOV_TRACE_V1_VERSION};
+use fsa_lm::markov_trace_artifact::{get_markov_trace_v1, put_markov_trace_v1};
+use fsa_lm::markov_train::{markov_corpus_hash_v1, MarkovTrainCfgV1, MarkovTrainerV1};
+use fsa_lm::planner_hints_artifact::put_planner_hints_v1;
+use fsa_lm::planner_v1::{
+    plan_from_evidence_bundle_v1_with_guidance, PlannerCfgV1, PlannerOutputV1,
+};
+use fsa_lm::prompt_artifact::{get_prompt_pack, put_prompt_pack};
+use fsa_lm::prompt_pack::{Message, PromptIds, PromptLimits, PromptPack, Role};
+use fsa_lm::quality_gate_v1::{
+    build_markov_trace_tokens_v1, derive_directives_opt, derive_markov_hints_opener_preface_opt,
+    realize_with_quality_gate_v1,
+};
+use fsa_lm::realizer_v1::RealizerCfgV1;
+use fsa_lm::reduce_index::{reduce_index_v1, ReduceIndexResultV1};
+use fsa_lm::replay::{ReplayLog, ReplayStep};
+use fsa_lm::replay_artifact::{append_prompt_step, get_replay_log, put_replay_log};
+use fsa_lm::replay_steps::{
+    step_from_slices, STEP_ANSWER_V1, STEP_BUILD_EVIDENCE_V1, STEP_FORECAST_V1,
+    STEP_MARKOV_HINTS_V1, STEP_MARKOV_TRACE_V1, STEP_PLANNER_HINTS_V1, STEP_REALIZER_DIRECTIVES_V1,
+    STEP_RETRIEVE_V1,
+};
+use fsa_lm::retrieval_control::RetrievalControlV1;
+use fsa_lm::retrieval_policy::{apply_retrieval_policy_from_text_v1, RetrievalPolicyCfgV1};
+use fsa_lm::shard_manifest::{
+    ShardEntryV1, ShardManifestV1, ShardOutputV1, SHARD_MANIFEST_V1_VERSION,
+};
+use fsa_lm::shard_manifest_artifact::{get_shard_manifest_v1, put_shard_manifest_v1};
+use fsa_lm::sharding_v1::{ShardCfgV1, SHARD_MAPPING_DOC_ID_HASH32_V1};
 
 use fsa_lm::scale_report_artifact::put_scale_demo_scale_report_v1;
 
@@ -65,30 +73,36 @@ use fsa_lm::lexicon_snapshot_builder::build_lexicon_snapshot_v1_from_segments;
 
 use fsa_lm::lexicon_snapshot_validate::validate_lexicon_snapshot_v1_disjoint_owners;
 
-use fsa_lm::pragmatics_extract::{extract_pragmatics_frames_for_prompt_pack_v1, PragmaticsExtractCfg};
-use fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1;
+use fsa_lm::pragmatics_extract::{
+    extract_pragmatics_frames_for_prompt_pack_v1, PragmaticsExtractCfg,
+};
 use fsa_lm::pragmatics_frame_store::get_pragmatics_frame_v1;
+use fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1;
 
 use fsa_lm::realizer_directives_artifact::put_realizer_directives_v1;
 
 use fsa_lm::compaction_report::CompactionCfgV1;
 use fsa_lm::index_compaction::compact_index_snapshot_v1;
 
+use bzip2::read::BzDecoder;
+use fsa_lm::artifact_sync::{
+    run_sync_server_v1, sync_reduce_batch_v1, sync_reduce_v1, SyncClientCfgV1, SyncServerCfgV1,
+};
+use fsa_lm::debug_bundle::{export_debug_bundle_v1, DebugBundleCfgV1};
 use fsa_lm::frame_store::{get_frame_segment_v1, put_frame_segment_v1};
-use fsa_lm::tokenizer::{term_freqs_from_text, TokenizerCfg};
-use fsa_lm::wiki_ingest::{ingest_wiki_tsv, ingest_wiki_tsv_sharded, WikiIngestCfg, ingest_wiki_xml, ingest_wiki_xml_sharded};
+use fsa_lm::net;
 use fsa_lm::scale_demo::{
-    run_scale_demo_build_answers_v1, run_scale_demo_build_evidence_bundles_v1,
-    run_scale_demo_build_index_from_manifest_v1, run_scale_demo_generate_and_ingest_frames_v1,
-    run_scale_demo_generate_and_store_prompts_v1, run_scale_demo_generate_only_v1,
-    build_scale_demo_scale_report_v1,
-    ScaleDemoCfgV1, SCALE_DEMO_V1_VERSION,
+    build_scale_demo_scale_report_v1, run_scale_demo_build_answers_v1,
+    run_scale_demo_build_evidence_bundles_v1, run_scale_demo_build_index_from_manifest_v1,
+    run_scale_demo_generate_and_ingest_frames_v1, run_scale_demo_generate_and_store_prompts_v1,
+    run_scale_demo_generate_only_v1, ScaleDemoCfgV1, SCALE_DEMO_V1_VERSION,
+};
+use fsa_lm::tokenizer::{term_freqs_from_text, TokenizerCfg};
+use fsa_lm::wiki_ingest::{
+    ingest_wiki_tsv, ingest_wiki_tsv_sharded, ingest_wiki_xml, ingest_wiki_xml_sharded,
+    WikiIngestCfg,
 };
 use fsa_lm::workload_gen::{WorkloadCfgV1, WORKLOAD_GEN_V1_VERSION};
-use fsa_lm::net;
-use fsa_lm::artifact_sync::{run_sync_server_v1, sync_reduce_v1, sync_reduce_batch_v1, SyncClientCfgV1, SyncServerCfgV1};
-use fsa_lm::debug_bundle::{export_debug_bundle_v1, DebugBundleCfgV1};
-use bzip2::read::BzDecoder;
 
 use std::env;
 use std::fs;
@@ -185,7 +199,6 @@ fn collect_bin_paths(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
-
 fn read_all_from(path_opt: Option<&str>) -> io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     match path_opt {
@@ -217,7 +230,6 @@ fn parse_u32(s: &str) -> Result<u32, String> {
 fn parse_u8(s: &str) -> Result<u8, String> {
     s.parse::<u8>().map_err(|_| "invalid u8".to_string())
 }
-
 
 fn env_u64(name: &str) -> Option<u64> {
     match env::var(name) {
@@ -541,7 +553,10 @@ fn cmd_prompt(args: &[String]) -> i32 {
     };
 
     let mut pack = PromptPack::new(seed, max_tokens, ids);
-    pack.messages.push(Message { role, content: text });
+    pack.messages.push(Message {
+        role,
+        content: text,
+    });
 
     // Apply default canonical limits to make a bounded artifact.
     let limits = PromptLimits::default_v1();
@@ -632,7 +647,6 @@ fn cmd_replay_decode(args: &[String]) -> i32 {
     0
 }
 
-
 fn cmd_replay_new(args: &[String]) -> i32 {
     let mut root = default_root();
 
@@ -668,7 +682,6 @@ fn cmd_replay_new(args: &[String]) -> i32 {
         }
     }
 }
-
 
 fn cmd_frame_seg_demo(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -968,7 +981,10 @@ fn cmd_ingest_wiki(args: &[String]) -> i32 {
                 eprintln!("shard-id out of range");
                 return 2;
             }
-            Some(ShardCfgV1 { shard_count: sc, shard_id: sid })
+            Some(ShardCfgV1 {
+                shard_count: sc,
+                shard_id: sid,
+            })
         }
         _ => {
             eprintln!("provide both --shards and --shard-id");
@@ -997,7 +1013,11 @@ fn cmd_ingest_wiki(args: &[String]) -> i32 {
     // seg_rows is a target row cap, not a hard byte cap.
     let seg_bytes = (seg_mb as u64) * 1024 * 1024;
     let row_bytes = (row_kb as u64) * 1024;
-    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
+    let mut seg_rows = if row_bytes == 0 {
+        1
+    } else {
+        seg_bytes / row_bytes
+    };
     if seg_rows < 1 {
         seg_rows = 1;
     }
@@ -1025,7 +1045,6 @@ fn cmd_ingest_wiki(args: &[String]) -> i32 {
     println!("{}", hex32(&mh));
     0
 }
-
 
 fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -1061,7 +1080,7 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
                 }
                 xml_path = Some(&args[i]);
             }
-            
+
             "--xml-bz2" => {
                 i += 1;
                 if i >= args.len() {
@@ -1071,8 +1090,7 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
                 xml_bz2_path = Some(&args[i]);
             }
 
-
-"--seg_mb" => {
+            "--seg_mb" => {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --seg_mb value");
@@ -1175,17 +1193,17 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
     }
 
     let (xml_path, is_bz2) = match (xml_path, xml_bz2_path) {
-    (Some(p), None) => (p, false),
-    (None, Some(p)) => (p, true),
-    (None, None) => {
-        eprintln!("missing --xml or --xml-bz2 value");
-        return 2;
-    }
-    (Some(_), Some(_)) => {
-        eprintln!("provide only one of --xml or --xml-bz2");
-        return 2;
-    }
-};
+        (Some(p), None) => (p, false),
+        (None, Some(p)) => (p, true),
+        (None, None) => {
+            eprintln!("missing --xml or --xml-bz2 value");
+            return 2;
+        }
+        (Some(_), Some(_)) => {
+            eprintln!("provide only one of --xml or --xml-bz2");
+            return 2;
+        }
+    };
 
     let shard_cfg = match (shards, shard_id) {
         (None, None) => None,
@@ -1194,7 +1212,10 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
                 eprintln!("shard-id out of range");
                 return 2;
             }
-            Some(ShardCfgV1 { shard_count: sc, shard_id: sid })
+            Some(ShardCfgV1 {
+                shard_count: sc,
+                shard_id: sid,
+            })
         }
         _ => {
             eprintln!("provide both --shards and --shard-id");
@@ -1210,7 +1231,6 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
 
     let store = store_for(&root);
 
-
     let file = match std::fs::File::open(xml_path) {
         Ok(f) => f,
         Err(e) => {
@@ -1219,9 +1239,15 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
         }
     };
     // Translate sizing knobs to row/segment parameters.
-    let seg_bytes: u64 = (seg_mb as u64).saturating_mul(1024u64).saturating_mul(1024u64);
+    let seg_bytes: u64 = (seg_mb as u64)
+        .saturating_mul(1024u64)
+        .saturating_mul(1024u64);
     let row_bytes: u64 = (row_kb as u64).saturating_mul(1024u64);
-    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
+    let mut seg_rows = if row_bytes == 0 {
+        1
+    } else {
+        seg_bytes / row_bytes
+    };
     if seg_rows == 0 {
         seg_rows = 1;
     }
@@ -1236,36 +1262,35 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
     cfg.max_docs = max_docs;
 
     let mh = if is_bz2 {
-    let dec = BzDecoder::new(file);
-    let rr = std::io::BufReader::new(dec);
-    match match shard_cfg {
-        Some(sc) => ingest_wiki_xml_sharded(&store, rr, cfg, sc),
-        None => ingest_wiki_xml(&store, rr, cfg),
-    } {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("ingest failed: {}", e);
-            return 1;
+        let dec = BzDecoder::new(file);
+        let rr = std::io::BufReader::new(dec);
+        match match shard_cfg {
+            Some(sc) => ingest_wiki_xml_sharded(&store, rr, cfg, sc),
+            None => ingest_wiki_xml(&store, rr, cfg),
+        } {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("ingest failed: {}", e);
+                return 1;
+            }
         }
-    }
-} else {
-    let rr = std::io::BufReader::new(file);
-    match match shard_cfg {
-        Some(sc) => ingest_wiki_xml_sharded(&store, rr, cfg, sc),
-        None => ingest_wiki_xml(&store, rr, cfg),
-    } {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("ingest failed: {}", e);
-            return 1;
+    } else {
+        let rr = std::io::BufReader::new(file);
+        match match shard_cfg {
+            Some(sc) => ingest_wiki_xml_sharded(&store, rr, cfg, sc),
+            None => ingest_wiki_xml(&store, rr, cfg),
+        } {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("ingest failed: {}", e);
+                return 1;
+            }
         }
-    }
-};
+    };
 
     println!("{}", hex32(&mh));
     0
 }
-
 
 fn cmd_ingest_wiki_sharded(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -1410,7 +1435,11 @@ fn cmd_ingest_wiki_sharded(args: &[String]) -> i32 {
     // Derive segment sizing deterministically from seg_mb and row_kb.
     let seg_bytes = (seg_mb as u64) * 1024 * 1024;
     let row_bytes = (row_kb as u64) * 1024;
-    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
+    let mut seg_rows = if row_bytes == 0 {
+        1
+    } else {
+        seg_bytes / row_bytes
+    };
     if seg_rows < 1 {
         seg_rows = 1;
     }
@@ -1421,7 +1450,10 @@ fn cmd_ingest_wiki_sharded(args: &[String]) -> i32 {
     let mut entries: Vec<ShardEntryV1> = Vec::with_capacity(shard_count as usize);
 
     for sid in 0..shard_count {
-        let shard = ShardCfgV1 { shard_count, shard_id: sid };
+        let shard = ShardCfgV1 {
+            shard_count,
+            shard_id: sid,
+        };
         if shard.validate().is_err() {
             eprintln!("bad shard cfg");
             return 2;
@@ -1480,8 +1512,11 @@ fn cmd_ingest_wiki_sharded(args: &[String]) -> i32 {
     };
 
     if let Some(p) = out_file {
-        let s = format!("{}
-", hex32(&man_hash));
+        let s = format!(
+            "{}
+",
+            hex32(&man_hash)
+        );
         if let Err(e) = std::fs::write(&p, s.as_bytes()) {
             eprintln!("write error: {}", e);
             return 1;
@@ -1646,9 +1681,15 @@ fn cmd_ingest_wiki_xml_sharded(args: &[String]) -> i32 {
         }
     };
 
-    let seg_bytes: u64 = (seg_mb as u64).saturating_mul(1024u64).saturating_mul(1024u64);
+    let seg_bytes: u64 = (seg_mb as u64)
+        .saturating_mul(1024u64)
+        .saturating_mul(1024u64);
     let row_bytes: u64 = (row_kb as u64).saturating_mul(1024u64);
-    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
+    let mut seg_rows = if row_bytes == 0 {
+        1
+    } else {
+        seg_bytes / row_bytes
+    };
     if seg_rows == 0 {
         seg_rows = 1;
     }
@@ -1659,7 +1700,10 @@ fn cmd_ingest_wiki_xml_sharded(args: &[String]) -> i32 {
     let mut entries: Vec<ShardEntryV1> = Vec::with_capacity(shard_count as usize);
 
     for sid in 0..shard_count {
-        let shard = ShardCfgV1 { shard_count, shard_id: sid };
+        let shard = ShardCfgV1 {
+            shard_count,
+            shard_id: sid,
+        };
         if shard.validate().is_err() {
             eprintln!("bad shard cfg");
             return 2;
@@ -1730,8 +1774,11 @@ fn cmd_ingest_wiki_xml_sharded(args: &[String]) -> i32 {
     };
 
     if let Some(p) = out_file {
-        let s = format!("{}
-", hex32(&man_hash));
+        let s = format!(
+            "{}
+",
+            hex32(&man_hash)
+        );
         if let Err(e) = std::fs::write(&p, s.as_bytes()) {
             eprintln!("write error: {}", e);
             return 1;
@@ -1741,7 +1788,6 @@ fn cmd_ingest_wiki_xml_sharded(args: &[String]) -> i32 {
     println!("{}", hex32(&man_hash));
     0
 }
-
 
 fn cmd_build_index(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -1791,7 +1837,7 @@ fn cmd_build_index(args: &[String]) -> i32 {
         if bytes.len() < FRAME_SEGMENT_MAGIC.len() {
             continue;
         }
-                if &bytes[..FRAME_SEGMENT_MAGIC.len()] != &FRAME_SEGMENT_MAGIC[..] {
+        if &bytes[..FRAME_SEGMENT_MAGIC.len()] != &FRAME_SEGMENT_MAGIC[..] {
             continue;
         }
 
@@ -1813,8 +1859,7 @@ fn cmd_build_index(args: &[String]) -> i32 {
             if idx.source_id != src {
                 eprintln!(
                     "mixed source_id detected; expected {}, saw {}",
-                    src.0 .0,
-                    idx.source_id.0 .0
+                    src.0 .0, idx.source_id.0 .0
                 );
                 eprintln!("build-index currently requires a single source_id per snapshot");
                 return 1;
@@ -1831,7 +1876,6 @@ fn cmd_build_index(args: &[String]) -> i32 {
             }
         };
 
-
         let idx_hash = match store.put(&idx_bytes) {
             Ok(h) => h,
             Err(e) => {
@@ -1846,7 +1890,12 @@ fn cmd_build_index(args: &[String]) -> i32 {
         for t in &idx.terms {
             sig_terms.push(t.term);
         }
-        let sig = match fsa_lm::segment_sig::SegmentSigV1::build(idx_hash, &sig_terms, bloom_bytes, bloom_k) {
+        let sig = match fsa_lm::segment_sig::SegmentSigV1::build(
+            idx_hash,
+            &sig_terms,
+            bloom_bytes,
+            bloom_k,
+        ) {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("segment sig build error: {}", e);
@@ -1910,7 +1959,6 @@ fn cmd_build_index(args: &[String]) -> i32 {
             return 1;
         }
     };
-
 
     // Store IndexSigMapV1 sidecar for this snapshot.
     let mut sig_map = fsa_lm::index_sig_map::IndexSigMapV1::new(src);
@@ -2042,19 +2090,22 @@ fn cmd_compact_index(args: &[String]) -> i32 {
         let r = res.report;
         println!("dry_run=1");
         println!("input_snapshot={}", hex32(&r.input_snapshot_id));
-        println!("target_bytes_per_out_segment={}", r.cfg.target_bytes_per_out_segment);
+        println!(
+            "target_bytes_per_out_segment={}",
+            r.cfg.target_bytes_per_out_segment
+        );
         println!("max_out_segments={}", r.cfg.max_out_segments);
-        println!("used_even_pack_fallback={}", if r.cfg.used_even_pack_fallback { 1 } else { 0 });
+        println!(
+            "used_even_pack_fallback={}",
+            if r.cfg.used_even_pack_fallback { 1 } else { 0 }
+        );
         println!("bytes_input_total={}", r.bytes_input_total);
         println!("groups={}", r.groups.len());
         if verbose {
             for (gi, g) in r.groups.iter().enumerate() {
                 println!(
                     "group={} start_ix={} len={} est_bytes_in={}",
-                    gi,
-                    g.start_ix,
-                    g.len,
-                    g.est_bytes_in
+                    gi, g.start_ix, g.len, g.est_bytes_in
                 );
             }
         }
@@ -2085,7 +2136,11 @@ fn cmd_compact_index(args: &[String]) -> i32 {
         res.report.bytes_input_total,
         res.report.bytes_output_total,
         res.report.groups.len(),
-        if res.report.cfg.used_even_pack_fallback { 1 } else { 0 }
+        if res.report.cfg.used_even_pack_fallback {
+            1
+        } else {
+            0
+        }
     );
 
     if verbose {
@@ -2096,12 +2151,7 @@ fn cmd_compact_index(args: &[String]) -> i32 {
             };
             eprintln!(
                 "group={} start_ix={} len={} est_bytes_in={} out_id={} out_bytes={}",
-                gi,
-                g.start_ix,
-                g.len,
-                g.est_bytes_in,
-                out_id,
-                g.out_bytes
+                gi, g.start_ix, g.len, g.est_bytes_in, out_id, g.out_bytes
             );
         }
     }
@@ -2109,9 +2159,9 @@ fn cmd_compact_index(args: &[String]) -> i32 {
     0
 }
 
-
-
-fn try_build_index_v1_in_store(store: &FsArtifactStore) -> Result<Option<(Hash32, Hash32)>, String> {
+fn try_build_index_v1_in_store(
+    store: &FsArtifactStore,
+) -> Result<Option<(Hash32, Hash32)>, String> {
     let mut paths: Vec<PathBuf> = Vec::new();
     collect_bin_paths(store.root(), &mut paths);
 
@@ -2151,8 +2201,7 @@ fn try_build_index_v1_in_store(store: &FsArtifactStore) -> Result<Option<(Hash32
             if idx.source_id != src {
                 return Err(format!(
                     "mixed source_id detected; expected {}, saw {}",
-                    src.0 .0,
-                    idx.source_id.0 .0
+                    src.0 .0, idx.source_id.0 .0
                 ));
             }
         } else {
@@ -2178,7 +2227,12 @@ fn try_build_index_v1_in_store(store: &FsArtifactStore) -> Result<Option<(Hash32
         for t in &idx.terms {
             sig_terms.push(t.term);
         }
-        let sig = match fsa_lm::segment_sig::SegmentSigV1::build(idx_hash, &sig_terms, bloom_bytes, bloom_k) {
+        let sig = match fsa_lm::segment_sig::SegmentSigV1::build(
+            idx_hash,
+            &sig_terms,
+            bloom_bytes,
+            bloom_k,
+        ) {
             Ok(s) => s,
             Err(e) => {
                 return Err(format!("segment sig build error: {}", e));
@@ -2444,7 +2498,6 @@ fn cmd_build_index_sharded(args: &[String]) -> i32 {
     0
 }
 
-
 fn cmd_reduce_index(args: &[String]) -> i32 {
     let mut root = default_root();
     let mut manifest_hex: Option<&str> = None;
@@ -2509,7 +2562,8 @@ fn cmd_reduce_index(args: &[String]) -> i32 {
         }
     };
 
-    let out_lines = format!("{}\n{}\n{}\n",
+    let out_lines = format!(
+        "{}\n{}\n{}\n",
         hex32(&res.reduce_manifest),
         hex32(&res.merged_snapshot),
         hex32(&res.merged_sig_map),
@@ -2732,7 +2786,11 @@ fn cmd_run_phase6(args: &[String]) -> i32 {
     // Derive segment sizing deterministically from seg_mb and row_kb.
     let seg_bytes = (seg_mb as u64) * 1024 * 1024;
     let row_bytes = (row_kb as u64) * 1024;
-    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
+    let mut seg_rows = if row_bytes == 0 {
+        1
+    } else {
+        seg_bytes / row_bytes
+    };
     if seg_rows < 1 {
         seg_rows = 1;
     }
@@ -2743,7 +2801,10 @@ fn cmd_run_phase6(args: &[String]) -> i32 {
     // Sharded ingest.
     let mut entries: Vec<ShardEntryV1> = Vec::with_capacity(shard_count as usize);
     for sid in 0..shard_count {
-        let shard = ShardCfgV1 { shard_count, shard_id: sid };
+        let shard = ShardCfgV1 {
+            shard_count,
+            shard_id: sid,
+        };
         if shard.validate().is_err() {
             eprintln!("bad shard cfg");
             return 2;
@@ -2879,16 +2940,31 @@ fn cmd_run_phase6(args: &[String]) -> i32 {
     };
 
     let mut out = String::new();
-    out.push_str(&format!("shard_manifest_ingest={}
-", hex32(&ingest_man_hash)));
-    out.push_str(&format!("shard_manifest_index={}
-", hex32(&index_man_hash)));
-    out.push_str(&format!("reduce_manifest={}
-", hex32(&red.reduce_manifest)));
-    out.push_str(&format!("merged_snapshot={}
-", hex32(&red.merged_snapshot)));
-    out.push_str(&format!("merged_sig_map={}
-", hex32(&red.merged_sig_map)));
+    out.push_str(&format!(
+        "shard_manifest_ingest={}
+",
+        hex32(&ingest_man_hash)
+    ));
+    out.push_str(&format!(
+        "shard_manifest_index={}
+",
+        hex32(&index_man_hash)
+    ));
+    out.push_str(&format!(
+        "reduce_manifest={}
+",
+        hex32(&red.reduce_manifest)
+    ));
+    out.push_str(&format!(
+        "merged_snapshot={}
+",
+        hex32(&red.merged_snapshot)
+    ));
+    out.push_str(&format!(
+        "merged_sig_map={}
+",
+        hex32(&red.merged_sig_map)
+    ));
 
     // Optional: 6c client sync step (assumes server is already running).
     if sync_addr.is_some() || sync_root.is_some() {
@@ -2941,10 +3017,7 @@ fn cmd_run_phase6(args: &[String]) -> i32 {
         out.push_str(&format!(
             "sync_stats needed_total={} already_present={} fetched={} bytes_fetched={}
 ",
-            stats.needed_total,
-            stats.already_present,
-            stats.fetched,
-            stats.bytes_fetched
+            stats.needed_total, stats.already_present, stats.fetched, stats.bytes_fetched
         ));
     }
 
@@ -2957,7 +3030,6 @@ fn cmd_run_phase6(args: &[String]) -> i32 {
     }
     0
 }
-
 
 fn cmd_build_lexicon_snapshot(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -3045,7 +3117,6 @@ fn cmd_build_lexicon_snapshot(args: &[String]) -> i32 {
     0
 }
 
-
 fn cmd_validate_lexicon_snapshot(args: &[String]) -> i32 {
     let mut root = default_root();
     let mut snap_hex: Option<String> = None;
@@ -3112,7 +3183,6 @@ fn cmd_validate_lexicon_snapshot(args: &[String]) -> i32 {
         }
     }
 }
-
 
 fn cmd_build_pragmatics(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -3183,7 +3253,6 @@ fn cmd_build_pragmatics(args: &[String]) -> i32 {
         }
         i += 1;
     }
-
 
     if tok_max_bytes == 0 {
         eprintln!("tok-max-bytes must be > 0");
@@ -3271,13 +3340,14 @@ fn cmd_build_pragmatics(args: &[String]) -> i32 {
     0
 }
 
-
 #[cfg(test)]
 mod validate_lexicon_snapshot_cli_tests {
     use super::*;
 
     use fsa_lm::frame::Id64;
-    use fsa_lm::lexicon::{LemmaId, LemmaKeyId, LemmaRowV1, SenseId, SenseRowV1, TextId, LEXICON_SCHEMA_V1};
+    use fsa_lm::lexicon::{
+        LemmaId, LemmaKeyId, LemmaRowV1, SenseId, SenseRowV1, TextId, LEXICON_SCHEMA_V1,
+    };
     use fsa_lm::lexicon_segment::LexiconSegmentV1;
     use fsa_lm::lexicon_segment_store::put_lexicon_segment_v1;
     use fsa_lm::lexicon_snapshot::{LexiconSnapshotEntryV1, LexiconSnapshotV1};
@@ -3575,16 +3645,16 @@ mod scale_demo_cli_tests {
     }
 }
 
-
-
 #[cfg(test)]
 mod sharded_ingest_cli_tests {
     use super::*;
 
     use fsa_lm::frame::{derive_id64, DocId};
-    use fsa_lm::index_snapshot_store::get_index_snapshot_v1;
+    use fsa_lm::index_query::{
+        query_terms_from_text, search_snapshot_gated, QueryTermsCfg, SearchCfg,
+    };
     use fsa_lm::index_sig_map_store::get_index_sig_map_v1;
-    use fsa_lm::index_query::{query_terms_from_text, search_snapshot_gated, QueryTermsCfg, SearchCfg};
+    use fsa_lm::index_snapshot_store::get_index_snapshot_v1;
     use fsa_lm::prompt_artifact::put_prompt_pack;
     use fsa_lm::prompt_pack::{Message, PromptIds, PromptLimits, PromptPack, Role};
     use fsa_lm::reduce_manifest_artifact::get_reduce_manifest_v1;
@@ -3638,10 +3708,16 @@ mod sharded_ingest_cli_tests {
         let t1 = title_for_shard(1, shard_count);
 
         let mut data = String::new();
-        data.push_str(&format!("{}	{}
-", t0, "hello world"));
-        data.push_str(&format!("{}	{}
-", t1, "hello world"));
+        data.push_str(&format!(
+            "{}	{}
+",
+            t0, "hello world"
+        ));
+        data.push_str(&format!(
+            "{}	{}
+",
+            t1, "hello world"
+        ));
         std::fs::write(&dump, data.as_bytes()).unwrap();
 
         let args = vec![
@@ -3663,7 +3739,9 @@ mod sharded_ingest_cli_tests {
         let man_hash = parse_hash32_hex(hex).unwrap();
 
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let man = get_shard_manifest_v1(&base_store, &man_hash).unwrap().unwrap();
+        let man = get_shard_manifest_v1(&base_store, &man_hash)
+            .unwrap()
+            .unwrap();
         assert_eq!(man.shard_count, shard_count);
         assert_eq!(man.mapping_id, SHARD_MAPPING_DOC_ID_HASH32_V1.to_string());
         assert_eq!(man.shards.len(), 2);
@@ -3753,7 +3831,9 @@ mod sharded_ingest_cli_tests {
 
         // Verify ReduceManifestV1 references match the printed merged ids.
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let rm = get_reduce_manifest_v1(&base_store, &reduce_hash).unwrap().unwrap();
+        let rm = get_reduce_manifest_v1(&base_store, &reduce_hash)
+            .unwrap()
+            .unwrap();
         let mut got_snap: Option<Hash32> = None;
         let mut got_sig: Option<Hash32> = None;
         for o in rm.outputs.iter() {
@@ -3807,12 +3887,7 @@ mod sharded_ingest_cli_tests {
             for (j, t) in titles.iter().enumerate() {
                 // Keep tokens simple and deterministic.
                 // All rows include "alpha" so we can assert non-empty search hits.
-                let body = format!(
-                    "alpha beta gamma shard{} doc{} x{}",
-                    sid,
-                    j,
-                    (j % 13)
-                );
+                let body = format!("alpha beta gamma shard{} doc{} x{}", sid, j, (j % 13));
                 data.push_str(&format!("{}\t{}\n", t, body));
             }
         }
@@ -3878,8 +3953,12 @@ mod sharded_ingest_cli_tests {
 
         // Load merged artifacts and sanity-check counts.
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let snap = get_index_snapshot_v1(&base_store, &merged_snapshot).unwrap().unwrap();
-        let sig_map = get_index_sig_map_v1(&base_store, &merged_sig_map).unwrap().unwrap();
+        let snap = get_index_snapshot_v1(&base_store, &merged_snapshot)
+            .unwrap()
+            .unwrap();
+        let sig_map = get_index_sig_map_v1(&base_store, &merged_sig_map)
+            .unwrap()
+            .unwrap();
 
         // With seg_rows=16 and docs_per_shard=64, we should usually have >= 24 entries.
         // Keep the bound conservative to avoid brittleness.
@@ -3890,7 +3969,11 @@ mod sharded_ingest_cli_tests {
         let qcfg = QueryTermsCfg::new();
         let qterms = query_terms_from_text("alpha beta", &qcfg);
         assert!(!qterms.is_empty());
-        let scfg = SearchCfg { k: 20, entry_cap: 0, dense_row_threshold: 200_000 };
+        let scfg = SearchCfg {
+            k: 20,
+            entry_cap: 0,
+            dense_row_threshold: 200_000,
+        };
         let (hits, _gate_stats) = search_snapshot_gated(
             &base_store,
             &merged_snapshot,
@@ -3901,7 +3984,6 @@ mod sharded_ingest_cli_tests {
         .unwrap();
         assert!(!hits.is_empty());
     }
-
 
     fn find_output(outputs: &[ShardOutputV1], tag: &str) -> Option<Hash32> {
         for o in outputs.iter() {
@@ -4066,7 +4148,6 @@ mod sharded_ingest_cli_tests {
         assert_eq!(rc, 0);
     }
 
-
     #[test]
     fn cmd_reduce_index_ok_when_primary_root_already_has_some_artifacts() {
         let root = tmp_dir("reduce_preexisting");
@@ -4086,13 +4167,17 @@ mod sharded_ingest_cli_tests {
 
         // Pre-copy one frame segment into the primary root before reduce.
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let man = get_shard_manifest_v1(&base_store, &man1_hash).unwrap().unwrap();
+        let man = get_shard_manifest_v1(&base_store, &man1_hash)
+            .unwrap()
+            .unwrap();
         let se0 = &man.shards[0];
         let shard0_root = root.join(&se0.shard_root_rel);
         let shard0_store = FsArtifactStore::new(&shard0_root).unwrap();
 
         let snap0 = find_output(&se0.outputs, "index_snapshot_v1").unwrap();
-        let snap = get_index_snapshot_v1(&shard0_store, &snap0).unwrap().unwrap();
+        let snap = get_index_snapshot_v1(&shard0_store, &snap0)
+            .unwrap()
+            .unwrap();
         let frame_seg = snap.entries[0].frame_seg;
 
         let bytes = shard0_store.get(&frame_seg).unwrap().unwrap();
@@ -4153,9 +4238,16 @@ mod sharded_ingest_cli_tests {
         // Create a minimal PromptPack and run answer on merged ids.
         let store = FsArtifactStore::new(&root).unwrap();
         let zero: Hash32 = [0u8; 32];
-        let ids = PromptIds { snapshot_id: zero, weights_id: zero, tokenizer_id: zero };
+        let ids = PromptIds {
+            snapshot_id: zero,
+            weights_id: zero,
+            tokenizer_id: zero,
+        };
         let mut pack = PromptPack::new(1, 256, ids);
-        pack.messages.push(Message { role: Role::User, content: "hello world".to_string() });
+        pack.messages.push(Message {
+            role: Role::User,
+            content: "hello world".to_string(),
+        });
         let prompt_hash = put_prompt_pack(&store, &mut pack, PromptLimits::default_v1()).unwrap();
 
         let out_ans = root.join("answer.txt");
@@ -4179,7 +4271,6 @@ mod sharded_ingest_cli_tests {
         let ans_s = std::fs::read_to_string(&out_ans).unwrap();
         assert!(!ans_s.trim().is_empty());
     }
-
 
     #[test]
     fn cmd_run_operator_workflow_pipeline_end_to_end_small() {
@@ -4248,9 +4339,7 @@ mod sharded_ingest_cli_tests {
         assert!(store.get(&snap_h.unwrap()).unwrap().is_some());
         assert!(store.get(&sig_h.unwrap()).unwrap().is_some());
     }
-
 }
-
 
 #[cfg(test)]
 mod sharded_index_cli_tests {
@@ -4262,7 +4351,11 @@ mod sharded_index_cli_tests {
 
     fn tmp_dir(name: &str) -> PathBuf {
         let base = std::env::temp_dir();
-        let p = base.join(format!("fsa_lm_cli_shard_index_{}_{}", name, std::process::id()));
+        let p = base.join(format!(
+            "fsa_lm_cli_shard_index_{}_{}",
+            name,
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p
@@ -4342,7 +4435,9 @@ mod sharded_index_cli_tests {
         let man1_hash = parse_hash32_hex(man1_hex).unwrap();
 
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let man1 = get_shard_manifest_v1(&base_store, &man1_hash).unwrap().unwrap();
+        let man1 = get_shard_manifest_v1(&base_store, &man1_hash)
+            .unwrap()
+            .unwrap();
         assert_eq!(man1.shard_count, shard_count);
         assert_eq!(man1.shards.len(), 2);
 
@@ -4383,7 +4478,6 @@ mod sharded_index_cli_tests {
         assert_eq!(rc, 0);
     }
 }
-
 
 #[cfg(test)]
 mod markov_model_build_cli_tests {
@@ -4538,8 +4632,6 @@ mod markov_model_build_cli_tests {
         assert!(o.lines().count() >= 1);
     }
 
-
-
     #[test]
     fn cmd_build_markov_model_truncation_is_deterministic() {
         use fsa_lm::scale_report::hash_hash32_list_v1;
@@ -4660,9 +4752,9 @@ mod answer_cli_tests {
     use fsa_lm::frame_segment::FrameSegmentV1;
     use fsa_lm::frame_store::put_frame_segment_v1;
     use fsa_lm::index_segment::IndexSegmentV1;
-    use fsa_lm::index_store::put_index_segment_v1;
     use fsa_lm::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
     use fsa_lm::index_snapshot_store::put_index_snapshot_v1;
+    use fsa_lm::index_store::put_index_segment_v1;
     use fsa_lm::markov_hints::MarkovChoiceKindV1;
     use fsa_lm::prompt_artifact::put_prompt_pack;
     use fsa_lm::prompt_pack::{PromptIds, PromptLimits, PromptPack, Role};
@@ -4695,8 +4787,10 @@ mod answer_cli_tests {
         }
     }
 
-
-    fn find_markov_trace_hash_for_answer(store_root: &std::path::Path, answer_hash: Hash32) -> Hash32 {
+    fn find_markov_trace_hash_for_answer(
+        store_root: &std::path::Path,
+        answer_hash: Hash32,
+    ) -> Hash32 {
         // Locate the replay log that produced this answer (STEP_ANSWER_V1 outputs contain answer_hash),
         // then extract the STEP_MARKOV_TRACE_V1 output hash whose inputs include answer_hash.
         let mut files: Vec<PathBuf> = Vec::new();
@@ -4753,7 +4847,6 @@ mod answer_cli_tests {
 
         panic!("markov trace hash not found");
     }
-
 
     fn parse_query_id_from_answer_text(s: &str) -> Hash32 {
         for line in s.lines() {
@@ -4940,7 +5033,8 @@ mod answer_cli_tests {
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash =
+            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
         let out_path = root.join("answer.txt");
         let rc = cmd_answer(&[
@@ -4962,8 +5056,6 @@ mod answer_cli_tests {
         assert!(s.contains("Plan"));
         assert!(s.contains("Evidence"));
     }
-
-    
 
     #[test]
     fn cmd_answer_markov_trace_records_preface_choice_first() {
@@ -5035,7 +5127,8 @@ mod answer_cli_tests {
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash =
+            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
         let out_path = root.join("answer.txt");
         let rc = cmd_answer(&[
@@ -5059,7 +5152,9 @@ mod answer_cli_tests {
 
         let answer_hash = fsa_lm::hash::blake3_hash(s.as_bytes());
         let mt_hash = find_markov_trace_hash_for_answer(&store_root, answer_hash);
-        let trace = fsa_lm::markov_trace_artifact::get_markov_trace_v1(&store, &mt_hash).unwrap().unwrap();
+        let trace = fsa_lm::markov_trace_artifact::get_markov_trace_v1(&store, &mt_hash)
+            .unwrap()
+            .unwrap();
         assert!(!trace.tokens.is_empty());
 
         // This test targets Option B: if the realizer emits an opener preface line,
@@ -5089,8 +5184,6 @@ mod answer_cli_tests {
             "unexpected plan token id"
         );
     }
-
-
 
     #[test]
     fn cmd_answer_with_markov_model_selects_preface_variant1_and_trace() {
@@ -5162,7 +5255,8 @@ mod answer_cli_tests {
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash =
+            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
         // Store a MarkovModelV1 whose unconditional state prefers the supportive
         // alternate preface template (variant 1).
@@ -5195,7 +5289,8 @@ mod answer_cli_tests {
                 states: vec![s0],
             };
             assert!(model.validate().is_ok());
-            let model_hash = fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
+            let model_hash =
+                fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
 
             let out_path = root.join("answer.txt");
             let rc = cmd_answer(&[
@@ -5229,7 +5324,8 @@ mod answer_cli_tests {
                 .unwrap();
             assert!(!trace.tokens.is_empty());
 
-            let preface_cid = fsa_lm::frame::derive_id64(b"markov_choice_v1", b"preface:supportive:1");
+            let preface_cid =
+                fsa_lm::frame::derive_id64(b"markov_choice_v1", b"preface:supportive:1");
             assert_eq!(
                 trace.tokens[0],
                 MarkovTokenV1::new(MarkovChoiceKindV1::Opener, preface_cid)
@@ -5412,7 +5508,11 @@ fn cmd_query_index(args: &[String]) -> i32 {
     };
 
     // Build the query-id blob for retrieve-v1 so ReplayLog steps are fully hash-addressed.
-    let k_u32 = if k > (u32::MAX as usize) { u32::MAX } else { k as u32 };
+    let k_u32 = if k > (u32::MAX as usize) {
+        u32::MAX
+    } else {
+        k as u32
+    };
     let entry_cap_u32: u32 = 0;
     let dense_row_threshold: u32 = 200_000;
 
@@ -5440,13 +5540,19 @@ fn cmd_query_index(args: &[String]) -> i32 {
 
     let mut qcfg = QueryTermsCfg::new();
     qcfg.include_metaphone = include_meta;
-    let scfg = SearchCfg { k, entry_cap: entry_cap_u32 as usize, dense_row_threshold };
+    let scfg = SearchCfg {
+        k,
+        entry_cap: entry_cap_u32 as usize,
+        dense_row_threshold,
+    };
 
     let qterms = query_terms_from_text(&qtext, &qcfg);
 
     let hits = if cache_stats {
-        let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> = Cache2Q::new(cache_cfg_kind("SNAPSHOT"));
-        let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> = Cache2Q::new(cache_cfg_kind("INDEX"));
+        let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> =
+            Cache2Q::new(cache_cfg_kind("SNAPSHOT"));
+        let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> =
+            Cache2Q::new(cache_cfg_kind("INDEX"));
 
         let (h, gate) = match sig_map_hash {
             Some(ref smh) => match search_snapshot_cached_gated(
@@ -5527,9 +5633,18 @@ fn cmd_query_index(args: &[String]) -> i32 {
     // Store HitList and emit a ReplayLog step for retrieve-v1.
     let mut hl_hits: Vec<HitV1> = Vec::with_capacity(hits.len());
     for h in hits.iter() {
-        hl_hits.push(HitV1 { frame_seg: h.frame_seg, row_ix: h.row_ix, score: h.score });
+        hl_hits.push(HitV1 {
+            frame_seg: h.frame_seg,
+            row_ix: h.row_ix,
+            score: h.score,
+        });
     }
-    let hl = HitListV1 { query_id, snapshot_id: snap_hash, tie_control_id: None, hits: hl_hits };
+    let hl = HitListV1 {
+        query_id,
+        snapshot_id: snap_hash,
+        tie_control_id: None,
+        hits: hl_hits,
+    };
     let hit_list_hash = match put_hit_list_v1(&store, &hl) {
         Ok(h) => h,
         Err(e) => {
@@ -5545,7 +5660,11 @@ fn cmd_query_index(args: &[String]) -> i32 {
         inputs.push(smh);
     }
     inputs.push(query_id);
-    rlog.steps.push(step_from_slices(STEP_RETRIEVE_V1, &inputs, &[hit_list_hash]));
+    rlog.steps.push(step_from_slices(
+        STEP_RETRIEVE_V1,
+        &inputs,
+        &[hit_list_hash],
+    ));
     let _replay_hash = match put_replay_log(&store, &rlog) {
         Ok(h) => h,
         Err(e) => {
@@ -5561,13 +5680,16 @@ fn cmd_query_index(args: &[String]) -> i32 {
 
     for h in hits.iter() {
         // Print as: score frame_seg row_ix
-        println!("{}\t{}\t{}", h.score, fsa_lm::hash::hex32(&h.frame_seg), h.row_ix);
+        println!(
+            "{}\t{}\t{}",
+            h.score,
+            fsa_lm::hash::hex32(&h.frame_seg),
+            h.row_ix
+        );
     }
 
     0
 }
-
-
 
 fn cmd_build_evidence(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -5765,8 +5887,10 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
     };
 
     let hits = if cache_stats {
-        let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> = Cache2Q::new(cache_cfg_kind("SNAPSHOT"));
-        let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> = Cache2Q::new(cache_cfg_kind("INDEX"));
+        let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> =
+            Cache2Q::new(cache_cfg_kind("SNAPSHOT"));
+        let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> =
+            Cache2Q::new(cache_cfg_kind("INDEX"));
 
         let (h, gate) = match sig_map_hash {
             Some(ref smh) => match search_snapshot_cached_gated(
@@ -5844,7 +5968,11 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
         }
     };
 
-    let k_u32 = if k > (u32::MAX as usize) { u32::MAX } else { k as u32 };
+    let k_u32 = if k > (u32::MAX as usize) {
+        u32::MAX
+    } else {
+        k as u32
+    };
     let mi = max_items.unwrap_or(k_u32);
     let mb = max_bytes.unwrap_or(64 * 1024);
 
@@ -5874,8 +6002,11 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
         return 1;
     }
 
-
-    let limits = EvidenceLimitsV1 { segments_touched: 0, max_items: mi, max_bytes: mb };
+    let limits = EvidenceLimitsV1 {
+        segments_touched: 0,
+        max_items: mi,
+        max_bytes: mb,
+    };
 
     let mut bcfg = EvidenceBuildCfgV1::new();
     bcfg.verify_refs = !no_verify;
@@ -5941,7 +6072,11 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
         inputs.push(smh);
     }
     inputs.push(query_id);
-    rlog.steps.push(step_from_slices(STEP_BUILD_EVIDENCE_V1, &inputs, &[ev_hash]));
+    rlog.steps.push(step_from_slices(
+        STEP_BUILD_EVIDENCE_V1,
+        &inputs,
+        &[ev_hash],
+    ));
     let replay_hash = match put_replay_log(&store, &rlog) {
         Ok(h) => h,
         Err(e) => {
@@ -5952,7 +6087,6 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
     if verbose {
         eprintln!("replay_log={}", hex32(&replay_hash));
     }
-
 
     if verbose {
         let mut sketch_count: u32 = 0;
@@ -6245,7 +6379,6 @@ fn cmd_answer(args: &[String]) -> i32 {
     }
     let qtext = query_text.unwrap_or_else(|| "".to_string());
 
-
     let mut qcfg = QueryTermsCfg::new();
     qcfg.include_metaphone = include_meta;
     if let Some(mt) = max_terms {
@@ -6343,7 +6476,15 @@ fn cmd_answer(args: &[String]) -> i32 {
     };
     let score_model_id: u32 = 1;
     let bcfg = EvidenceBuildCfgV1::new();
-    let mut bundle = match build_evidence_bundle_v1_from_hits(&store, query_id, snapshot_hash, limits, score_model_id, &hits, &bcfg) {
+    let mut bundle = match build_evidence_bundle_v1_from_hits(
+        &store,
+        query_id,
+        snapshot_hash,
+        limits,
+        score_model_id,
+        &hits,
+        &bcfg,
+    ) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("build-evidence failed: {}", e);
@@ -6461,7 +6602,12 @@ fn cmd_answer(args: &[String]) -> i32 {
         }
     }
 
-    let PlannerOutputV1 { plan, hints: planner_hints, forecast } = match plan_from_evidence_bundle_v1_with_guidance(&bundle, ev_hash, &pl_cfg, pf_opt.as_ref()) {
+    let PlannerOutputV1 {
+        plan,
+        hints: planner_hints,
+        forecast,
+    } = match plan_from_evidence_bundle_v1_with_guidance(&bundle, ev_hash, &pl_cfg, pf_opt.as_ref())
+    {
         Ok(x) => x,
         Err(e) => {
             eprintln!("plan failed: {}", e);
@@ -6527,11 +6673,8 @@ fn cmd_answer(args: &[String]) -> i32 {
     //
     // For the opener preface line, use the realizer-reported surface-choice
     // event as the source of truth (no re-parsing of rendered text).
-    let mt_tokens: Vec<MarkovTokenV1> = build_markov_trace_tokens_v1(
-        &plan,
-        opener_preface_choice,
-        did_append_q,
-    );
+    let mt_tokens: Vec<MarkovTokenV1> =
+        build_markov_trace_tokens_v1(&plan, opener_preface_choice, did_append_q);
 
     let trace = MarkovTraceV1 {
         version: MARKOV_TRACE_V1_VERSION,
@@ -6546,7 +6689,6 @@ fn cmd_answer(args: &[String]) -> i32 {
             return 1;
         }
     };
-
 
     //: Build a minimal EvidenceSetV1 that binds the full answer text
     // to the rendered evidence rows (bounded by the realizer limit).
@@ -6641,7 +6783,8 @@ fn cmd_answer(args: &[String]) -> i32 {
             mh_inputs.push(dh);
         }
         mh_inputs.push(model_hash);
-        log.steps.push(step_from_slices(STEP_MARKOV_HINTS_V1, &mh_inputs, &[hh]));
+        log.steps
+            .push(step_from_slices(STEP_MARKOV_HINTS_V1, &mh_inputs, &[hh]));
     }
 
     //: Record planner guidance artifacts in stable steps.
@@ -6653,14 +6796,22 @@ fn cmd_answer(args: &[String]) -> i32 {
         ph_inputs.push(*h);
     }
     ph_inputs.push(ev_hash);
-    log.steps.push(step_from_slices(STEP_PLANNER_HINTS_V1, &ph_inputs, &[planner_hints_hash]));
+    log.steps.push(step_from_slices(
+        STEP_PLANNER_HINTS_V1,
+        &ph_inputs,
+        &[planner_hints_hash],
+    ));
 
     let mut fc_inputs: Vec<Hash32> = Vec::new();
     for h in control.pragmatics_frame_ids.iter() {
         fc_inputs.push(*h);
     }
     fc_inputs.push(planner_hints_hash);
-    log.steps.push(step_from_slices(STEP_FORECAST_V1, &fc_inputs, &[forecast_hash]));
+    log.steps.push(step_from_slices(
+        STEP_FORECAST_V1,
+        &fc_inputs,
+        &[forecast_hash],
+    ));
 
     let mut ins: Vec<Hash32> = Vec::new();
     ins.push(prompt_hash);
@@ -6699,7 +6850,11 @@ fn cmd_answer(args: &[String]) -> i32 {
         outputs: vec![answer_hash, set_hash],
     });
 
-    log.steps.push(step_from_slices(STEP_MARKOV_TRACE_V1, &mt_inputs, &[markov_trace_hash]));
+    log.steps.push(step_from_slices(
+        STEP_MARKOV_TRACE_V1,
+        &mt_inputs,
+        &[markov_trace_hash],
+    ));
 
     if let Err(e) = put_replay_log(&store, &log) {
         eprintln!("store error: {}", e);
@@ -6720,8 +6875,6 @@ fn cmd_answer(args: &[String]) -> i32 {
 
     0
 }
-
-
 
 fn cmd_build_markov_model(args: &[String]) -> i32 {
     let mut out_file: Option<String> = None;
@@ -6897,7 +7050,11 @@ fn cmd_build_markov_model(args: &[String]) -> i32 {
         return 2;
     }
 
-    let cfg = MarkovTrainCfgV1 { order_n_max, max_next_per_state, max_states };
+    let cfg = MarkovTrainCfgV1 {
+        order_n_max,
+        max_next_per_state,
+        max_states,
+    };
     if let Err(e) = cfg.validate() {
         eprintln!("build-markov-model: invalid cfg: {}", e);
         return 2;
@@ -6938,8 +7095,10 @@ fn cmd_build_markov_model(args: &[String]) -> i32 {
         trace_hashes.truncate(max_traces as usize);
     }
 
-    let replay_summary = fsa_lm::scale_report::HashListSummaryV1::from_list("markov_replays_v1", &replay_hashes);
-    let trace_summary = fsa_lm::scale_report::HashListSummaryV1::from_list("markov_traces_v1", &trace_hashes);
+    let replay_summary =
+        fsa_lm::scale_report::HashListSummaryV1::from_list("markov_replays_v1", &replay_hashes);
+    let trace_summary =
+        fsa_lm::scale_report::HashListSummaryV1::from_list("markov_traces_v1", &trace_hashes);
 
     let corpus_hash = match markov_corpus_hash_v1(&cfg, &trace_hashes) {
         Ok(h) => h,
@@ -7024,7 +7183,6 @@ fn cmd_build_markov_model(args: &[String]) -> i32 {
 
     0
 }
-
 
 fn cmd_inspect_markov_model(args: &[String]) -> i32 {
     use fsa_lm::markov_model_artifact::get_markov_model_v1;
@@ -7226,7 +7384,11 @@ fn cmd_inspect_markov_model(args: &[String]) -> i32 {
             let (out_sum, idx) = sums[rank];
             let st = &model.states[idx];
             let ctx = fmt_ctx(&st.context);
-            let next_s = if nn > 0 { fmt_next(&st.next, nn) } else { "[]".to_string() };
+            let next_s = if nn > 0 {
+                fmt_next(&st.next, nn)
+            } else {
+                "[]".to_string()
+            };
             out.push_str(&format!(
                 "markov_model_state_v1 rank={} idx={} ctx_len={} out={} ctx={} next={}\n",
                 rank,
@@ -7537,7 +7699,6 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
         query_tokens as u16
     };
 
-
     let wcfg = WorkloadCfgV1 {
         version: WORKLOAD_GEN_V1_VERSION,
         seed,
@@ -7549,7 +7710,6 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
         query_tokens: query_tokens_u16,
         include_tie_pair: tie_pair,
     };
-
 
     let cfg = ScaleDemoCfgV1 {
         version: SCALE_DEMO_V1_VERSION,
@@ -7642,8 +7802,15 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
     let evidence_report_opt = if evidence == 0 {
         None
     } else {
-        let ix = index_report_opt.as_ref().expect("validated --evidence requires index");
-        match run_scale_demo_build_evidence_bundles_v1(&store, cfg, &ix.index_snapshot_hash, &ix.index_sig_map_hash) {
+        let ix = index_report_opt
+            .as_ref()
+            .expect("validated --evidence requires index");
+        match run_scale_demo_build_evidence_bundles_v1(
+            &store,
+            cfg,
+            &ix.index_snapshot_hash,
+            &ix.index_sig_map_hash,
+        ) {
             Ok(r) => Some(r),
             Err(e) => {
                 eprintln!("scale-demo evidence: {e}");
@@ -7655,7 +7822,9 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
     let answers_report_opt = if answer == 0 {
         None
     } else {
-        let ev = evidence_report_opt.as_ref().expect("validated --answer requires evidence");
+        let ev = evidence_report_opt
+            .as_ref()
+            .expect("validated --answer requires evidence");
         match run_scale_demo_build_answers_v1(&store, ev) {
             Ok(r) => Some(r),
             Err(e) => {
@@ -7664,7 +7833,6 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
             }
         }
     };
-
 
     let scale_rep = match build_scale_demo_scale_report_v1(
         &report,
@@ -7714,7 +7882,6 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
         out.push_str(&ar.to_string());
         out.push('\n');
     }
-
 
     out.push_str("scale_demo_scale_report_v3 ");
     out.push_str("report=");
@@ -7915,8 +8082,7 @@ fn cmd_golden_pack_turn_pairs(args: &[String]) -> i32 {
     };
 
     let cfg = fsa_lm::golden_pack_turn_pairs_run::GoldenPackTurnPairsRunCfgV1::default_tiny_v1();
-    let out = match fsa_lm::golden_pack_turn_pairs_run::run_golden_pack_turn_pairs_v1(&store, cfg)
-    {
+    let out = match fsa_lm::golden_pack_turn_pairs_run::run_golden_pack_turn_pairs_v1(&store, cfg) {
         Ok(o) => o,
         Err(e) => {
             eprintln!("golden pack turn-pairs failed: {}", e);
@@ -7926,8 +8092,8 @@ fn cmd_golden_pack_turn_pairs(args: &[String]) -> i32 {
 
     let line = fsa_lm::golden_pack_turn_pairs_run::format_golden_pack_turn_pairs_run_line(&out);
 
-    let expect = expect_hex
-        .or_else(|| std::env::var("FSA_LM_GOLDEN_PACK_TURN_PAIRS_V1_REPORT_HEX").ok());
+    let expect =
+        expect_hex.or_else(|| std::env::var("FSA_LM_GOLDEN_PACK_TURN_PAIRS_V1_REPORT_HEX").ok());
     if let Some(hex) = expect {
         match parse_hash32_hex(&hex) {
             Ok(h) => {
@@ -7997,20 +8163,21 @@ fn cmd_golden_pack_conversation(args: &[String]) -> i32 {
         }
     };
 
-    let cfg = fsa_lm::golden_pack_conversation_run::GoldenPackConversationRunCfgV1::default_tiny_v1();
-    let out = match fsa_lm::golden_pack_conversation_run::run_golden_pack_conversation_v1(&store, cfg)
-    {
-        Ok(o) => o,
-        Err(e) => {
-            eprintln!("golden pack conversation failed: {}", e);
-            return 2;
-        }
-    };
+    let cfg =
+        fsa_lm::golden_pack_conversation_run::GoldenPackConversationRunCfgV1::default_tiny_v1();
+    let out =
+        match fsa_lm::golden_pack_conversation_run::run_golden_pack_conversation_v1(&store, cfg) {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("golden pack conversation failed: {}", e);
+                return 2;
+            }
+        };
 
     let line = fsa_lm::golden_pack_conversation_run::format_golden_pack_conversation_run_line(&out);
 
-    let expect = expect_hex
-        .or_else(|| std::env::var("FSA_LM_GOLDEN_PACK_CONVERSATION_V1_REPORT_HEX").ok());
+    let expect =
+        expect_hex.or_else(|| std::env::var("FSA_LM_GOLDEN_PACK_CONVERSATION_V1_REPORT_HEX").ok());
     if let Some(hex) = expect {
         match parse_hash32_hex(&hex) {
             Ok(h) => {
@@ -8158,19 +8325,26 @@ fn handle_client(mut stream: TcpStream, root: PathBuf) -> io::Result<()> {
 
         match req {
             net::Request::Put(bytes) => {
-                let h = store.put(&bytes).map_err(|_| io::Error::new(io::ErrorKind::Other, "put failed"))?;
-                let resp = net::encode_put_resp(&h).map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
+                let h = store
+                    .put(&bytes)
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "put failed"))?;
+                let resp = net::encode_put_resp(&h)
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
                 net::write_frame(&mut stream, &resp)?;
             }
             net::Request::Get(hash) => {
-                let got = store.get(&hash).map_err(|_| io::Error::new(io::ErrorKind::Other, "get failed"))?;
+                let got = store
+                    .get(&hash)
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "get failed"))?;
                 match got {
                     Some(bytes) => {
-                        let resp = net::encode_get_resp(true, &bytes).map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
+                        let resp = net::encode_get_resp(true, &bytes)
+                            .map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
                         net::write_frame(&mut stream, &resp)?;
                     }
                     None => {
-                        let resp = net::encode_get_resp(false, &[]).map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
+                        let resp = net::encode_get_resp(false, &[])
+                            .map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
                         net::write_frame(&mut stream, &resp)?;
                     }
                 }
@@ -8414,7 +8588,8 @@ fn cmd_send_get(args: &[String]) -> i32 {
 }
 
 fn bytes_from_kb(v: u32) -> Result<u32, String> {
-    v.checked_mul(1024).ok_or_else(|| "kb too large".to_string())
+    v.checked_mul(1024)
+        .ok_or_else(|| "kb too large".to_string())
 }
 
 fn bytes_from_mb(v: u32) -> Result<u32, String> {
@@ -9000,7 +9175,7 @@ fn main() {
         "send-get" => cmd_send_get(rest),
         "sync-reduce" => cmd_sync_reduce(rest),
         "sync-reduce-batch" => cmd_sync_reduce_batch(rest),
-                "replay-new" => cmd_replay_new(rest),
+        "replay-new" => cmd_replay_new(rest),
         "frame-seg-demo" => cmd_frame_seg_demo(rest),
         "frame-seg-show" => cmd_frame_seg_show(rest),
         "ingest-wiki" => cmd_ingest_wiki(rest),
@@ -9026,7 +9201,7 @@ fn main() {
         "golden-pack-turn-pairs" => cmd_golden_pack_turn_pairs(rest),
         "golden-pack-conversation" => cmd_golden_pack_conversation(rest),
         "replay-add-prompt" => cmd_replay_add_prompt(rest),
-_ => {
+        _ => {
             eprintln!("unknown cmd: {}\n\n{}", cmd, usage());
             2
         }

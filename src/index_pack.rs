@@ -84,7 +84,9 @@ impl IndexPackV1 {
             let idx = IndexSegmentV1::decode(&e.index_bytes)
                 .map_err(|_| EncodeError::new("pack contains invalid index segment bytes"))?;
             if idx.seg_hash != e.frame_seg {
-                return Err(EncodeError::new("pack entry frame_seg does not match index seg_hash"));
+                return Err(EncodeError::new(
+                    "pack entry frame_seg does not match index seg_hash",
+                ));
             }
             if idx.source_id != tmp.source_id {
                 return Err(EncodeError::new("pack entry source_id mismatch"));
@@ -160,13 +162,18 @@ impl IndexPackV1 {
 
             let idx = IndexSegmentV1::decode(&idx_bytes)?;
             if idx.seg_hash != frame_seg {
-                return Err(DecodeError::new("pack entry frame_seg does not match index seg_hash"));
+                return Err(DecodeError::new(
+                    "pack entry frame_seg does not match index seg_hash",
+                ));
             }
             if idx.source_id != source_id {
                 return Err(DecodeError::new("pack entry source_id mismatch"));
             }
 
-            entries.push(IndexPackEntryV1 { frame_seg, index_bytes: idx_bytes });
+            entries.push(IndexPackEntryV1 {
+                frame_seg,
+                index_bytes: idx_bytes,
+            });
         }
 
         if r.remaining() != 0 {
@@ -216,8 +223,10 @@ mod tests {
         // IndexSegmentV1::build_from_segment requires seg_hash to be the canonical content hash
         // of the encoded FrameSegment bytes.
         let mut row = crate::frame::FrameRowV1::new(DocId(Id64(1)), source_id);
-        row.terms
-            .push(crate::frame::TermFreq { term: crate::frame::TermId(Id64(term_u64)), tf: 1 });
+        row.terms.push(crate::frame::TermFreq {
+            term: crate::frame::TermId(Id64(term_u64)),
+            tf: 1,
+        });
         row.recompute_doc_len();
         let seg = FrameSegmentV1::from_rows(&[row], 16).unwrap();
         let seg_bytes = seg.encode().unwrap();
@@ -236,8 +245,14 @@ mod tests {
         let p = IndexPackV1 {
             source_id: sid,
             entries: vec![
-                IndexPackEntryV1 { frame_seg: seg_b, index_bytes: idx_b.encode().unwrap() },
-                IndexPackEntryV1 { frame_seg: seg_a, index_bytes: idx_a.encode().unwrap() },
+                IndexPackEntryV1 {
+                    frame_seg: seg_b,
+                    index_bytes: idx_b.encode().unwrap(),
+                },
+                IndexPackEntryV1 {
+                    frame_seg: seg_a,
+                    index_bytes: idx_a.encode().unwrap(),
+                },
             ],
         };
 
@@ -265,8 +280,14 @@ mod tests {
         let p = IndexPackV1 {
             source_id: sid,
             entries: vec![
-                IndexPackEntryV1 { frame_seg: seg_a, index_bytes: idx_bytes.clone() },
-                IndexPackEntryV1 { frame_seg: seg_a, index_bytes: idx_bytes },
+                IndexPackEntryV1 {
+                    frame_seg: seg_a,
+                    index_bytes: idx_bytes.clone(),
+                },
+                IndexPackEntryV1 {
+                    frame_seg: seg_a,
+                    index_bytes: idx_bytes,
+                },
             ],
         };
 

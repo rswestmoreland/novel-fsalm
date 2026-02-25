@@ -6,8 +6,8 @@
 //! This module implements manifest-driven replication over TCP using
 //! artifact_sync_v1 protocol.
 
-use crate::artifact::{ArtifactError, ArtifactResult, FsArtifactStore};
 use crate::artifact::ArtifactStore;
+use crate::artifact::{ArtifactError, ArtifactResult, FsArtifactStore};
 use crate::artifact_sync_v1 as p;
 use crate::hash::{hex32, Hash32};
 use crate::index_sig_map::IndexSigMapV1;
@@ -161,7 +161,12 @@ fn ensure_parent_dir(path: &Path) -> ArtifactResult<()> {
 fn tmp_candidates(final_path: &Path, hash: &Hash32) -> [PathBuf; 4] {
     // Mirror the store's short temp naming strategy to reduce Windows MAX_PATH risk.
     let start = (hash[31] & 0x03) as usize;
-    let mut out = [PathBuf::new(), PathBuf::new(), PathBuf::new(), PathBuf::new()];
+    let mut out = [
+        PathBuf::new(),
+        PathBuf::new(),
+        PathBuf::new(),
+        PathBuf::new(),
+    ];
 
     let parent = final_path.parent().unwrap_or_else(|| Path::new("."));
     let hex = hex32(hash);
@@ -212,7 +217,11 @@ fn atomic_write_verified_from_chunks(
     let tmp_paths = tmp_candidates(&final_path, expected);
     let mut last_err: Option<std::io::Error> = None;
     for tmp in tmp_paths.iter() {
-        match fs::OpenOptions::new().write(true).create_new(true).open(tmp) {
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(tmp)
+        {
             Ok(mut f) => {
                 let mut hasher = blake3::Hasher::new();
                 let mut wrote: u64 = 0;
@@ -288,16 +297,18 @@ fn do_hello(stream: &mut TcpStream, cfg: &SyncClientCfgV1) -> SyncResult<p::Hell
         max_chunk_bytes: cfg.max_chunk_bytes,
         max_artifact_bytes: cfg.max_artifact_bytes,
     };
-    let payload = p::encode_hello_v1(&hello).map_err(|_| SyncErrorV1::Proto("encode hello failed"))?;
+    let payload =
+        p::encode_hello_v1(&hello).map_err(|_| SyncErrorV1::Proto("encode hello failed"))?;
     net::write_frame(stream, &payload).map_err(SyncErrorV1::from)?;
-    let resp = net::read_frame(stream, cfg.max_req_frame_bytes)
-        .map_err(SyncErrorV1::from)?;
+    let resp = net::read_frame(stream, cfg.max_req_frame_bytes).map_err(SyncErrorV1::from)?;
     // Could be HELLO_ACK or ERR.
-    let first = *resp.get(0).ok_or_else(|| SyncErrorV1::Proto("empty frame"))?;
-    match p::SyncMsgKind::from_u8(first).map_err(|_| SyncErrorV1::Proto("decode kind failed"))?
-    {
+    let first = *resp
+        .get(0)
+        .ok_or_else(|| SyncErrorV1::Proto("empty frame"))?;
+    match p::SyncMsgKind::from_u8(first).map_err(|_| SyncErrorV1::Proto("decode kind failed"))? {
         p::SyncMsgKind::HelloAck => {
-            let ack = p::decode_hello_ack_v1(&resp).map_err(|_| SyncErrorV1::Proto("decode hello_ack failed"))?;
+            let ack = p::decode_hello_ack_v1(&resp)
+                .map_err(|_| SyncErrorV1::Proto("decode hello_ack failed"))?;
             if ack.version != p::ARTIFACT_SYNC_V1_VERSION {
                 return Err(SyncErrorV1::Proto("bad protocol version"));
             }
@@ -338,10 +349,12 @@ pub fn fetch_one_v1(
         return Ok((false, 0));
     }
 
-    let req = p::encode_get_req_v1(expected).map_err(|_| SyncErrorV1::Proto("encode get failed"))?;
+    let req =
+        p::encode_get_req_v1(expected).map_err(|_| SyncErrorV1::Proto("encode get failed"))?;
     net::write_frame(stream, &req).map_err(SyncErrorV1::from)?;
 
-    let begin_payload = net::read_frame(stream, cfg.max_req_frame_bytes).map_err(SyncErrorV1::from)?;
+    let begin_payload =
+        net::read_frame(stream, cfg.max_req_frame_bytes).map_err(SyncErrorV1::from)?;
     if let Some(msg) = remote_err_msg(&begin_payload) {
         return Err(SyncErrorV1::Remote(msg));
     }
@@ -365,13 +378,16 @@ pub fn fetch_one_v1(
         if done {
             return Ok(None);
         }
-        let payload = net::read_frame(stream, cfg.max_chunk_bytes + 16)
-            .map_err(SyncErrorV1::from)?;
+        let payload =
+            net::read_frame(stream, cfg.max_chunk_bytes + 16).map_err(SyncErrorV1::from)?;
         if let Some(msg) = remote_err_msg(&payload) {
             return Err(SyncErrorV1::Remote(msg));
         }
-        let first = *payload.get(0).ok_or_else(|| SyncErrorV1::Proto("empty frame"))?;
-        let k = p::SyncMsgKind::from_u8(first).map_err(|_| SyncErrorV1::Proto("decode kind failed"))?;
+        let first = *payload
+            .get(0)
+            .ok_or_else(|| SyncErrorV1::Proto("empty frame"))?;
+        let k =
+            p::SyncMsgKind::from_u8(first).map_err(|_| SyncErrorV1::Proto("decode kind failed"))?;
         match k {
             p::SyncMsgKind::GetChunk => {
                 let c = p::decode_get_chunk_v1(&payload)
@@ -389,17 +405,19 @@ pub fn fetch_one_v1(
         }
     };
 
-    let wrote = atomic_write_verified_from_chunks(store, expected, begin.total_len, &mut next_chunk)?;
+    let wrote =
+        atomic_write_verified_from_chunks(store, expected, begin.total_len, &mut next_chunk)?;
     // Ensure stream ended and counts match.
     if !done {
         // Drain until GetEnd if writer exited early.
         loop {
-            let payload = net::read_frame(stream, cfg.max_chunk_bytes + 16)
-                .map_err(SyncErrorV1::from)?;
+            let payload =
+                net::read_frame(stream, cfg.max_chunk_bytes + 16).map_err(SyncErrorV1::from)?;
             if let Some(msg) = remote_err_msg(&payload) {
                 return Err(SyncErrorV1::Remote(msg));
             }
-            let k = p::SyncMsgKind::from_u8(payload[0]).map_err(|_| SyncErrorV1::Proto("decode kind failed"))?;
+            let k = p::SyncMsgKind::from_u8(payload[0])
+                .map_err(|_| SyncErrorV1::Proto("decode kind failed"))?;
             match k {
                 p::SyncMsgKind::GetChunk => {
                     let c = p::decode_get_chunk_v1(&payload)
@@ -439,10 +457,16 @@ fn collect_needed_from_reduce(
     let snap_h = snap_hash.ok_or_else(|| SyncErrorV1::Proto("reduce missing index_snapshot_v1"))?;
     let sig_h = sig_hash.ok_or_else(|| SyncErrorV1::Proto("reduce missing index_sig_map_v1"))?;
 
-    let snap_b = store.get(&snap_h)?.ok_or_else(|| SyncErrorV1::Proto("missing snapshot"))?;
-    let sig_b = store.get(&sig_h)?.ok_or_else(|| SyncErrorV1::Proto("missing sig map"))?;
-    let snap = IndexSnapshotV1::decode(&snap_b).map_err(|_| SyncErrorV1::Proto("decode snapshot failed"))?;
-    let sig = IndexSigMapV1::decode(&sig_b).map_err(|_| SyncErrorV1::Proto("decode sig map failed"))?;
+    let snap_b = store
+        .get(&snap_h)?
+        .ok_or_else(|| SyncErrorV1::Proto("missing snapshot"))?;
+    let sig_b = store
+        .get(&sig_h)?
+        .ok_or_else(|| SyncErrorV1::Proto("missing sig map"))?;
+    let snap = IndexSnapshotV1::decode(&snap_b)
+        .map_err(|_| SyncErrorV1::Proto("decode snapshot failed"))?;
+    let sig =
+        IndexSigMapV1::decode(&sig_b).map_err(|_| SyncErrorV1::Proto("decode sig map failed"))?;
 
     let mut out: Vec<Hash32> = Vec::new();
     out.push(*reduce_manifest_hash);
@@ -503,8 +527,8 @@ pub fn sync_reduce_v1(
     let reduce_b = local_store
         .get(reduce_manifest_hash)?
         .ok_or_else(|| SyncErrorV1::Proto("missing reduce manifest after fetch"))?;
-    let reduce =
-        ReduceManifestV1::decode(&reduce_b).map_err(|_| SyncErrorV1::Proto("decode reduce manifest failed"))?;
+    let reduce = ReduceManifestV1::decode(&reduce_b)
+        .map_err(|_| SyncErrorV1::Proto("decode reduce manifest failed"))?;
 
     // Ensure referenced outputs (snapshot + sig-map) exist so we can derive the full needed list.
     let mut snap_h: Option<Hash32> = None;
@@ -670,9 +694,9 @@ pub fn sync_reduce_batch_v1(
     })
 }
 
-
 fn send_err(stream: &mut TcpStream, msg: &str) -> std::io::Result<()> {
-    let payload = p::encode_err_v1(msg).map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "encode err failed"))?;
+    let payload = p::encode_err_v1(msg)
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "encode err failed"))?;
     net::write_frame(stream, &payload)
 }
 
@@ -684,7 +708,8 @@ fn serve_one_get(
 ) -> std::io::Result<()> {
     let path = store.path_for(hash);
     if !path.exists() {
-        let begin = p::encode_get_begin_v1(false, 0).map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "encode begin failed"))?;
+        let begin = p::encode_get_begin_v1(false, 0)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "encode begin failed"))?;
         net::write_frame(stream, &begin)?;
         return Ok(());
     }
@@ -697,7 +722,8 @@ fn serve_one_get(
         return send_err(stream, "artifact too large");
     }
     let total_len = len_u64 as u32;
-    let begin = p::encode_get_begin_v1(true, total_len).map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "encode begin failed"))?;
+    let begin = p::encode_get_begin_v1(true, total_len)
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "encode begin failed"))?;
     net::write_frame(stream, &begin)?;
 
     let mut f = fs::File::open(&path)?;
@@ -707,16 +733,22 @@ fn serve_one_get(
         if n == 0 {
             break;
         }
-        let payload = p::encode_get_chunk_v1(&buf[..n]).map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "encode chunk failed"))?;
+        let payload = p::encode_get_chunk_v1(&buf[..n])
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "encode chunk failed"))?;
         net::write_frame(stream, &payload)?;
     }
-    let end = p::encode_get_end_v1().map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "encode end failed"))?;
+    let end = p::encode_get_end_v1()
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "encode end failed"))?;
     net::write_frame(stream, &end)?;
     Ok(())
 }
 
 /// Handle one sync client connection.
-pub fn handle_sync_client_v1(mut stream: TcpStream, store: FsArtifactStore, cfg: SyncServerCfgV1) -> std::io::Result<()> {
+pub fn handle_sync_client_v1(
+    mut stream: TcpStream,
+    store: FsArtifactStore,
+    cfg: SyncServerCfgV1,
+) -> std::io::Result<()> {
     // Apply connection timeouts.
     if cfg.rw_timeout_ms == 0 {
         let _ = stream.set_read_timeout(None);
@@ -745,7 +777,8 @@ pub fn handle_sync_client_v1(mut stream: TcpStream, store: FsArtifactStore, cfg:
         max_chunk_bytes: cfg.max_chunk_bytes,
         max_artifact_bytes: cfg.max_artifact_bytes,
     };
-    let ack_payload = p::encode_hello_ack_v1(&ack).map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "encode ack failed"))?;
+    let ack_payload = p::encode_hello_ack_v1(&ack)
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "encode ack failed"))?;
     net::write_frame(&mut stream, &ack_payload)?;
 
     loop {
@@ -808,10 +841,10 @@ pub fn run_sync_server_v1(root: &Path, addr: &str, cfg: SyncServerCfgV1) -> Sync
 mod tests {
     use super::*;
     use crate::artifact::ArtifactStore;
-    use crate::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
     use crate::frame::{Id64, SourceId};
     use crate::hash::blake3_hash;
     use crate::index_sig_map::{IndexSigMapEntryV1, IndexSigMapV1};
+    use crate::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
     use crate::reduce_manifest::{ReduceManifestV1, ReduceOutputV1, REDUCE_MANIFEST_V1_VERSION};
     use std::thread;
     use std::time::Duration;
@@ -903,8 +936,14 @@ mod tests {
             copied_index_segs: 1,
             copied_segment_sigs: 1,
             outputs: vec![
-                ReduceOutputV1 { tag: "index_sig_map_v1".to_string(), hash: sig_hh },
-                ReduceOutputV1 { tag: "index_snapshot_v1".to_string(), hash: snap_h },
+                ReduceOutputV1 {
+                    tag: "index_sig_map_v1".to_string(),
+                    hash: sig_hh,
+                },
+                ReduceOutputV1 {
+                    tag: "index_snapshot_v1".to_string(),
+                    hash: snap_h,
+                },
             ],
         };
         let reduce_b = reduce.encode().unwrap();
@@ -989,8 +1028,14 @@ mod tests {
             copied_index_segs: 1,
             copied_segment_sigs: 1,
             outputs: vec![
-                ReduceOutputV1 { tag: "index_sig_map_v1".to_string(), hash: sig_hh },
-                ReduceOutputV1 { tag: "index_snapshot_v1".to_string(), hash: snap_h },
+                ReduceOutputV1 {
+                    tag: "index_sig_map_v1".to_string(),
+                    hash: sig_hh,
+                },
+                ReduceOutputV1 {
+                    tag: "index_snapshot_v1".to_string(),
+                    hash: snap_h,
+                },
             ],
         };
         let reduce_b = reduce.encode().unwrap();
@@ -1160,7 +1205,6 @@ mod tests {
         let _ = th.join();
     }
 
-
     #[test]
     fn sync_client_times_out_if_server_stalls() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -1201,7 +1245,8 @@ mod tests {
         let th = thread::spawn(move || {
             if let Ok((mut stream, _)) = listener.accept() {
                 // HELLO -> ACK.
-                let hello_payload = net::read_frame(&mut stream, p::DEFAULT_MAX_REQ_FRAME_BYTES).unwrap();
+                let hello_payload =
+                    net::read_frame(&mut stream, p::DEFAULT_MAX_REQ_FRAME_BYTES).unwrap();
                 let _hello = p::decode_hello_v1(&hello_payload).unwrap();
                 let ack = p::HelloAckV1 {
                     version: p::ARTIFACT_SYNC_V1_VERSION,
@@ -1212,7 +1257,8 @@ mod tests {
                 net::write_frame(&mut stream, &ack_payload).unwrap();
 
                 // Expect GET.
-                let get_payload = net::read_frame(&mut stream, p::DEFAULT_MAX_REQ_FRAME_BYTES).unwrap();
+                let get_payload =
+                    net::read_frame(&mut stream, p::DEFAULT_MAX_REQ_FRAME_BYTES).unwrap();
                 let get = p::decode_get_req_v1(&get_payload).unwrap();
                 assert_eq!(get.hash, expected);
 
@@ -1234,7 +1280,10 @@ mod tests {
         let _ack = do_hello(&mut stream, &cfgc).unwrap();
 
         let err = fetch_one_v1(&dst_store, &mut stream, &expected, &cfgc).unwrap_err();
-        assert!(matches!(err, SyncErrorV1::Disconnected | SyncErrorV1::Timeout | SyncErrorV1::Io(_)));
+        assert!(matches!(
+            err,
+            SyncErrorV1::Disconnected | SyncErrorV1::Timeout | SyncErrorV1::Io(_)
+        ));
         assert!(dst_store.get(&expected).unwrap().is_none());
         assert!(!any_tmp_files_under(&dst));
 

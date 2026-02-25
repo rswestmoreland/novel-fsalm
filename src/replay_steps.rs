@@ -39,8 +39,6 @@ pub const STEP_MARKOV_TRACE_V1: &str = "markov-trace-v1";
 /// MarkovHintsV1 is advisory-only guidance used for surface-template selection.
 pub const STEP_MARKOV_HINTS_V1: &str = "markov-hints-v1";
 
-
-
 /// Step name for ingest-wiki (TSV dump -> FrameSegments).
 pub const STEP_INGEST_WIKI_V1: &str = "ingest-wiki-v1";
 

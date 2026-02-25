@@ -13,7 +13,6 @@
 //! - a row-oriented builder view (FrameRowV1) that can be converted into
 //! columnar storage later
 
-
 /// A stable 64-bit identifier.
 ///
 /// This is derived from a domain separator plus payload bytes, using BLAKE3 and
@@ -203,7 +202,11 @@ impl FrameRowV1 {
         for t in &self.terms {
             sum += t.tf as u64;
         }
-        self.doc_len = if sum > (u32::MAX as u64) { u32::MAX } else { sum as u32 };
+        self.doc_len = if sum > (u32::MAX as u64) {
+            u32::MAX
+        } else {
+            sum as u32
+        };
     }
 }
 
@@ -243,8 +246,14 @@ mod tests {
         let doc = DocId(Id64(1));
         let src = SourceId(Id64(2));
         let mut row = FrameRowV1::new(doc, src);
-        row.terms.push(TermFreq { term: TermId(Id64(10)), tf: 3 });
-        row.terms.push(TermFreq { term: TermId(Id64(11)), tf: 5 });
+        row.terms.push(TermFreq {
+            term: TermId(Id64(10)),
+            tf: 3,
+        });
+        row.terms.push(TermFreq {
+            term: TermId(Id64(11)),
+            tf: 5,
+        });
         row.recompute_doc_len();
         assert_eq!(row.doc_len, 8);
     }

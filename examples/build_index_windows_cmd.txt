@@ -1,0 +1,15 @@
+# build-index example (Windows cmd.exe)
+
+REM Choose an artifact root directory (it will be created if missing).
+set ROOT=%CD%\store
+
+REM 1) Create a tiny FrameSegment artifact from some text.
+REM This prints the FrameSegment hash.
+cargo run --bin fsa_lm -- frame-seg-demo --root %ROOT% --text "Novel is a CPU-first deterministic LM prototype."
+
+REM 2) Build per-segment postings indexes and emit an IndexSnapshot manifest hash.
+REM This scans the artifact store for FrameSegments.
+cargo run --bin fsa_lm -- build-index --root %ROOT%
+
+REM 3) (Optional) Inspect a frame segment if you captured the segment hash from step 1.
+REM cargo run --bin fsa_lm -- frame-seg-show --root %ROOT% <segment_hash_hex>

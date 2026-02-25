@@ -1,0 +1,794 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Richard S. Westmoreland <dev@rswestmore.land>
+
+//! Pragmatics extractor.
+//!
+//! This module implements a rules-first, deterministic extractor for
+//! [`crate::pragmatics_frame::PragmaticsFrameV1`].
+//!
+//! Design goals:
+//! - CPU-only, integer-only.
+//! - Bitwise deterministic given identical input text + config.
+//! - Bounded memory: O(n) byte scan and O(t) token scan.
+//! - No unsafe.
+
+use crate::frame::Id64;
+use crate::pragmatics_frame::{
+    IntentFlagsV1,
+    PragmaticsFrameV1,
+    PragmaticsFrameV1ValidateError,
+    RhetoricModeV1,
+    INTENT_FLAG_HAS_CODE,
+    INTENT_FLAG_HAS_CONSTRAINTS,
+    INTENT_FLAG_HAS_MATH,
+    INTENT_FLAG_HAS_QUESTION,
+    INTENT_FLAG_HAS_REQUEST,
+    INTENT_FLAG_IS_FOLLOW_UP,
+    INTENT_FLAG_IS_META_PROMPT,
+    INTENT_FLAG_SAFETY_SENSITIVE,
+    PRAGMATICS_FRAME_V1_VERSION,
+};
+use crate::prompt_pack::PromptPack;
+use crate::tokenizer::{term_id_from_token, TokenIter, TokenizerCfg};
+
+use std::error::Error;
+use std::fmt;
+
+/// Configuration for [`extract_pragmatics_frame_v1`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PragmaticsExtractCfg {
+    /// Tokenizer configuration used for cue matching.
+    pub tokenizer_cfg: TokenizerCfg,
+}
+
+impl Default for PragmaticsExtractCfg {
+    fn default() -> Self {
+        PragmaticsExtractCfg {
+            tokenizer_cfg: TokenizerCfg::default(),
+        }
+    }
+}
+
+/// Errors produced by the pragmatics extractor.
+#[derive(Debug)]
+pub enum PragmaticsExtractError {
+    /// The produced frame failed [`PragmaticsFrameV1::validate`].
+    Validate {
+        /// Validation error.
+        err: PragmaticsFrameV1ValidateError,
+    },
+}
+
+impl fmt::Display for PragmaticsExtractError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PragmaticsExtractError::Validate { err } => {
+                write!(f, "pragmatics frame validate failed: {err}")
+            }
+        }
+    }
+}
+
+impl Error for PragmaticsExtractError {}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct PunctStats {
+    exclamations: u16,
+    questions: u16,
+    ellipses: u16,
+    repeat_punct_runs: u16,
+    quotes: u16,
+    ascii_only: u8,
+}
+
+fn sat_u16_add(acc: u16, add: u32) -> u16 {
+    let a = u32::from(acc);
+    let v = a.saturating_add(add);
+    if v > u32::from(u16::MAX) {
+        u16::MAX
+    } else {
+        v as u16
+    }
+}
+
+fn clamp_u16_0_1000(v: u32) -> u16 {
+    if v > 1000 {
+        1000
+    } else {
+        v as u16
+    }
+}
+
+fn clamp_u16_0_1000_i32(v: i32) -> u16 {
+    if v <= 0 {
+        0
+    } else if v >= 1000 {
+        1000
+    } else {
+        v as u16
+    }
+}
+
+fn clamp_i16_m1000_1000(v: i32) -> i16 {
+    if v > 1000 {
+        1000
+    } else if v < -1000 {
+        -1000
+    } else {
+        v as i16
+    }
+}
+
+fn is_all_caps_ascii_word(tok: &str) -> bool {
+    let b = tok.as_bytes();
+    if b.len() < 2 {
+        return false;
+    }
+    for &x in b {
+        if !(b'A'..=b'Z').contains(&x) {
+            return false;
+        }
+    }
+    true
+}
+
+fn contains_subslice(hay: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    if hay.len() < needle.len() {
+        return false;
+    }
+    for i in 0..=(hay.len() - needle.len()) {
+        if &hay[i..i + needle.len()] == needle {
+            return true;
+        }
+    }
+    false
+}
+
+fn scan_punct_stats(text: &str) -> PunctStats {
+    let bytes = text.as_bytes();
+    let mut st = PunctStats::default();
+    st.ascii_only = 1;
+
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b >= 0x80 {
+            st.ascii_only = 0;
+        }
+
+        if b == b'"' || b == b'\'' {
+            st.quotes = sat_u16_add(st.quotes, 1);
+        }
+
+        if b == b'.' {
+            if i + 2 < bytes.len() && bytes[i + 1] == b'.' && bytes[i + 2] == b'.' {
+                st.ellipses = sat_u16_add(st.ellipses, 1);
+                i += 3;
+                continue;
+            }
+        }
+
+        if b == b'!' || b == b'?' {
+            let ch = b;
+            let mut j = i;
+            while j < bytes.len() && bytes[j] == ch {
+                j += 1;
+            }
+            let run_len = (j - i) as u32;
+            if ch == b'!' {
+                st.exclamations = sat_u16_add(st.exclamations, run_len);
+            } else {
+                st.questions = sat_u16_add(st.questions, run_len);
+            }
+            if run_len >= 2 {
+                st.repeat_punct_runs = sat_u16_add(st.repeat_punct_runs, 1);
+            }
+            i = j;
+            continue;
+        }
+
+        i += 1;
+    }
+
+    st
+}
+
+fn make_ids(cfg: TokenizerCfg, words: &[&'static str]) -> Vec<u64> {
+    let mut v: Vec<u64> = Vec::with_capacity(words.len());
+    for &w in words {
+        v.push(term_id_from_token(w, cfg).0 .0);
+    }
+    v.sort_unstable();
+    v.dedup();
+    v
+}
+
+fn make_pairs(cfg: TokenizerCfg, pairs: &[(&'static str, &'static str)]) -> Vec<u128> {
+    let mut v: Vec<u128> = Vec::with_capacity(pairs.len());
+    for &(a, b) in pairs {
+        let ia = term_id_from_token(a, cfg).0 .0;
+        let ib = term_id_from_token(b, cfg).0 .0;
+        let key = (u128::from(ia) << 64) | u128::from(ib);
+        v.push(key);
+    }
+    v.sort_unstable();
+    v.dedup();
+    v
+}
+
+fn in_ids(ids: &[u64], x: u64) -> bool {
+    ids.binary_search(&x).is_ok()
+}
+
+fn in_pairs(pairs: &[u128], a: u64, b: u64) -> bool {
+    let key = (u128::from(a) << 64) | u128::from(b);
+    pairs.binary_search(&key).is_ok()
+}
+
+fn scan_has_math(text: &str, tok_cfg: TokenizerCfg) -> bool {
+    let bytes = text.as_bytes();
+    let mut has_digit = false;
+    let mut has_op = false;
+    for &b in bytes {
+        if (b'0'..=b'9').contains(&b) {
+            has_digit = true;
+        }
+        if matches!(b, b'+' | b'-' | b'*' | b'/' | b'=' | b'^') {
+            has_op = true;
+        }
+    }
+
+    if has_digit && has_op {
+        return true;
+    }
+
+    // Keyword fallback (token-based).
+    let kw = make_ids(tok_cfg, &["sqrt", "sin", "cos", "tan", "log", "ln"]);
+    for sp in TokenIter::new(text) {
+        let tok = &text[sp.start..sp.end];
+        let id = term_id_from_token(tok, tok_cfg).0 .0;
+        if in_ids(&kw, id) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn scan_has_code(text: &str, tok_cfg: TokenizerCfg) -> bool {
+    let bytes = text.as_bytes();
+    if contains_subslice(bytes, b"```") {
+        return true;
+    }
+
+    // Cheap raw cues.
+    let mut has_braces = false;
+    let mut has_semi = false;
+    for &b in bytes {
+        if b == b'{' || b == b'}' {
+            has_braces = true;
+        }
+        if b == b';' {
+            has_semi = true;
+        }
+    }
+    if has_braces && has_semi {
+        return true;
+    }
+
+    // Keyword fallback (token-based).
+    let kw = make_ids(
+        tok_cfg,
+        &[
+            "fn",
+            "pub",
+            "use",
+            "let",
+            "const",
+            "class",
+            "def",
+            "import",
+            "return",
+            "println",
+            "panic",
+            "stacktrace",
+            "exception",
+        ],
+    );
+
+    for sp in TokenIter::new(text) {
+        let tok = &text[sp.start..sp.end];
+        let id = term_id_from_token(tok, tok_cfg).0 .0;
+        if in_ids(&kw, id) {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Extract a [`PragmaticsFrameV1`] from a single message.
+///
+/// This function is rules-only in v1. It derives:
+/// - punctuation and emphasis summaries via a single byte scan
+/// - cue counts and intent flags via tokenization and stable TermIds
+/// - coarse scores (temperature, politeness, etc.) via integer arithmetic
+pub fn extract_pragmatics_frame_v1(
+    source_id: Id64,
+    msg_ix: u32,
+    text: &str,
+    cfg: PragmaticsExtractCfg,
+) -> Result<PragmaticsFrameV1, PragmaticsExtractError> {
+    let bl_u32 = if (text.len() as u64) > (u32::MAX as u64) {
+        u32::MAX
+    } else {
+        text.len() as u32
+    };
+
+    let punct = scan_punct_stats(text);
+
+    // Cue ids. Keep the lists conservative and ASCII-only.
+    let tok_cfg = cfg.tokenizer_cfg;
+
+    let wh_words = make_ids(tok_cfg, &["what", "why", "how", "when", "where", "who", "which"]);
+
+    let request_words = make_ids(tok_cfg, &["please"]);
+    let request_pairs = make_pairs(tok_cfg, &[("can", "you"), ("could", "you"), ("would", "you")]);
+
+    let constraints_words = make_ids(tok_cfg, &["must", "should", "avoid", "never", "only", "require", "requires"]);
+    let constraints_pairs = make_pairs(tok_cfg, &[("do", "not")]);
+
+    let meta_words = make_ids(tok_cfg, &["system", "assistant", "model", "prompt", "chatgpt", "gpt"]);
+
+    let follow_first = make_ids(tok_cfg, &["and", "also", "so"]);
+    let follow_pairs = make_pairs(tok_cfg, &[("what", "about"), ("how", "about")]);
+
+    let hedge_words = make_ids(tok_cfg, &["maybe", "perhaps", "probably", "likely", "kinda", "sorta"]);
+    let hedge_pairs = make_pairs(tok_cfg, &[("i", "think"), ("kind", "of")]);
+
+    let intens_words = make_ids(tok_cfg, &["very", "extremely", "super", "really", "so"]);
+
+    let profanity_words = make_ids(tok_cfg, &["damn", "shit", "fuck"]);
+    let apology_words = make_ids(tok_cfg, &["sorry", "apologies"]);
+    let gratitude_words = make_ids(tok_cfg, &["thanks", "thank", "appreciate"]);
+    let insult_words = make_ids(tok_cfg, &["idiot", "stupid", "moron"]);
+
+    let safety_words = make_ids(tok_cfg, &["suicide", "self-harm", "kill", "murder"]);
+
+    let brainstorm_words = make_ids(tok_cfg, &["brainstorm", "ideas", "options"]);
+    let brainstorm_pairs = make_pairs(tok_cfg, &[("what", "if")]);
+
+    let debate_words = make_ids(tok_cfg, &["debate", "argue", "argument", "prove", "refute"]);
+
+    let first_person_words = make_ids(tok_cfg, &["i", "me", "my", "mine"]);
+    let negative_words = make_ids(tok_cfg, &["hate", "angry", "frustrated", "annoyed", "upset"]);
+
+    let imperative_first_words = make_ids(
+        tok_cfg,
+        &[
+            "do",
+            "make",
+            "show",
+            "tell",
+            "give",
+            "write",
+            "explain",
+            "help",
+            "build",
+            "implement",
+            "fix",
+        ],
+    );
+
+    // Token scan.
+    let mut caps_words: u16 = 0;
+
+    let mut hedge_count: u16 = 0;
+    let mut intensifier_count: u16 = 0;
+    let mut profanity_count: u16 = 0;
+    let mut apology_count: u16 = 0;
+    let mut gratitude_count: u16 = 0;
+    let mut insult_count: u16 = 0;
+
+    let mut has_constraints = false;
+    let mut has_request = false;
+    let mut has_meta = false;
+    let mut is_follow_up = false;
+    let mut is_brainstorm = false;
+    let mut is_debate = false;
+
+    let mut first_person = false;
+    let mut negative_cue = false;
+
+    let mut first_id: Option<u64> = None;
+    let mut second_id: Option<u64> = None;
+    let mut prev_id: Option<u64> = None;
+
+    let mut flags: IntentFlagsV1 = 0;
+
+    for sp in TokenIter::new(text) {
+        let tok = &text[sp.start..sp.end];
+        if is_all_caps_ascii_word(tok) {
+            caps_words = sat_u16_add(caps_words, 1);
+        }
+
+        let id = term_id_from_token(tok, tok_cfg).0 .0;
+
+        if first_id.is_none() {
+            first_id = Some(id);
+        } else if second_id.is_none() {
+            second_id = Some(id);
+        }
+
+        if in_ids(&meta_words, id) {
+            has_meta = true;
+        }
+
+        if in_ids(&constraints_words, id) {
+            has_constraints = true;
+        }
+
+        if in_ids(&request_words, id) {
+            has_request = true;
+        }
+
+        if in_ids(&hedge_words, id) {
+            hedge_count = sat_u16_add(hedge_count, 1);
+        }
+
+        if in_ids(&intens_words, id) {
+            intensifier_count = sat_u16_add(intensifier_count, 1);
+        }
+
+        if in_ids(&profanity_words, id) {
+            profanity_count = sat_u16_add(profanity_count, 1);
+        }
+
+        if in_ids(&apology_words, id) {
+            apology_count = sat_u16_add(apology_count, 1);
+        }
+
+        if in_ids(&gratitude_words, id) {
+            gratitude_count = sat_u16_add(gratitude_count, 1);
+        }
+
+        if in_ids(&insult_words, id) {
+            insult_count = sat_u16_add(insult_count, 1);
+        }
+
+        if in_ids(&safety_words, id) {
+            flags |= INTENT_FLAG_SAFETY_SENSITIVE;
+        }
+
+        if in_ids(&brainstorm_words, id) {
+            is_brainstorm = true;
+        }
+
+        if in_ids(&debate_words, id) {
+            is_debate = true;
+        }
+
+        if in_ids(&first_person_words, id) {
+            first_person = true;
+        }
+
+        if in_ids(&negative_words, id) {
+            negative_cue = true;
+        }
+
+        if let Some(p) = prev_id {
+            if in_pairs(&hedge_pairs, p, id) {
+                hedge_count = sat_u16_add(hedge_count, 1);
+            }
+
+            if in_pairs(&constraints_pairs, p, id) {
+                has_constraints = true;
+            }
+
+            if in_pairs(&brainstorm_pairs, p, id) {
+                is_brainstorm = true;
+            }
+        }
+
+        prev_id = Some(id);
+    }
+
+    // Request pairs at start.
+    if let (Some(a), Some(b)) = (first_id, second_id) {
+        if in_pairs(&request_pairs, a, b) {
+            has_request = true;
+        }
+        if in_pairs(&follow_pairs, a, b) {
+            is_follow_up = true;
+        }
+    }
+
+    // Intent flags.
+    if punct.questions != 0 {
+        flags |= INTENT_FLAG_HAS_QUESTION;
+    } else if let Some(fid) = first_id {
+        if in_ids(&wh_words, fid) {
+            flags |= INTENT_FLAG_HAS_QUESTION;
+        }
+    }
+
+    if has_request {
+        flags |= INTENT_FLAG_HAS_REQUEST;
+    }
+
+    // Imperative heuristic: first token is an imperative verb and there is no '?'.
+    if punct.questions == 0 {
+        if let Some(fid) = first_id {
+            if in_ids(&imperative_first_words, fid) {
+                flags |= INTENT_FLAG_HAS_REQUEST;
+            }
+        }
+    }
+
+    if has_constraints {
+        flags |= INTENT_FLAG_HAS_CONSTRAINTS;
+    }
+
+    if scan_has_math(text, tok_cfg) {
+        flags |= INTENT_FLAG_HAS_MATH;
+    }
+
+    if scan_has_code(text, tok_cfg) {
+        flags |= INTENT_FLAG_HAS_CODE;
+    }
+
+    if has_meta {
+        flags |= INTENT_FLAG_IS_META_PROMPT;
+    }
+
+    if !is_follow_up {
+        if bl_u32 <= 80 && (flags & INTENT_FLAG_HAS_QUESTION) != 0 {
+            if let Some(fid) = first_id {
+                if in_ids(&follow_first, fid) {
+                    is_follow_up = true;
+                }
+            }
+        }
+    }
+
+    if is_follow_up {
+        flags |= INTENT_FLAG_IS_FOLLOW_UP;
+    }
+
+    // Emphasis score.
+    let emphasis_score = clamp_u16_0_1000(
+        u32::from(punct.exclamations).saturating_mul(30)
+            + u32::from(punct.questions).saturating_mul(20)
+            + u32::from(punct.repeat_punct_runs).saturating_mul(200)
+            + u32::from(caps_words).saturating_mul(120)
+            + u32::from(punct.ellipses).saturating_mul(40),
+    );
+
+    // Coarse scores.
+    let mut temperature = clamp_u16_0_1000(
+        150
+            + u32::from(punct.repeat_punct_runs).saturating_mul(200)
+            + u32::from(punct.exclamations).saturating_mul(25)
+            + u32::from(profanity_count).saturating_mul(180)
+            + u32::from(insult_count).saturating_mul(220)
+            + u32::from(caps_words).saturating_mul(80),
+    );
+
+    let mut arousal = clamp_u16_0_1000(
+        150
+            + u32::from(emphasis_score).saturating_div(2)
+            + u32::from(intensifier_count).saturating_mul(50),
+    );
+
+
+
+    let politeness_i = 500i32
+        + (i32::from(gratitude_count) * 200)
+        + (i32::from(apology_count) * 160)
+        - (i32::from(profanity_count) * 300)
+        - (i32::from(insult_count) * 350);
+    let mut politeness = clamp_u16_0_1000_i32(politeness_i);
+
+    let formality_i = 500i32
+        + (i32::from(apology_count) * 80)
+        + (i32::from(gratitude_count) * 50)
+        - (i32::from(profanity_count) * 150)
+        - (i32::from(insult_count) * 150)
+        - (i32::from(punct.exclamations) * 5)
+        - (i32::from(punct.repeat_punct_runs) * 20);
+    let mut formality = clamp_u16_0_1000_i32(formality_i);
+
+    let mut directness_i = 500i32 - (i32::from(hedge_count) * 150);
+    if (flags & INTENT_FLAG_HAS_REQUEST) != 0 {
+        directness_i += 200;
+    }
+    if (flags & INTENT_FLAG_HAS_CONSTRAINTS) != 0 {
+        directness_i += 80;
+    }
+    if (flags & INTENT_FLAG_HAS_QUESTION) != 0 {
+        directness_i -= 50;
+    }
+    let mut directness = clamp_u16_0_1000_i32(directness_i);
+
+    let mut empathy_i = 100i32;
+    if (flags & INTENT_FLAG_SAFETY_SENSITIVE) != 0 {
+        empathy_i += 700;
+    }
+    empathy_i += i32::from(apology_count) * 200;
+    if negative_cue {
+        empathy_i += 200;
+    }
+    if profanity_count != 0 || insult_count != 0 {
+        empathy_i += 150;
+    }
+    let mut empathy_need = clamp_u16_0_1000_i32(empathy_i);
+
+    let valence_i = 0i32
+        + (i32::from(gratitude_count) * 200)
+        + (i32::from(apology_count) * 100)
+        - (i32::from(profanity_count) * 250)
+        - (i32::from(insult_count) * 300)
+        - if negative_cue { 150 } else { 0 }
+        - if (flags & INTENT_FLAG_SAFETY_SENSITIVE) != 0 { 200 } else { 0 };
+    let mut valence = clamp_i16_m1000_1000(valence_i);
+
+    // Mode selection.
+    let mut mode = RhetoricModeV1::Unknown;
+    if (flags & INTENT_FLAG_HAS_QUESTION) != 0 {
+        mode = RhetoricModeV1::Ask;
+    } else if (flags & INTENT_FLAG_HAS_REQUEST) != 0 {
+        mode = RhetoricModeV1::Command;
+    } else if is_debate {
+        mode = RhetoricModeV1::Debate;
+    } else if is_brainstorm {
+        mode = RhetoricModeV1::Brainstorm;
+    } else if temperature >= 700
+        && (profanity_count != 0 || insult_count != 0 || (first_person && negative_cue))
+    {
+        mode = RhetoricModeV1::Vent;
+    }
+
+    // Mode-based adjustments. Keep the adjustments small; this is a v1 heuristic.
+    match mode {
+        RhetoricModeV1::Ask => {
+            temperature = clamp_u16_0_1000(u32::from(temperature).saturating_sub(50));
+            arousal = clamp_u16_0_1000(u32::from(arousal).saturating_sub(50));
+            directness = clamp_u16_0_1000_i32(i32::from(directness) - 50);
+        }
+        RhetoricModeV1::Command => {
+            directness = clamp_u16_0_1000_i32(i32::from(directness) + 100);
+        }
+        RhetoricModeV1::Vent => {
+            temperature = clamp_u16_0_1000(u32::from(temperature) + 100);
+            politeness = clamp_u16_0_1000_i32(i32::from(politeness) - 150);
+            empathy_need = clamp_u16_0_1000_i32(i32::from(empathy_need) + 150);
+            valence = clamp_i16_m1000_1000(i32::from(valence) - 100);
+        }
+        RhetoricModeV1::Debate => {
+            formality = clamp_u16_0_1000_i32(i32::from(formality) + 50);
+        }
+        RhetoricModeV1::Brainstorm => {
+            directness = clamp_u16_0_1000_i32(i32::from(directness) - 25);
+        }
+        RhetoricModeV1::Story | RhetoricModeV1::Negotiation | RhetoricModeV1::Unknown => {}
+    }
+
+    if has_meta {
+        formality = clamp_u16_0_1000_i32(i32::from(formality) + 50);
+    }
+
+    let frame = PragmaticsFrameV1 {
+        version: PRAGMATICS_FRAME_V1_VERSION,
+        source_id,
+        msg_ix,
+        byte_len: bl_u32,
+        ascii_only: punct.ascii_only,
+        temperature,
+        valence,
+        arousal,
+        politeness,
+        formality,
+        directness,
+        empathy_need,
+        mode,
+        flags,
+        exclamations: punct.exclamations,
+        questions: punct.questions,
+        ellipses: punct.ellipses,
+        caps_words,
+        repeat_punct_runs: punct.repeat_punct_runs,
+        quotes: punct.quotes,
+        emphasis_score,
+        hedge_count,
+        intensifier_count,
+        profanity_count,
+        apology_count,
+        gratitude_count,
+        insult_count,
+    };
+
+    frame
+        .validate()
+        .map_err(|err| PragmaticsExtractError::Validate { err })?;
+
+    Ok(frame)
+}
+
+/// Extract pragmatics frames for all messages in a [`PromptPack`].
+///
+/// The returned frames are ordered by message index.
+pub fn extract_pragmatics_frames_for_prompt_pack_v1(
+    source_id: Id64,
+    pack: &PromptPack,
+    cfg: PragmaticsExtractCfg,
+) -> Result<Vec<PragmaticsFrameV1>, PragmaticsExtractError> {
+    let mut out = Vec::with_capacity(pack.messages.len());
+    for (ix, msg) in pack.messages.iter().enumerate() {
+        let ix_u32 = if (ix as u64) > (u32::MAX as u64) {
+            u32::MAX
+        } else {
+            ix as u32
+        };
+        out.push(extract_pragmatics_frame_v1(source_id, ix_u32, &msg.content, cfg)?);
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ex(text: &str) -> PragmaticsFrameV1 {
+        extract_pragmatics_frame_v1(Id64(1), 0, text, PragmaticsExtractCfg::default()).unwrap()
+    }
+
+    #[test]
+    fn extract_sets_question_mode_and_flag() {
+        let f = ex("What is this?");
+        assert_eq!(f.questions, 1);
+        assert_eq!(f.exclamations, 0);
+        assert!((f.flags & INTENT_FLAG_HAS_QUESTION) != 0);
+        assert_eq!(f.mode, RhetoricModeV1::Ask);
+        assert!(f.validate().is_ok());
+    }
+
+    #[test]
+    fn extract_detects_request_and_constraints() {
+        let f = ex("Please avoid unsafe code.");
+        assert!((f.flags & INTENT_FLAG_HAS_REQUEST) != 0);
+        assert!((f.flags & INTENT_FLAG_HAS_CONSTRAINTS) != 0);
+        assert_eq!(f.mode, RhetoricModeV1::Command);
+        assert!(f.validate().is_ok());
+    }
+
+    #[test]
+    fn extract_counts_caps_and_punct_runs() {
+        let f = ex("THIS IS BAD!!!");
+        assert_eq!(f.exclamations, 3);
+        assert_eq!(f.repeat_punct_runs, 1);
+        assert_eq!(f.caps_words, 3);
+        assert!(f.emphasis_score > 0);
+        assert!(f.validate().is_ok());
+    }
+
+    #[test]
+    fn extract_counts_gratitude_and_apology() {
+        let f = ex("Thanks, sorry.");
+        assert_eq!(f.gratitude_count, 1);
+        assert_eq!(f.apology_count, 1);
+        assert!(f.politeness > 500);
+        assert!(f.valence > 0);
+        assert!(f.validate().is_ok());
+    }
+
+    #[test]
+    fn extract_sets_safety_sensitive_flag() {
+        let f = ex("suicide");
+        assert!((f.flags & INTENT_FLAG_SAFETY_SENSITIVE) != 0);
+        assert!(f.empathy_need >= 700);
+        assert!(f.validate().is_ok());
+    }
+}

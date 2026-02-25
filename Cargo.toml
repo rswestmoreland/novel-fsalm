@@ -1,0 +1,27 @@
+[package]
+name = "fsa_lm"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Richard S. Westmoreland <dev@rswestmore.land>"]
+readme = "README.md"
+
+# Keep metadata minimal until the public repository URL is finalized.
+
+[dependencies]
+# Optional convenience: stream Wikipedia XML dumps in .bz2 form.
+# This keeps memory bounded (decoder is streaming) and avoids an external decompression step.
+bzip2 = "0.4.4"
+
+blake3 = "1.5"
+rustc-hash = "1.1"
+
+# Optional future deps (commented out for now to keep crate usage minimal):
+# thiserror = "1.0"
+# memmap2 = "0.9"
+# smallvec = "1.13"
+# num-bigint = "0.4"
+# num-rational = "0.4"
+# num-traits = "0.2"
+
+[dev-dependencies]

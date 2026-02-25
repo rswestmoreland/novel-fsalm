@@ -1,0 +1,22 @@
+# Rust
+/target/
+**/target/
+
+# If you choose to commit Cargo.lock for the CLI, remove any local ignore rules.
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local scratch roots used by examples and tests
+/_tmp*/
+/_tmp_*/
+
+# Local debug bundles
+/_debug_bundle*/

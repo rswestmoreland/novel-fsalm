@@ -37,7 +37,8 @@ pub const PSA_FLAG_MERGED: PuzzleSketchFlagsV1 = 1u32 << 1;
 pub const PSA_FLAG_PENDING: PuzzleSketchFlagsV1 = 1u32 << 2;
 
 /// Mask of all known v1 flags.
-pub const PSA_FLAGS_V1_ALL: PuzzleSketchFlagsV1 = PSA_FLAG_USED_LEXICON | PSA_FLAG_MERGED | PSA_FLAG_PENDING;
+pub const PSA_FLAGS_V1_ALL: PuzzleSketchFlagsV1 =
+    PSA_FLAG_USED_LEXICON | PSA_FLAG_MERGED | PSA_FLAG_PENDING;
 
 fn shape_to_u8(s: PuzzleShapeHintV1) -> u8 {
     match s {
@@ -163,7 +164,8 @@ impl PuzzleSketchArtifactV1 {
             has_constraints: sketch.has_constraints,
             shape: sketch.shape,
         };
-        out.validate().map_err(|_| EncodeError::new("validate failed"))?;
+        out.validate()
+            .map_err(|_| EncodeError::new("validate failed"))?;
         Ok(out)
     }
 
@@ -202,7 +204,8 @@ impl PuzzleSketchArtifactV1 {
 
     /// Encode to canonical bytes.
     pub fn encode(&self) -> Result<Vec<u8>, EncodeError> {
-        self.validate().map_err(|_| EncodeError::new("validate failed"))?;
+        self.validate()
+            .map_err(|_| EncodeError::new("validate failed"))?;
 
         let mut w = ByteWriter::with_capacity(256 + self.var_names.len() * 16);
         w.write_u32(self.version);
@@ -344,7 +347,6 @@ pub fn puzzle_sketch_merged_source_hash_v1(prev_source_hash: &Hash32, reply_text
     blake3_hash(&b)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -372,5 +374,4 @@ mod tests {
         let h3 = puzzle_sketch_merged_source_hash_v1(&a, "ordering");
         assert_ne!(h1, h3);
     }
-
 }

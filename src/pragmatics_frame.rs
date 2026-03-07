@@ -66,17 +66,16 @@ pub const INTENT_FLAG_IS_PROBLEM_SOLVE: IntentFlagsV1 = 1u32 << 8;
 pub const INTENT_FLAG_IS_LOGIC_PUZZLE: IntentFlagsV1 = 1u32 << 9;
 
 /// Mask of all defined v1 intent flags.
-pub const INTENT_FLAGS_V1_ALL: IntentFlagsV1 =
-    INTENT_FLAG_HAS_QUESTION
-        | INTENT_FLAG_HAS_REQUEST
-        | INTENT_FLAG_HAS_CONSTRAINTS
-        | INTENT_FLAG_HAS_MATH
-        | INTENT_FLAG_HAS_CODE
-        | INTENT_FLAG_IS_META_PROMPT
-        | INTENT_FLAG_IS_FOLLOW_UP
-        | INTENT_FLAG_SAFETY_SENSITIVE
-        | INTENT_FLAG_IS_PROBLEM_SOLVE
-        | INTENT_FLAG_IS_LOGIC_PUZZLE;
+pub const INTENT_FLAGS_V1_ALL: IntentFlagsV1 = INTENT_FLAG_HAS_QUESTION
+    | INTENT_FLAG_HAS_REQUEST
+    | INTENT_FLAG_HAS_CONSTRAINTS
+    | INTENT_FLAG_HAS_MATH
+    | INTENT_FLAG_HAS_CODE
+    | INTENT_FLAG_IS_META_PROMPT
+    | INTENT_FLAG_IS_FOLLOW_UP
+    | INTENT_FLAG_SAFETY_SENSITIVE
+    | INTENT_FLAG_IS_PROBLEM_SOLVE
+    | INTENT_FLAG_IS_LOGIC_PUZZLE;
 
 /// Errors produced by [`PragmaticsFrameV1::validate`].
 #[derive(Debug)]
@@ -155,10 +154,7 @@ impl fmt::Display for PragmaticsFrameV1ValidateError {
                 max,
                 got,
             } => {
-                write!(
-                    f,
-                    "{field} out of range: got={got} expected={min}..={max}"
-                )
+                write!(f, "{field} out of range: got={got} expected={min}..={max}")
             }
             PragmaticsFrameV1ValidateError::RangeI16 {
                 field,
@@ -166,10 +162,7 @@ impl fmt::Display for PragmaticsFrameV1ValidateError {
                 max,
                 got,
             } => {
-                write!(
-                    f,
-                    "{field} out of range: got={got} expected={min}..={max}"
-                )
+                write!(f, "{field} out of range: got={got} expected={min}..={max}")
             }
             PragmaticsFrameV1ValidateError::UnknownIntentFlags { flags, unknown } => {
                 write!(
@@ -644,10 +637,7 @@ mod tests {
             }
             other => panic!("unexpected error: {other:?}"),
         }
-        assert_eq!(
-            err.to_string(),
-            "version mismatch: got=0 expected=1"
-        );
+        assert_eq!(err.to_string(), "version mismatch: got=0 expected=1");
     }
 
     #[test]

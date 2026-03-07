@@ -45,7 +45,9 @@ pub fn put_lexicon_snapshot_v1<S: ArtifactStore>(
     snap: &LexiconSnapshotV1,
 ) -> Result<Hash32, LexiconSnapshotStoreError> {
     let bytes = snap.encode().map_err(LexiconSnapshotStoreError::Encode)?;
-    let h = store.put(&bytes).map_err(LexiconSnapshotStoreError::Store)?;
+    let h = store
+        .put(&bytes)
+        .map_err(LexiconSnapshotStoreError::Store)?;
     Ok(h)
 }
 
@@ -150,10 +152,15 @@ mod tests {
         let snap = sample_snapshot();
         let h = put_lexicon_snapshot_v1(&store, &snap).unwrap();
 
-        let mut cache: Cache2Q<Hash32, Arc<LexiconSnapshotV1>> = Cache2Q::new(CacheCfgV1::new(1_000_000));
+        let mut cache: Cache2Q<Hash32, Arc<LexiconSnapshotV1>> =
+            Cache2Q::new(CacheCfgV1::new(1_000_000));
 
-        let a1 = get_lexicon_snapshot_v1_cached(&store, &mut cache, &h).unwrap().unwrap();
-        let a2 = get_lexicon_snapshot_v1_cached(&store, &mut cache, &h).unwrap().unwrap();
+        let a1 = get_lexicon_snapshot_v1_cached(&store, &mut cache, &h)
+            .unwrap()
+            .unwrap();
+        let a2 = get_lexicon_snapshot_v1_cached(&store, &mut cache, &h)
+            .unwrap()
+            .unwrap();
 
         assert!(Arc::ptr_eq(&a1, &a2));
     }

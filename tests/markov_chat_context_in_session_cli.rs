@@ -5,13 +5,15 @@ use fsa_lm::artifact::FsArtifactStore;
 use fsa_lm::hash::Hash32;
 use fsa_lm::markov_hints::MH_FLAG_HAS_HISTORY;
 use fsa_lm::markov_hints_artifact::get_markov_hints_v1;
-use fsa_lm::markov_model::{MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1, MARKOV_MODEL_V1_VERSION};
+use fsa_lm::markov_model::{
+    MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1, MARKOV_MODEL_V1_VERSION,
+};
 use fsa_lm::markov_model_artifact::put_markov_model_v1;
-use fsa_lm::pragmatics_frame::{PragmaticsFrameV1, PRAGMATICS_FRAME_V1_VERSION, RhetoricModeV1};
+use fsa_lm::pragmatics_frame::{PragmaticsFrameV1, RhetoricModeV1, PRAGMATICS_FRAME_V1_VERSION};
 use fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1;
+use fsa_lm::realizer_directives::ToneV1;
 use fsa_lm::replay_artifact::get_replay_log;
 use fsa_lm::replay_steps::STEP_MARKOV_HINTS_V1;
-use fsa_lm::realizer_directives::ToneV1;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -84,7 +86,10 @@ fn hex_to_hash32(s: &str) -> Hash32 {
 }
 
 fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str) {
-    let s = format!("merged_snapshot={}\nmerged_sig_map={}\n", merged_snapshot, merged_sig_map);
+    let s = format!(
+        "merged_snapshot={}\nmerged_sig_map={}\n",
+        merged_snapshot, merged_sig_map
+    );
     std::fs::write(root.join("workspace_v1.txt"), s.as_bytes()).unwrap();
 }
 
@@ -287,11 +292,19 @@ fn chat_in_session_markov_hints_set_has_history_after_first_turn() {
     }
 
     let out = child.wait_with_output().unwrap();
-    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
-    let conv_hex = parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= in session file");
+    let conv_hex = parse_file_kv(&session_path, "conversation_pack")
+        .expect("conversation_pack= in session file");
     let conv = hex_to_hash32(&conv_hex);
-    let pack = fsa_lm::conversation_pack_artifact::get_conversation_pack(&store, &conv).unwrap().unwrap();
+    let pack = fsa_lm::conversation_pack_artifact::get_conversation_pack(&store, &conv)
+        .unwrap()
+        .unwrap();
 
     let mut assistant_replays: Vec<Hash32> = Vec::new();
     for m in pack.messages.iter() {
@@ -301,10 +314,15 @@ fn chat_in_session_markov_hints_set_has_history_after_first_turn() {
             }
         }
     }
-    assert!(assistant_replays.len() >= 2, "expected at least two assistant turns");
+    assert!(
+        assistant_replays.len() >= 2,
+        "expected at least two assistant turns"
+    );
 
     // First assistant turn should not claim history.
-    let log1 = get_replay_log(&store, &assistant_replays[0]).unwrap().unwrap();
+    let log1 = get_replay_log(&store, &assistant_replays[0])
+        .unwrap()
+        .unwrap();
     let mut mh1: Option<Hash32> = None;
     for st in log1.steps.iter() {
         if st.name == STEP_MARKOV_HINTS_V1 && !st.outputs.is_empty() {
@@ -314,10 +332,16 @@ fn chat_in_session_markov_hints_set_has_history_after_first_turn() {
     }
     let mh1 = mh1.expect("markov-hints-v1 output on first turn");
     let hints1 = get_markov_hints_v1(&store, &mh1).unwrap().unwrap();
-    assert_eq!(hints1.flags & MH_FLAG_HAS_HISTORY, 0, "did not expect HAS_HISTORY on first turn");
+    assert_eq!(
+        hints1.flags & MH_FLAG_HAS_HISTORY,
+        0,
+        "did not expect HAS_HISTORY on first turn"
+    );
 
     // Second assistant turn should set HAS_HISTORY based on in-session tail.
-    let log2 = get_replay_log(&store, &assistant_replays[1]).unwrap().unwrap();
+    let log2 = get_replay_log(&store, &assistant_replays[1])
+        .unwrap()
+        .unwrap();
     let mut mh2: Option<Hash32> = None;
     for st in log2.steps.iter() {
         if st.name == STEP_MARKOV_HINTS_V1 && !st.outputs.is_empty() {
@@ -327,5 +351,9 @@ fn chat_in_session_markov_hints_set_has_history_after_first_turn() {
     }
     let mh2 = mh2.expect("markov-hints-v1 output on second turn");
     let hints2 = get_markov_hints_v1(&store, &mh2).unwrap().unwrap();
-    assert_ne!(hints2.flags & MH_FLAG_HAS_HISTORY, 0, "expected HAS_HISTORY on second turn");
+    assert_ne!(
+        hints2.flags & MH_FLAG_HAS_HISTORY,
+        0,
+        "expected HAS_HISTORY on second turn"
+    );
 }

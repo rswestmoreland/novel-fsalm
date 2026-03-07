@@ -72,7 +72,10 @@ fn parse_file_kv(path: &Path, key: &str) -> Option<String> {
 }
 
 fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str) {
-    let s = format!("merged_snapshot={}\nmerged_sig_map={}\n", merged_snapshot, merged_sig_map);
+    let s = format!(
+        "merged_snapshot={}\nmerged_sig_map={}\n",
+        merged_snapshot, merged_sig_map
+    );
     std::fs::write(root.join("workspace_v1.txt"), s.as_bytes()).unwrap();
 }
 
@@ -133,11 +136,25 @@ fn chat_session_file_autosave_and_resume() {
         stdin.write_all(b"banana\n/exit\n").unwrap();
     }
     let out = child.wait_with_output().unwrap();
-    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
-    let conv1 = parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= in session file");
+    let conv1 = parse_file_kv(&session_path, "conversation_pack")
+        .expect("conversation_pack= in session file");
 
-    let (scode, sout, serr) = run_cmd(bin, &["show-conversation", "--root", root.to_str().unwrap(), &conv1]);
+    let (scode, sout, serr) = run_cmd(
+        bin,
+        &[
+            "show-conversation",
+            "--root",
+            root.to_str().unwrap(),
+            &conv1,
+        ],
+    );
     assert_eq!(scode, 0, "stderr={}", String::from_utf8_lossy(&serr));
     let sout_s = String::from_utf8_lossy(&sout).replace("\r\n", "\n");
     assert!(sout_s.contains(&format!("conversation_pack={}", conv1)));
@@ -165,11 +182,17 @@ fn chat_session_file_autosave_and_resume() {
         stdin.write_all(b"night\n/exit\n").unwrap();
     }
     let out2 = child2.wait_with_output().unwrap();
-    assert_eq!(out2.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out2.stderr));
+    assert_eq!(
+        out2.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out2.stderr)
+    );
     let stdout2 = String::from_utf8_lossy(&out2.stdout);
     assert!(stdout2.contains("Answer v1"), "stdout={}", stdout2);
 
-    let conv2 = parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= in session file after resume");
+    let conv2 = parse_file_kv(&session_path, "conversation_pack")
+        .expect("conversation_pack= in session file after resume");
     assert!(is_hex64(&conv2));
     assert_ne!(conv1, conv2, "autosave should advance the session pointer");
 }

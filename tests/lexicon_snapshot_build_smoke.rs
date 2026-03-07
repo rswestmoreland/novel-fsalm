@@ -2,7 +2,9 @@
 // Copyright (c) 2026 Richard S. Westmoreland <dev@rswestmore.land>
 
 use fsa_lm::artifact::FsArtifactStore;
-use fsa_lm::lexicon::{LemmaRowV1, PronunciationRowV1, RelationEdgeRowV1, SenseRowV1, POS_NOUN, RelFromId, RelTypeId};
+use fsa_lm::lexicon::{
+    LemmaRowV1, PronunciationRowV1, RelFromId, RelTypeId, RelationEdgeRowV1, SenseRowV1, POS_NOUN,
+};
 use fsa_lm::lexicon_segment::LexiconSegmentV1;
 use fsa_lm::lexicon_segment_store::put_lexicon_segment_v1;
 use fsa_lm::lexicon_snapshot_builder::build_lexicon_snapshot_v1_from_segments;
@@ -21,7 +23,8 @@ fn lexicon_snapshot_build_and_store_round_trip() {
     // Segment A: 2 lemmas, no senses/rels/prons.
     let l1 = LemmaRowV1::new("Cat", POS_NOUN, 0);
     let l2 = LemmaRowV1::new("Dog", POS_NOUN, 0);
-    let seg_a = LexiconSegmentV1::build_from_rows(&[l1.clone(), l2.clone()], &[], &[], &[]).unwrap();
+    let seg_a =
+        LexiconSegmentV1::build_from_rows(&[l1.clone(), l2.clone()], &[], &[], &[]).unwrap();
     let h_a = put_lexicon_segment_v1(&store, &seg_a).unwrap();
 
     // Segment B: 1 lemma with 1 sense, 1 relation, 1 pronunciation.
@@ -35,7 +38,9 @@ fn lexicon_snapshot_build_and_store_round_trip() {
     // Build snapshot with hashes in non-canonical order.
     let (snap_hash, _) = build_lexicon_snapshot_v1_from_segments(&store, &[h_b, h_a]).unwrap();
 
-    let snap = get_lexicon_snapshot_v1(&store, &snap_hash).unwrap().unwrap();
+    let snap = get_lexicon_snapshot_v1(&store, &snap_hash)
+        .unwrap()
+        .unwrap();
     assert_eq!(snap.version, 1);
     assert_eq!(snap.entries.len(), 2);
     assert!(snap.entries[0].lex_seg < snap.entries[1].lex_seg);

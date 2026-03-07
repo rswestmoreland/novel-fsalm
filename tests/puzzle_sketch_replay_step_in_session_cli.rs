@@ -142,7 +142,8 @@ fn puzzle_sketch_replay_step_is_recorded_when_clarifying() {
     assert_eq!(acode, 0, "stderr={}", aerr);
     assert!(aout.contains("Clarifying question:"), "stdout={}", aout);
 
-    let conv_hex = parse_file_kv(&session_file, "conversation_pack").expect("conversation_pack in session file");
+    let conv_hex = parse_file_kv(&session_file, "conversation_pack")
+        .expect("conversation_pack in session file");
     let conv_hash = hex_to_hash32(&conv_hex);
 
     let store = FsArtifactStore::new(&root).unwrap();
@@ -168,7 +169,9 @@ fn puzzle_sketch_replay_step_is_recorded_when_clarifying() {
     }
     let sketch_hash = sketch_hash_opt.expect("puzzle-sketch-v1 step present");
 
-    let psa = get_puzzle_sketch_artifact_v1(&store, &sketch_hash).unwrap().unwrap();
+    let psa = get_puzzle_sketch_artifact_v1(&store, &sketch_hash)
+        .unwrap()
+        .unwrap();
     assert_eq!(psa.version, PUZZLE_SKETCH_ARTIFACT_V1_VERSION);
     assert!((psa.flags & PSA_FLAG_PENDING) != 0, "flags={}", psa.flags);
     assert!(psa.is_logic_puzzle_likely);

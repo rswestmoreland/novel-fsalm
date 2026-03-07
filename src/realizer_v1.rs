@@ -15,7 +15,7 @@
 //! This is a debugging-grade output intended to prove end-to-end determinism
 //! before adding richer synthesis.
 
-use crate::answer_plan::{AnswerPlanItemKindV1, AnswerPlanValidateError, AnswerPlanV1};
+use crate::answer_plan::{AnswerPlanItemKindV1, AnswerPlanV1, AnswerPlanValidateError};
 use crate::artifact::ArtifactStore;
 use crate::evidence_bundle::{EvidenceBundleV1, EvidenceItemDataV1};
 use crate::forecast::ForecastV1;
@@ -27,12 +27,10 @@ use crate::planner_hints::{PlannerHintsV1, PH_FLAG_PREFER_CLARIFY};
 use crate::proof_artifact::{PA_FLAG_NO_SOLUTION, PA_FLAG_TRUNCATED, PA_FLAG_UNIQUE};
 use crate::proof_artifact_store::get_proof_artifact_v1;
 use crate::realizer_directives::{
-    RealizerDirectivesV1, RealizerDirectivesError, StyleV1, ToneV1,
-    FORMAT_FLAG_BULLETS, FORMAT_FLAG_NUMBERED,
+    RealizerDirectivesError, RealizerDirectivesV1, StyleV1, ToneV1, FORMAT_FLAG_BULLETS,
     FORMAT_FLAG_INCLUDE_ASSUMPTIONS, FORMAT_FLAG_INCLUDE_NEXT_STEPS, FORMAT_FLAG_INCLUDE_RISKS,
-    FORMAT_FLAG_INCLUDE_SUMMARY,
+    FORMAT_FLAG_INCLUDE_SUMMARY, FORMAT_FLAG_NUMBERED,
 };
-
 
 /// Realizer configuration schema version (v1).
 pub const REALIZER_CFG_V1_VERSION: u16 = 1;
@@ -183,7 +181,10 @@ pub fn realize_answer_plan_v1_with_directives<S: ArtifactStore>(
     cfg: &RealizerCfgV1,
     directives: Option<&RealizerDirectivesV1>,
 ) -> Result<String, RealizerV1Error> {
-    Ok(realize_answer_plan_v1_with_directives_and_markov_events(store, evidence, plan, cfg, directives, None)?.text)
+    Ok(realize_answer_plan_v1_with_directives_and_markov_events(
+        store, evidence, plan, cfg, directives, None,
+    )?
+    .text)
 }
 
 /// Realize an answer plan into a deterministic text output, optionally guided by
@@ -201,7 +202,15 @@ pub fn realize_answer_plan_v1_with_directives_and_markov<S: ArtifactStore>(
     directives: Option<&RealizerDirectivesV1>,
     markov_hints: Option<&MarkovHintsV1>,
 ) -> Result<String, RealizerV1Error> {
-    Ok(realize_answer_plan_v1_with_directives_and_markov_events(store, evidence, plan, cfg, directives, markov_hints)?.text)
+    Ok(realize_answer_plan_v1_with_directives_and_markov_events(
+        store,
+        evidence,
+        plan,
+        cfg,
+        directives,
+        markov_hints,
+    )?
+    .text)
 }
 
 /// Realize an answer plan and return the realized text plus any observed Markov
@@ -214,7 +223,14 @@ pub fn realize_answer_plan_v1_with_directives_and_markov_events<S: ArtifactStore
     directives: Option<&RealizerDirectivesV1>,
     markov_hints: Option<&MarkovHintsV1>,
 ) -> Result<RealizerOutputV1, RealizerV1Error> {
-    realize_answer_plan_v1_with_directives_inner_events(store, evidence, plan, cfg, directives, markov_hints)
+    realize_answer_plan_v1_with_directives_inner_events(
+        store,
+        evidence,
+        plan,
+        cfg,
+        directives,
+        markov_hints,
+    )
 }
 
 fn realize_answer_plan_v1_with_directives_inner_events<S: ArtifactStore>(
@@ -353,10 +369,10 @@ fn realize_answer_plan_v1_with_directives_inner_events<S: ArtifactStore>(
                         if let Some(row) = seg.get_row(fr.row_ix) {
                             out.push(' ');
                             out.push_str("doc_id=");
-                            out.push_str(&row.doc_id.0.0.to_string());
+                            out.push_str(&row.doc_id.0 .0.to_string());
                             out.push(' ');
                             out.push_str("source_id=");
-                            out.push_str(&row.source_id.0.0.to_string());
+                            out.push_str(&row.source_id.0 .0.to_string());
                             out.push(' ');
                             out.push_str("confidence_q16=");
                             out.push_str(&row.confidence.0.to_string());
@@ -371,7 +387,7 @@ fn realize_answer_plan_v1_with_directives_inner_events<S: ArtifactStore>(
                                     if tix != 0 {
                                         out.push(',');
                                     }
-                                    out.push_str(&row.terms[tix].term.0.0.to_string());
+                                    out.push_str(&row.terms[tix].term.0 .0.to_string());
                                 }
                                 if row.terms.len() > n {
                                     out.push_str(",...");
@@ -468,7 +484,10 @@ fn preface_choice_id_v1(t: ToneV1, variant: u8) -> Id64 {
     }
 }
 
-fn preface_choice_for_tone(t: ToneV1, markov_hints: Option<&MarkovHintsV1>) -> (Id64, &'static str) {
+fn preface_choice_for_tone(
+    t: ToneV1,
+    markov_hints: Option<&MarkovHintsV1>,
+) -> (Id64, &'static str) {
     let desired = match markov_hints {
         Some(h) => {
             if h.validate().is_ok() {
@@ -528,10 +547,15 @@ fn preface_choice_for_tone(t: ToneV1, markov_hints: Option<&MarkovHintsV1>) -> (
     }
 }
 
-
-
-fn should_show_proof_solution_line_v1(plan: &AnswerPlanV1, d: Option<&RealizerDirectivesV1>) -> bool {
-    if plan.items.iter().any(|it| it.kind == AnswerPlanItemKindV1::Step) {
+fn should_show_proof_solution_line_v1(
+    plan: &AnswerPlanV1,
+    d: Option<&RealizerDirectivesV1>,
+) -> bool {
+    if plan
+        .items
+        .iter()
+        .any(|it| it.kind == AnswerPlanItemKindV1::Step)
+    {
         return true;
     }
     let dd = match d {
@@ -541,11 +565,16 @@ fn should_show_proof_solution_line_v1(plan: &AnswerPlanV1, d: Option<&RealizerDi
     if (dd.format_flags & FORMAT_FLAG_INCLUDE_NEXT_STEPS) != 0 {
         return true;
     }
-    matches!(dd.style, StyleV1::Checklist | StyleV1::StepByStep | StyleV1::Debug)
+    matches!(
+        dd.style,
+        StyleV1::Checklist | StyleV1::StepByStep | StyleV1::Debug
+    )
 }
 
-
-fn format_proof_solution_line_v1<S: ArtifactStore>(store: &S, evidence: &EvidenceBundleV1) -> Option<String> {
+fn format_proof_solution_line_v1<S: ArtifactStore>(
+    store: &S,
+    evidence: &EvidenceBundleV1,
+) -> Option<String> {
     let mut proof_id_opt: Option<Hash32> = None;
     for it in evidence.items.iter() {
         if let EvidenceItemDataV1::Proof(p) = &it.data {
@@ -592,18 +621,35 @@ fn format_proof_solution_line_v1<S: ArtifactStore>(store: &S, evidence: &Evidenc
     Some(out)
 }
 
-fn render_plan_sections_v1(out: &mut String, plan: &AnswerPlanV1, d: &RealizerDirectivesV1, numbered: bool) {
+fn render_plan_sections_v1(
+    out: &mut String,
+    plan: &AnswerPlanV1,
+    d: &RealizerDirectivesV1,
+    numbered: bool,
+) {
     let flags = d.format_flags;
-    let include_summary = (flags & FORMAT_FLAG_INCLUDE_SUMMARY) != 0 || d.style == StyleV1::Debug || d.style == StyleV1::Default;
+    let include_summary = (flags & FORMAT_FLAG_INCLUDE_SUMMARY) != 0
+        || d.style == StyleV1::Debug
+        || d.style == StyleV1::Default;
     let include_steps = (flags & FORMAT_FLAG_INCLUDE_NEXT_STEPS) != 0
         || d.style == StyleV1::Checklist
         || d.style == StyleV1::StepByStep
         || d.style == StyleV1::Debug;
-    let include_details = (flags & FORMAT_FLAG_INCLUDE_ASSUMPTIONS) != 0 || d.style == StyleV1::Default || d.style == StyleV1::Debug;
-    let include_caveats = (flags & FORMAT_FLAG_INCLUDE_RISKS) != 0 || d.tone == ToneV1::Cautious || d.style == StyleV1::Debug;
+    let include_details = (flags & FORMAT_FLAG_INCLUDE_ASSUMPTIONS) != 0
+        || d.style == StyleV1::Default
+        || d.style == StyleV1::Debug;
+    let include_caveats = (flags & FORMAT_FLAG_INCLUDE_RISKS) != 0
+        || d.tone == ToneV1::Cautious
+        || d.style == StyleV1::Debug;
 
     if include_summary {
-        render_plan_group(out, plan, AnswerPlanItemKindV1::Summary, "Summary", numbered);
+        render_plan_group(
+            out,
+            plan,
+            AnswerPlanItemKindV1::Summary,
+            "Summary",
+            numbered,
+        );
     }
     if include_steps {
         render_plan_group(out, plan, AnswerPlanItemKindV1::Step, "Steps", numbered);
@@ -761,10 +807,10 @@ pub fn realize_answer_plan_v1<S: ArtifactStore>(
                         if let Some(row) = seg.get_row(fr.row_ix) {
                             out.push(' ');
                             out.push_str("doc_id=");
-                            out.push_str(&row.doc_id.0.0.to_string());
+                            out.push_str(&row.doc_id.0 .0.to_string());
                             out.push(' ');
                             out.push_str("source_id=");
-                            out.push_str(&row.source_id.0.0.to_string());
+                            out.push_str(&row.source_id.0 .0.to_string());
                             out.push(' ');
                             out.push_str("confidence_q16=");
                             out.push_str(&row.confidence.0.to_string());
@@ -779,7 +825,7 @@ pub fn realize_answer_plan_v1<S: ArtifactStore>(
                                     if tix != 0 {
                                         out.push(',');
                                     }
-                                    out.push_str(&row.terms[tix].term.0.0.to_string());
+                                    out.push_str(&row.terms[tix].term.0 .0.to_string());
                                 }
                                 if row.terms.len() > n {
                                     out.push_str(",...");
@@ -820,7 +866,6 @@ pub fn realize_answer_plan_v1<S: ArtifactStore>(
 
     Ok(out)
 }
-
 
 /// Append a single clarifying question, if requested by PlannerHintsV1.
 ///
@@ -880,7 +925,8 @@ mod directed_realizer_tests {
     use crate::answer_plan::{AnswerPlanItemKindV1, AnswerPlanItemV1};
     use crate::artifact::{ArtifactResult, ArtifactStore};
     use crate::evidence_bundle::{
-        EvidenceBundleV1, EvidenceItemDataV1, EvidenceItemV1, EvidenceLimitsV1, LexiconRowRefV1, ProofRefV1,
+        EvidenceBundleV1, EvidenceItemDataV1, EvidenceItemV1, EvidenceLimitsV1, LexiconRowRefV1,
+        ProofRefV1,
     };
     use crate::hash::Hash32;
     use std::path::PathBuf;
@@ -951,7 +997,9 @@ mod directed_realizer_tests {
             version: crate::realizer_directives::REALIZER_DIRECTIVES_V1_VERSION,
             tone: ToneV1::Supportive,
             style: StyleV1::Checklist,
-            format_flags: FORMAT_FLAG_BULLETS | FORMAT_FLAG_INCLUDE_SUMMARY | FORMAT_FLAG_INCLUDE_NEXT_STEPS,
+            format_flags: FORMAT_FLAG_BULLETS
+                | FORMAT_FLAG_INCLUDE_SUMMARY
+                | FORMAT_FLAG_INCLUDE_NEXT_STEPS,
             max_preface_sentences: 1,
             max_softeners: 0,
             max_hedges: 0,
@@ -959,7 +1007,8 @@ mod directed_realizer_tests {
             rationale_codes: Vec::new(),
         };
 
-        let text = realize_answer_plan_v1_with_directives(&store, &bundle, &plan, &rcfg, Some(&d)).expect("realize");
+        let text = realize_answer_plan_v1_with_directives(&store, &bundle, &plan, &rcfg, Some(&d))
+            .expect("realize");
         assert!(text.contains("directives tone=Supportive style=Checklist"));
         assert!(text.contains("Plan"));
         assert!(text.contains("Summary"));

@@ -62,7 +62,9 @@ impl core::fmt::Display for QueryExpansionCfgError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             QueryExpansionCfgError::MaxTotalZero => f.write_str("max_total_terms must be >= 1"),
-            QueryExpansionCfgError::MaxNewExceedsTotal => f.write_str("max_new_terms exceeds max_total_terms"),
+            QueryExpansionCfgError::MaxNewExceedsTotal => {
+                f.write_str("max_new_terms exceeds max_total_terms")
+            }
         }
     }
 }
@@ -248,7 +250,11 @@ pub fn expand_query_terms_v1(
 
     let mut out: Vec<ExpandedTermV1> = Vec::with_capacity(max_total);
     for u in &orig_u64 {
-        out.push(ExpandedTermV1::new(TermId(Id64(*u)), 0, QueryExpansionReasonV1::Original));
+        out.push(ExpandedTermV1::new(
+            TermId(Id64(*u)),
+            0,
+            QueryExpansionReasonV1::Original,
+        ));
     }
 
     let mut seen_u64: Vec<u64> = orig_u64;
@@ -303,14 +309,12 @@ mod tests {
 
     use crate::artifact::FsArtifactStore;
     use crate::frame::Id64;
-    use crate::lexicon::{
-        derive_text_id, LemmaId, LemmaRowV1, LEXICON_SCHEMA_V1,
-    };
+    use crate::lexicon::{derive_text_id, LemmaId, LemmaRowV1, LEXICON_SCHEMA_V1};
+    use crate::lexicon_expand_lookup::load_lexicon_expand_lookup_v1;
     use crate::lexicon_segment::LexiconSegmentV1;
     use crate::lexicon_segment_store::put_lexicon_segment_v1;
     use crate::lexicon_snapshot::{LexiconSnapshotEntryV1, LexiconSnapshotV1};
     use crate::lexicon_snapshot_store::put_lexicon_snapshot_v1;
-    use crate::lexicon_expand_lookup::load_lexicon_expand_lookup_v1;
 
     fn tmp_dir(name: &str) -> std::path::PathBuf {
         use std::fs;
@@ -351,7 +355,9 @@ mod tests {
         snap.canonicalize_in_place();
 
         let snap_h = put_lexicon_snapshot_v1(&store, &snap).unwrap();
-        load_lexicon_expand_lookup_v1(&store, &snap_h).unwrap().unwrap()
+        load_lexicon_expand_lookup_v1(&store, &snap_h)
+            .unwrap()
+            .unwrap()
     }
 
     fn term_u64(s: &str) -> u64 {
@@ -379,9 +385,13 @@ mod tests {
         assert!(ids.contains(&term_u64("banana")));
 
         // Original must be present with depth 0.
-        assert!(out.iter().any(|x| x.depth == 0 && x.reason_code == (QueryExpansionReasonV1::Original as u16)));
+        assert!(out
+            .iter()
+            .any(|x| x.depth == 0 && x.reason_code == (QueryExpansionReasonV1::Original as u16)));
         // Variant must be present with depth 1.
-        assert!(out.iter().any(|x| x.depth == 1 && x.reason_code == (QueryExpansionReasonV1::Variant as u16)));
+        assert!(out
+            .iter()
+            .any(|x| x.depth == 1 && x.reason_code == (QueryExpansionReasonV1::Variant as u16)));
     }
 
     #[test]
@@ -404,7 +414,11 @@ mod tests {
     fn expansion_respects_caps() {
         let lex = build_lookup_with_lemmas(
             "expansion_respects_caps",
-            vec![lemma_row(1, "banana"), lemma_row(2, "bake"), lemma_row(3, "make")],
+            vec![
+                lemma_row(1, "banana"),
+                lemma_row(2, "bake"),
+                lemma_row(3, "make"),
+            ],
         );
 
         let cfg = QueryExpansionCfgV1 {
@@ -417,7 +431,8 @@ mod tests {
         };
 
         // "bananas baked" could emit two variants (banana, bake), but caps allow only one.
-        let out = expand_query_terms_v1("bananas baked", TokenizerCfg::default(), &lex, &cfg).unwrap();
+        let out =
+            expand_query_terms_v1("bananas baked", TokenizerCfg::default(), &lex, &cfg).unwrap();
         assert!(out.len() <= 3);
 
         let n_variant = out
@@ -435,7 +450,10 @@ mod tests {
             max_total_terms: 0,
             allow_relations_mask: 0,
         };
-        assert_eq!(cfg.validate().unwrap_err(), QueryExpansionCfgError::MaxTotalZero);
+        assert_eq!(
+            cfg.validate().unwrap_err(),
+            QueryExpansionCfgError::MaxTotalZero
+        );
     }
 
     #[test]
@@ -446,6 +464,9 @@ mod tests {
             max_total_terms: 3,
             allow_relations_mask: 0,
         };
-        assert_eq!(cfg.validate().unwrap_err(), QueryExpansionCfgError::MaxNewExceedsTotal);
+        assert_eq!(
+            cfg.validate().unwrap_err(),
+            QueryExpansionCfgError::MaxNewExceedsTotal
+        );
     }
 }

@@ -248,7 +248,10 @@ impl ProofArtifactV1 {
             if v.is_empty() || v.len() > 32 {
                 return Err(DecodeError::new("bad ProofArtifactV1 var name"));
             }
-            if !v.bytes().all(|b| matches!(b, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_')) {
+            if !v
+                .bytes()
+                .all(|b| matches!(b, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_'))
+            {
                 return Err(DecodeError::new("bad ProofArtifactV1 var name"));
             }
             if let Some(p) = prev {
@@ -344,7 +347,8 @@ impl ProofArtifactV1 {
 
     /// Encode as canonical bytes.
     pub fn encode(&self) -> Result<Vec<u8>, EncodeError> {
-        self.validate().map_err(|_| EncodeError::new("bad ProofArtifactV1"))?;
+        self.validate()
+            .map_err(|_| EncodeError::new("bad ProofArtifactV1"))?;
 
         let cap = 64
             + self.vars.len() * 16
@@ -356,7 +360,8 @@ impl ProofArtifactV1 {
         w.write_u32(self.flags);
         w.write_u16(self.vars.len() as u16);
         for v in self.vars.iter() {
-            w.write_str(v).map_err(|_| EncodeError::new("var write failed"))?;
+            w.write_str(v)
+                .map_err(|_| EncodeError::new("var write failed"))?;
         }
         w.write_u16(self.domain.len() as u16);
         for &d in self.domain.iter() {
@@ -412,14 +417,24 @@ impl ProofArtifactV1 {
                         w.write_u16(ix);
                     }
                 }
-                ConstraintV1::ImpEqVarVal { cond_var, cond_val, var, val } => {
+                ConstraintV1::ImpEqVarVal {
+                    cond_var,
+                    cond_val,
+                    var,
+                    val,
+                } => {
                     w.write_u8(ConstraintKindV1::ImpEqVarVal as u8);
                     w.write_u16(*cond_var);
                     w.write_i64(*cond_val);
                     w.write_u16(*var);
                     w.write_i64(*val);
                 }
-                ConstraintV1::ImpNeqVarVal { cond_var, cond_val, var, val } => {
+                ConstraintV1::ImpNeqVarVal {
+                    cond_var,
+                    cond_val,
+                    var,
+                    val,
+                } => {
                     w.write_u8(ConstraintKindV1::ImpNeqVarVal as u8);
                     w.write_u16(*cond_var);
                     w.write_i64(*cond_val);
@@ -473,7 +488,8 @@ impl ProofArtifactV1 {
         let mut constraints: Vec<ConstraintV1> = Vec::with_capacity(nc);
         for _ in 0..nc {
             let tag = r.read_u8()?;
-            let kind = ConstraintKindV1::from_tag(tag).ok_or_else(|| DecodeError::new("bad constraint tag"))?;
+            let kind = ConstraintKindV1::from_tag(tag)
+                .ok_or_else(|| DecodeError::new("bad constraint tag"))?;
             let c = match kind {
                 ConstraintKindV1::EqVarVal => ConstraintV1::EqVarVal {
                     var: r.read_u16()?,
@@ -578,7 +594,10 @@ mod tests {
             domain: vec![1, 2],
             constraints: vec![ConstraintV1::NeqVarVar { a: 0, b: 1 }],
             solutions: vec![vec![1, 2]],
-            stats: ProofSolveStatsV1 { nodes: 3, backtracks: 1 },
+            stats: ProofSolveStatsV1 {
+                nodes: 3,
+                backtracks: 1,
+            },
         };
         let b = a.encode().unwrap();
         let a2 = ProofArtifactV1::decode(&b).unwrap();

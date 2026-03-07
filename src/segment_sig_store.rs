@@ -96,7 +96,6 @@ pub fn get_segment_sig_v1_cached<S: ArtifactStore>(
     Ok(Some(arc))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,10 +147,15 @@ mod tests {
         let sig = sample_sig();
         let hh = put_segment_sig_v1(&store, &sig).unwrap();
 
-        let mut cache: Cache2Q<Hash32, Arc<SegmentSigV1>> = Cache2Q::new(CacheCfgV1::new(1_000_000));
+        let mut cache: Cache2Q<Hash32, Arc<SegmentSigV1>> =
+            Cache2Q::new(CacheCfgV1::new(1_000_000));
 
-        let a1 = get_segment_sig_v1_cached(&store, &mut cache, &hh).unwrap().unwrap();
-        let a2 = get_segment_sig_v1_cached(&store, &mut cache, &hh).unwrap().unwrap();
+        let a1 = get_segment_sig_v1_cached(&store, &mut cache, &hh)
+            .unwrap()
+            .unwrap();
+        let a2 = get_segment_sig_v1_cached(&store, &mut cache, &hh)
+            .unwrap()
+            .unwrap();
 
         assert!(Arc::ptr_eq(&a1, &a2));
     }

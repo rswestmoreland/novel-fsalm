@@ -53,7 +53,10 @@ fn parse_stderr_kv(stderr: &str, key: &str) -> Option<String> {
 }
 
 fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str) {
-    let s = format!("merged_snapshot={}\nmerged_sig_map={}\n", merged_snapshot, merged_sig_map);
+    let s = format!(
+        "merged_snapshot={}\nmerged_sig_map={}\n",
+        merged_snapshot, merged_sig_map
+    );
     std::fs::write(root.join("workspace_v1.txt"), s.as_bytes()).unwrap();
 }
 
@@ -92,13 +95,7 @@ fn chat_runs_answer_pipeline_using_workspace_defaults() {
     write_workspace(&root, &idx_snap_hex, &sig_map_hex);
 
     let mut child = Command::new(bin)
-        .args([
-            "chat",
-            "--root",
-            root.to_str().unwrap(),
-            "--k",
-            "8",
-        ])
+        .args(["chat", "--root", root.to_str().unwrap(), "--k", "8"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -111,9 +108,18 @@ fn chat_runs_answer_pipeline_using_workspace_defaults() {
     }
 
     let out = child.wait_with_output().unwrap();
-    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let stdout_s = String::from_utf8_lossy(&out.stdout);
     assert!(stdout_s.contains("Answer v1"), "stdout={}", stdout_s);
-    assert!(stdout_s.contains("[E0]"), "expected evidence output; stdout={}", stdout_s);
+    assert!(
+        stdout_s.contains("[E0]"),
+        "expected evidence output; stdout={}",
+        stdout_s
+    );
 }

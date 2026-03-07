@@ -70,7 +70,8 @@ impl EvidenceSetV1 {
 
     /// Encode as canonical bytes, assuming the set is already canonical.
     pub fn encode_assuming_canonical(&self) -> Result<Vec<u8>, EncodeError> {
-        self.validate_canonical().map_err(|_| EncodeError::new("evidence set not canonical"))?;
+        self.validate_canonical()
+            .map_err(|_| EncodeError::new("evidence set not canonical"))?;
 
         // Rough capacity: header + per-item strings and refs.
         let mut cap = 2 + 32 + 4;
@@ -174,7 +175,8 @@ impl EvidenceSetV1 {
             it.evidence_refs.sort_by(cmp_row_ref);
         }
         // Validate now to catch duplicates / non-canonical structure.
-        self.validate_canonical().map_err(|_| EncodeError::new("evidence set not canonical"))?;
+        self.validate_canonical()
+            .map_err(|_| EncodeError::new("evidence set not canonical"))?;
         Ok(())
     }
 
@@ -189,7 +191,9 @@ impl EvidenceSetV1 {
         for it in self.items.iter() {
             if let Some(p) = prev_claim {
                 if it.claim_id <= p {
-                    return Err(DecodeError::new("items must be sorted by claim_id and unique"));
+                    return Err(DecodeError::new(
+                        "items must be sorted by claim_id and unique",
+                    ));
                 }
             }
             prev_claim = Some(it.claim_id);

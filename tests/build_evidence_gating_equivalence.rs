@@ -18,10 +18,10 @@ use fsa_lm::frame_store::put_frame_segment_v1;
 use fsa_lm::hash::{blake3_hash, Hash32};
 use fsa_lm::index_query::{search_snapshot, search_snapshot_gated, QueryTerm, SearchCfg};
 use fsa_lm::index_segment::IndexSegmentV1;
-use fsa_lm::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
-use fsa_lm::index_snapshot_store::put_index_snapshot_v1;
 use fsa_lm::index_sig_map::IndexSigMapV1;
 use fsa_lm::index_sig_map_store::put_index_sig_map_v1;
+use fsa_lm::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
+use fsa_lm::index_snapshot_store::put_index_snapshot_v1;
 use fsa_lm::index_store::put_index_segment_v1;
 use fsa_lm::segment_sig::SegmentSigV1;
 use fsa_lm::segment_sig_store::put_segment_sig_v1;
@@ -44,10 +44,7 @@ fn temp_dir(prefix: &str) -> PathBuf {
 
 fn make_row(doc_id: u64, source_id: SourceId, terms: &[TermId]) -> FrameRowV1 {
     let mut r = FrameRowV1::new(DocId(Id64(doc_id)), source_id);
-    r.terms = terms
-        .iter()
-        .map(|t| TermFreq { term: *t, tf: 1 })
-        .collect();
+    r.terms = terms.iter().map(|t| TermFreq { term: *t, tf: 1 }).collect();
     r.recompute_doc_len();
     r
 }
@@ -139,7 +136,10 @@ fn build_evidence_bundle_plain_vs_gated_equivalent() {
     let sig_map_hash = put_index_sig_map_v1(&store, &sig_map).unwrap();
 
     // Plain and gated search must return identical hits.
-    let qterms: Vec<QueryTerm> = vec![QueryTerm { term: qterm, qtf: 1 }];
+    let qterms: Vec<QueryTerm> = vec![QueryTerm {
+        term: qterm,
+        qtf: 1,
+    }];
     let mut scfg = SearchCfg::new();
     scfg.k = 64;
     scfg.entry_cap = 0;
@@ -149,7 +149,10 @@ fn build_evidence_bundle_plain_vs_gated_equivalent() {
         search_snapshot_gated(&store, &snap_hash, &sig_map_hash, &qterms, &scfg).unwrap();
 
     assert_eq!(hits_plain, hits_gated);
-    assert!(gate.entries_skipped_sig > 0, "expected at least one skipped entry");
+    assert!(
+        gate.entries_skipped_sig > 0,
+        "expected at least one skipped entry"
+    );
 
     // Build evidence from both hit lists and assert exact equivalence.
     let query_id: Hash32 = blake3_hash(b"test_query_id");
@@ -161,12 +164,26 @@ fn build_evidence_bundle_plain_vs_gated_equivalent() {
     let cfg = EvidenceBuildCfgV1::new();
     let score_model_id: u32 = 1;
 
-    let out_plain =
-        build_evidence_bundle_v1_from_hits(&store, query_id, snap_hash, limits, score_model_id, &hits_plain, &cfg)
-            .unwrap();
-    let out_gated =
-        build_evidence_bundle_v1_from_hits(&store, query_id, snap_hash, limits, score_model_id, &hits_gated, &cfg)
-            .unwrap();
+    let out_plain = build_evidence_bundle_v1_from_hits(
+        &store,
+        query_id,
+        snap_hash,
+        limits,
+        score_model_id,
+        &hits_plain,
+        &cfg,
+    )
+    .unwrap();
+    let out_gated = build_evidence_bundle_v1_from_hits(
+        &store,
+        query_id,
+        snap_hash,
+        limits,
+        score_model_id,
+        &hits_gated,
+        &cfg,
+    )
+    .unwrap();
 
     assert_eq!(out_plain, out_gated);
 }

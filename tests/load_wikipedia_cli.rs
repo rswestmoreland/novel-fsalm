@@ -77,16 +77,28 @@ fn load_wikipedia_writes_workspace_defaults_and_preserves_lexicon() {
         .output()
         .unwrap();
 
-    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n");
     assert!(stdout.contains("workspace_written=1"));
 
-    let merged_snapshot = parse_hash_line(&stdout, "merged_snapshot").expect("merged_snapshot line");
+    let merged_snapshot =
+        parse_hash_line(&stdout, "merged_snapshot").expect("merged_snapshot line");
     let merged_sig_map = parse_hash_line(&stdout, "merged_sig_map").expect("merged_sig_map line");
 
     let ws_text = read_file(&root.join("workspace_v1.txt"));
     assert!(ws_text.contains(&format!("merged_snapshot={}\n", merged_snapshot)));
     assert!(ws_text.contains(&format!("merged_sig_map={}\n", merged_sig_map)));
-    assert!(ws_text.contains(&format!("lexicon_snapshot={}\n", lex)), "expected lexicon_snapshot preserved");
-    assert!(ws_text.contains("default_k=7\n"), "expected default_k preserved");
+    assert!(
+        ws_text.contains(&format!("lexicon_snapshot={}\n", lex)),
+        "expected lexicon_snapshot preserved"
+    );
+    assert!(
+        ws_text.contains("default_k=7\n"),
+        "expected default_k preserved"
+    );
 }

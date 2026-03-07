@@ -62,7 +62,10 @@ pub fn read_frame(stream: &mut TcpStream, max_len: u32) -> std::io::Result<Vec<u
     stream.read_exact(&mut len_b)?;
     let len = u32::from_le_bytes(len_b);
     if len > max_len {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "frame too large"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "frame too large",
+        ));
     }
     let mut buf = vec![0u8; len as usize];
     stream.read_exact(&mut buf)?;

@@ -48,7 +48,9 @@ pub fn put_pragmatics_frame_v1<S: ArtifactStore>(
     frame: &PragmaticsFrameV1,
 ) -> Result<Hash32, PragmaticsFrameStoreError> {
     let bytes = frame.encode().map_err(PragmaticsFrameStoreError::Encode)?;
-    let h = store.put(&bytes).map_err(PragmaticsFrameStoreError::Store)?;
+    let h = store
+        .put(&bytes)
+        .map_err(PragmaticsFrameStoreError::Store)?;
     Ok(h)
 }
 
@@ -172,11 +174,16 @@ mod tests {
         let frame = sample_frame();
         let h = put_pragmatics_frame_v1(&store, &frame).unwrap();
 
-        let mut cache: Cache2Q<Hash32, PragmaticsFrameV1> = Cache2Q::new(CacheCfgV1::new(1_000_000));
+        let mut cache: Cache2Q<Hash32, PragmaticsFrameV1> =
+            Cache2Q::new(CacheCfgV1::new(1_000_000));
 
-        let a1 = get_pragmatics_frame_v1_cached(&store, &mut cache, &h).unwrap().unwrap();
+        let a1 = get_pragmatics_frame_v1_cached(&store, &mut cache, &h)
+            .unwrap()
+            .unwrap();
         let st1 = cache.stats();
-        let a2 = get_pragmatics_frame_v1_cached(&store, &mut cache, &h).unwrap().unwrap();
+        let a2 = get_pragmatics_frame_v1_cached(&store, &mut cache, &h)
+            .unwrap()
+            .unwrap();
         let st2 = cache.stats();
 
         assert_eq!(a1, frame);

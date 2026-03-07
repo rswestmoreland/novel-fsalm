@@ -136,7 +136,9 @@ mod tests {
         };
 
         let hash = put_scale_demo_scale_report_v1(&store, &rep).unwrap();
-        let got = get_scale_demo_scale_report_v1(&store, &hash).unwrap().unwrap();
+        let got = get_scale_demo_scale_report_v1(&store, &hash)
+            .unwrap()
+            .unwrap();
         assert_eq!(rep, got);
     }
 }

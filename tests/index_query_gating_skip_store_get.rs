@@ -139,7 +139,9 @@ fn query_index_signature_gating_skips_store_load_for_definite_miss_segment() {
         index_seg: idx2_hash,
         sig: sig2_hash,
     });
-    sig_map.entries.sort_by(|a, b| a.index_seg.cmp(&b.index_seg));
+    sig_map
+        .entries
+        .sort_by(|a, b| a.index_seg.cmp(&b.index_seg));
     let sig_map_hash = put_index_sig_map_v1(&store, &sig_map).unwrap();
 
     // Snapshot includes both segments.
@@ -161,14 +163,18 @@ fn query_index_signature_gating_skips_store_load_for_definite_miss_segment() {
     snap.canonicalize_in_place();
     let snap_hash = put_index_snapshot_v1(&store, &snap).unwrap();
 
-    let query_terms = [QueryTerm { term: qterm, qtf: 1 }];
+    let query_terms = [QueryTerm {
+        term: qterm,
+        qtf: 1,
+    }];
     let cfg = SearchCfg {
         k: 8,
         entry_cap: 0,
         dense_row_threshold: 1024,
     };
 
-    let (hits, gate) = search_snapshot_gated(&store, &snap_hash, &sig_map_hash, &query_terms, &cfg).unwrap();
+    let (hits, gate) =
+        search_snapshot_gated(&store, &snap_hash, &sig_map_hash, &query_terms, &cfg).unwrap();
 
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].frame_seg, seg1_hash);

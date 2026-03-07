@@ -311,7 +311,6 @@ pub fn metaphone_code(token: &str, cfg: MetaphoneCfg) -> MetaCode {
                 push_code(&mut out, &mut out_len, max_out, b'S');
             }
 
-
             b'z' => push_code(&mut out, &mut out_len, max_out, b'S'),
 
             _ => {}
@@ -367,7 +366,7 @@ pub fn meta_freqs_from_text(
             tok
         };
         if let Some(mid) = meta_code_id_from_token(tok, meta_cfg) {
-            ids.push(mid.0.0);
+            ids.push(mid.0 .0);
         }
     }
 
@@ -391,12 +390,18 @@ pub fn meta_freqs_from_text(
                 cnt += 1;
             }
         } else {
-            out.push(MetaFreq { meta: MetaCodeId(Id64(cur)), tf: cnt });
+            out.push(MetaFreq {
+                meta: MetaCodeId(Id64(cur)),
+                tf: cnt,
+            });
             cur = x;
             cnt = 1;
         }
     }
-    out.push(MetaFreq { meta: MetaCodeId(Id64(cur)), tf: cnt });
+    out.push(MetaFreq {
+        meta: MetaCodeId(Id64(cur)),
+        tf: cnt,
+    });
 
     out
 }

@@ -79,7 +79,11 @@ fn build_index_emits_segment_sigs_and_sig_map() {
         .output()
         .unwrap();
 
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
@@ -99,7 +103,9 @@ fn build_index_emits_segment_sigs_and_sig_map() {
     // Every snapshot entry should have a signature mapping, and the signature should
     // refer back to the index artifact hash.
     for ent in &snap.entries {
-        let sig_id = sig_map.lookup_sig(&ent.index_seg).expect("missing sig for entry");
+        let sig_id = sig_map
+            .lookup_sig(&ent.index_seg)
+            .expect("missing sig for entry");
         let sig = get_segment_sig_v1(&store, &sig_id)
             .unwrap()
             .expect("segment sig");

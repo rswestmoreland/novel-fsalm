@@ -86,7 +86,12 @@ fn parse_hash_line(stdout: &str, key: &str) -> Option<String> {
     None
 }
 
-fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str, lexicon_snapshot: Option<&str>) {
+fn write_workspace(
+    root: &Path,
+    merged_snapshot: &str,
+    merged_sig_map: &str,
+    lexicon_snapshot: Option<&str>,
+) {
     let mut s = String::new();
     s.push_str(&format!("merged_snapshot={}\n", merged_snapshot));
     s.push_str(&format!("merged_sig_map={}\n", merged_sig_map));
@@ -147,7 +152,10 @@ fn ask_runs_answer_pipeline_without_prompt_hash() {
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
     let s = std::fs::read_to_string(&out_path).unwrap();
     assert!(s.contains("Answer v1"));
-    assert!(s.contains("[E0]"), "expected evidence using workspace defaults");
+    assert!(
+        s.contains("[E0]"),
+        "expected evidence using workspace defaults"
+    );
 }
 
 #[test]
@@ -180,7 +188,8 @@ fn ask_expand_uses_workspace_lexicon_snapshot_when_omitted() {
     );
     assert_eq!(lxcode, 0, "stderr={}", String::from_utf8_lossy(&lxerr));
     let lxout_s = String::from_utf8_lossy(&lxout).replace("\r\n", "\n");
-    let lex_snap_hex = parse_hash_line(&lxout_s, "lexicon_snapshot").expect("lexicon_snapshot line");
+    let lex_snap_hex =
+        parse_hash_line(&lxout_s, "lexicon_snapshot").expect("lexicon_snapshot line");
 
     let (wcode, _wout, werr) = run_cmd(
         bin,
@@ -223,5 +232,8 @@ fn ask_expand_uses_workspace_lexicon_snapshot_when_omitted() {
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
     let s = std::fs::read_to_string(&out_path).unwrap();
     assert!(s.contains("Answer v1"));
-    assert!(s.contains("[E0]"), "expected evidence using workspace defaults");
+    assert!(
+        s.contains("[E0]"),
+        "expected evidence using workspace defaults"
+    );
 }

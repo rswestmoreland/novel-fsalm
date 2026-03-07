@@ -71,7 +71,10 @@ fn parse_file_kv(path: &Path, key: &str) -> Option<String> {
 }
 
 fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str) {
-    let s = format!("merged_snapshot={}\nmerged_sig_map={}\n", merged_snapshot, merged_sig_map);
+    let s = format!(
+        "merged_snapshot={}\nmerged_sig_map={}\n",
+        merged_snapshot, merged_sig_map
+    );
     std::fs::write(root.join("workspace_v1.txt"), s.as_bytes()).unwrap();
 }
 
@@ -129,10 +132,19 @@ fn ask_session_file_saves_and_resumes_conversation() {
     let aout_s = String::from_utf8_lossy(&aout);
     assert!(aout_s.contains("Answer v1"), "stdout={}", aout_s);
 
-    let conv1 = parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= in session file");
+    let conv1 = parse_file_kv(&session_path, "conversation_pack")
+        .expect("conversation_pack= in session file");
     assert!(is_hex64(&conv1));
 
-    let (scode, sout, serr) = run_cmd(bin, &["show-conversation", "--root", root.to_str().unwrap(), &conv1]);
+    let (scode, sout, serr) = run_cmd(
+        bin,
+        &[
+            "show-conversation",
+            "--root",
+            root.to_str().unwrap(),
+            &conv1,
+        ],
+    );
     assert_eq!(scode, 0, "stderr={}", String::from_utf8_lossy(&serr));
     let sout_s = String::from_utf8_lossy(&sout).replace("\r\n", "\n");
     assert!(sout_s.contains(&format!("conversation_pack={}", conv1)));
@@ -156,11 +168,20 @@ fn ask_session_file_saves_and_resumes_conversation() {
     let aout2_s = String::from_utf8_lossy(&aout2);
     assert!(aout2_s.contains("Answer v1"), "stdout={}", aout2_s);
 
-    let conv2 = parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= in session file after resume");
+    let conv2 = parse_file_kv(&session_path, "conversation_pack")
+        .expect("conversation_pack= in session file after resume");
     assert!(is_hex64(&conv2));
     assert_ne!(conv1, conv2, "session pointer should advance after ask");
 
-    let (scode2, sout2, serr2) = run_cmd(bin, &["show-conversation", "--root", root.to_str().unwrap(), &conv2]);
+    let (scode2, sout2, serr2) = run_cmd(
+        bin,
+        &[
+            "show-conversation",
+            "--root",
+            root.to_str().unwrap(),
+            &conv2,
+        ],
+    );
     assert_eq!(scode2, 0, "stderr={}", String::from_utf8_lossy(&serr2));
     let sout2_s = String::from_utf8_lossy(&sout2).replace("\r\n", "\n");
     assert!(sout2_s.contains("content=banana"));

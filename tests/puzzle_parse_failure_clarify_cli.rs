@@ -99,13 +99,7 @@ fn puzzle_block_parse_failure_triggers_clarify_question() {
 
     let (acode, aout, aerr) = run_cmd(
         bin,
-        &[
-            "ask",
-            "--root",
-            root.to_str().unwrap(),
-            "--text",
-            prompt,
-        ],
+        &["ask", "--root", root.to_str().unwrap(), "--text", prompt],
     );
     assert_eq!(acode, 0, "stderr={}", aerr);
     assert!(aout.contains("Clarifying question:"), "stdout={}", aout);

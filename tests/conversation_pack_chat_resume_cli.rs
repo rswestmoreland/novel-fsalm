@@ -53,7 +53,10 @@ fn parse_stderr_kv(stderr: &str, key: &str) -> Option<String> {
 }
 
 fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str) {
-    let s = format!("merged_snapshot={}\nmerged_sig_map={}\n", merged_snapshot, merged_sig_map);
+    let s = format!(
+        "merged_snapshot={}\nmerged_sig_map={}\n",
+        merged_snapshot, merged_sig_map
+    );
     std::fs::write(root.join("workspace_v1.txt"), s.as_bytes()).unwrap();
 }
 
@@ -103,15 +106,26 @@ fn chat_save_and_resume_via_conversation_pack() {
         stdin.write_all(b"banana\n/save\n/exit\n").unwrap();
     }
     let out = child.wait_with_output().unwrap();
-    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let stderr_s = String::from_utf8_lossy(&out.stderr).replace("\r\n", "\n");
-    let conv_hex = parse_stderr_kv(&stderr_s, "conversation_pack").expect("conversation_pack= on stderr");
+    let conv_hex =
+        parse_stderr_kv(&stderr_s, "conversation_pack").expect("conversation_pack= on stderr");
 
     // Show the stored conversation pack.
     let (scode, sout, serr) = run_cmd(
         bin,
-        &["show-conversation", "--root", root.to_str().unwrap(), &conv_hex],
+        &[
+            "show-conversation",
+            "--root",
+            root.to_str().unwrap(),
+            &conv_hex,
+        ],
     );
     assert_eq!(scode, 0, "stderr={}", String::from_utf8_lossy(&serr));
     let sout_s = String::from_utf8_lossy(&sout).replace("\r\n", "\n");
@@ -140,7 +154,12 @@ fn chat_save_and_resume_via_conversation_pack() {
         stdin.write_all(b"night\n/exit\n").unwrap();
     }
     let out2 = child2.wait_with_output().unwrap();
-    assert_eq!(out2.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out2.stderr));
+    assert_eq!(
+        out2.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out2.stderr)
+    );
     let stdout2 = String::from_utf8_lossy(&out2.stdout);
     assert!(stdout2.contains("Answer v1"), "stdout={}", stdout2);
 }

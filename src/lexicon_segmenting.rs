@@ -205,7 +205,7 @@ fn mix64(x: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
-     use super::*;
+    use super::*;
 
     use crate::frame::Id64;
     use crate::lexicon::{derive_lemma_id, POS_NOUN, REL_SYNONYM};
@@ -290,8 +290,20 @@ mod tests {
         let b = segment_lexicon_rows_v1(rows_b, 8).unwrap();
 
         for i in 0..8usize {
-            let sa = LexiconSegmentV1::build_from_rows(&a[i].lemmas, &a[i].senses, &a[i].rels, &a[i].prons).unwrap();
-            let sb = LexiconSegmentV1::build_from_rows(&b[i].lemmas, &b[i].senses, &b[i].rels, &b[i].prons).unwrap();
+            let sa = LexiconSegmentV1::build_from_rows(
+                &a[i].lemmas,
+                &a[i].senses,
+                &a[i].rels,
+                &a[i].prons,
+            )
+            .unwrap();
+            let sb = LexiconSegmentV1::build_from_rows(
+                &b[i].lemmas,
+                &b[i].senses,
+                &b[i].rels,
+                &b[i].prons,
+            )
+            .unwrap();
             assert_eq!(sa.encode().unwrap(), sb.encode().unwrap());
         }
     }
@@ -305,7 +317,12 @@ mod tests {
             derive_lemma_id("x"),
         ));
         let err = segment_lexicon_rows_v1(rows, 4).unwrap_err();
-        assert_eq!(err, LexiconSegmentationError::UnknownSense { sense_id: SenseId(Id64(999)) });
+        assert_eq!(
+            err,
+            LexiconSegmentationError::UnknownSense {
+                sense_id: SenseId(Id64(999))
+            }
+        );
     }
 
     #[test]

@@ -22,7 +22,8 @@ use crate::forecast::ForecastV1;
 use crate::frame::{derive_id64, Id64};
 use crate::hash::Hash32;
 use crate::markov_hints::{
-    MarkovChoiceKindV1, MarkovHintsFlagsV1, MarkovHintsV1, MH_FLAG_HAS_HISTORY, MH_FLAG_HAS_PRAGMATICS,
+    MarkovChoiceKindV1, MarkovHintsFlagsV1, MarkovHintsV1, MH_FLAG_HAS_HISTORY,
+    MH_FLAG_HAS_PRAGMATICS,
 };
 use crate::markov_model::{MarkovModelV1, MarkovTokenV1};
 use crate::markov_runtime::derive_markov_hints_opener_preface_v1;
@@ -138,7 +139,11 @@ pub fn build_markov_trace_tokens_v1(
     let mut out: Vec<MarkovTokenV1> = Vec::with_capacity(
         plan.items.len()
             + if did_append_q { 1 } else { 0 }
-            + if opener_preface_choice.is_some() { 1 } else { 0 },
+            + if opener_preface_choice.is_some() {
+                1
+            } else {
+                0
+            },
     );
 
     if let Some(cid) = opener_preface_choice {
@@ -177,8 +182,7 @@ mod tests {
     use super::*;
     use crate::answer_plan::{AnswerPlanItemKindV1, AnswerPlanItemV1};
     use crate::markov_model::{MarkovNextV1, MarkovStateV1, MARKOV_MODEL_V1_VERSION};
-    use crate::realizer_directives::{REALIZER_DIRECTIVES_V1_VERSION, StyleV1, ToneV1};
-
+    use crate::realizer_directives::{StyleV1, ToneV1, REALIZER_DIRECTIVES_V1_VERSION};
 
     #[test]
     fn build_markov_trace_tokens_includes_preface_first() {
@@ -275,5 +279,4 @@ mod tests {
         assert_ne!(h0.context_hash, h1.context_hash);
         assert_ne!(h0.state_id, h1.state_id);
     }
-
 }

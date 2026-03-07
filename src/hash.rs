@@ -97,7 +97,9 @@ mod tests {
         let h = blake3_hash(b"x");
         let s = hex32(&h);
         assert_eq!(s.len(), 64);
-        assert!(s.bytes().all(|c| (b'0'..=b'9').contains(&c) || (b'a'..=b'f').contains(&c)));
+        assert!(s
+            .bytes()
+            .all(|c| (b'0'..=b'9').contains(&c) || (b'a'..=b'f').contains(&c)));
     }
 
     #[test]

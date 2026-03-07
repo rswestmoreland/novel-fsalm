@@ -36,7 +36,7 @@ fn row_count_for(entries: &[IndexSnapshotEntryV1], seg: &[u8; 32]) -> Option<u32
     None
 }
 
-fn contains_seg(segs: &[ [u8; 32] ], seg: &[u8; 32]) -> bool {
+fn contains_seg(segs: &[[u8; 32]], seg: &[u8; 32]) -> bool {
     for s in segs {
         if s == seg {
             return true;
@@ -111,7 +111,11 @@ fn e2e_ingest_index_query_evidence_smoke() {
     let qtext = "banana";
     let qterms = query_terms_from_text(qtext, &qcfg);
 
-    let scfg = SearchCfg { k: 8, entry_cap: 0, dense_row_threshold: 200_000 };
+    let scfg = SearchCfg {
+        k: 8,
+        entry_cap: 0,
+        dense_row_threshold: 200_000,
+    };
     let hits = search_snapshot(&store, &snap_hash, &qterms, &scfg).unwrap();
     assert!(!hits.is_empty());
 
@@ -133,7 +137,11 @@ fn e2e_ingest_index_query_evidence_smoke() {
     qid_bytes.extend_from_slice(qtext.as_bytes());
     let query_id = blake3_hash(&qid_bytes);
 
-    let limits = EvidenceLimitsV1 { segments_touched: 0, max_items, max_bytes };
+    let limits = EvidenceLimitsV1 {
+        segments_touched: 0,
+        max_items,
+        max_bytes,
+    };
     let bcfg = EvidenceBuildCfgV1::new();
 
     let bundle = build_evidence_bundle_v1_from_hits(

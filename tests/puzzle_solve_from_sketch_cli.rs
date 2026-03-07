@@ -83,7 +83,10 @@ fn parse_file_kv(path: &Path, key: &str) -> Option<String> {
 }
 
 fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str) {
-    let s = format!("merged_snapshot={}\nmerged_sig_map={}\n", merged_snapshot, merged_sig_map);
+    let s = format!(
+        "merged_snapshot={}\nmerged_sig_map={}\n",
+        merged_snapshot, merged_sig_map
+    );
     std::fs::write(root.join("workspace_v1.txt"), s.as_bytes()).unwrap();
 }
 
@@ -185,7 +188,8 @@ fn puzzle_two_turn_block_solves_and_records_proof() {
     );
     assert_eq!(c2, 0, "stderr={}", err2);
 
-    let conv_hex = parse_file_kv(&session_file, "conversation_pack").expect("conversation_pack in session file");
+    let conv_hex = parse_file_kv(&session_file, "conversation_pack")
+        .expect("conversation_pack in session file");
     let conv_hash = hex_to_hash32(&conv_hex);
 
     let store = FsArtifactStore::new(&root).unwrap();
@@ -196,9 +200,15 @@ fn puzzle_two_turn_block_solves_and_records_proof() {
     let proof_hash = find_proof_step_output(&rlog);
 
     let proof = get_proof_artifact_v1(&store, &proof_hash).unwrap().unwrap();
-    assert_eq!(proof.vars, vec!["A".to_string(), "B".to_string(), "C".to_string()]);
+    assert_eq!(
+        proof.vars,
+        vec!["A".to_string(), "B".to_string(), "C".to_string()]
+    );
     assert_eq!(proof.domain, vec![1, 2, 3]);
-    assert!(!proof.solutions.is_empty(), "expected at least one solution");
+    assert!(
+        !proof.solutions.is_empty(),
+        "expected at least one solution"
+    );
 }
 
 #[test]
@@ -230,7 +240,8 @@ fn puzzle_block_proof_hash_is_stable_across_session_advances() {
     );
     assert_eq!(c1, 0, "stderr={}", err1);
 
-    let conv1_hex = parse_file_kv(&session_file, "conversation_pack").expect("conversation_pack after first run");
+    let conv1_hex = parse_file_kv(&session_file, "conversation_pack")
+        .expect("conversation_pack after first run");
     let conv1_hash = hex_to_hash32(&conv1_hex);
     let pack1 = get_conversation_pack(&store, &conv1_hash).unwrap().unwrap();
     let r1 = last_assistant_replay(&pack1);
@@ -252,7 +263,8 @@ fn puzzle_block_proof_hash_is_stable_across_session_advances() {
     );
     assert_eq!(c2, 0, "stderr={}", err2);
 
-    let conv2_hex = parse_file_kv(&session_file, "conversation_pack").expect("conversation_pack after second run");
+    let conv2_hex = parse_file_kv(&session_file, "conversation_pack")
+        .expect("conversation_pack after second run");
     let conv2_hash = hex_to_hash32(&conv2_hex);
     let pack2 = get_conversation_pack(&store, &conv2_hash).unwrap().unwrap();
     let r2 = last_assistant_replay(&pack2);

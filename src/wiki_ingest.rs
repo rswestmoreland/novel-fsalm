@@ -30,8 +30,8 @@ use crate::frame::{derive_id64, DocId, FrameRowV1, Id64, SectionId, SourceId};
 use crate::frame_segment::FrameSegmentV1;
 use crate::frame_store::put_frame_segment_v1;
 use crate::hash::Hash32;
+use crate::sharding_v1::{shard_id_for_doc_id_hash32_v1, ShardCfgV1};
 use crate::tokenizer::{term_freqs_from_text, TokenizerCfg};
-use crate::sharding_v1::{ShardCfgV1, shard_id_for_doc_id_hash32_v1};
 use crate::wiki_xml::{parse_wiki_xml, WikiXmlCfg, WikiXmlError, WikiXmlSink};
 
 use std::io::{self, BufRead};
@@ -112,7 +112,7 @@ impl WikiIngestManifestV1 {
         // Fixed fields are small; reserve enough for segment hashes.
         let mut ww = ByteWriter::with_capacity(64 + (self.segments.len() * 32));
         ww.write_u16(self.version);
-        ww.write_u64(self.source_id.0.0);
+        ww.write_u64(self.source_id.0 .0);
         ww.write_u32(self.chunk_rows);
         ww.write_u32(self.seg_rows);
         ww.write_u64(self.docs_total);
@@ -233,7 +233,7 @@ fn utf8_prefix_boundary(s: &str, max_bytes: usize) -> usize {
 
 fn section_id_from(doc: DocId, chunk_index: u32) -> SectionId {
     let mut payload = [0u8; 12];
-    payload[..8].copy_from_slice(&doc.0.0.to_le_bytes());
+    payload[..8].copy_from_slice(&doc.0 .0.to_le_bytes());
     payload[8..12].copy_from_slice(&chunk_index.to_le_bytes());
     SectionId(derive_id64(b"sec\0", &payload))
 }
@@ -319,7 +319,15 @@ fn ingest_wiki_tsv_impl<R: BufRead, S: ArtifactStore>(
 
         // Chunk the text into row_max_bytes pieces (UTF-8 safe).
         let mut chunk_index: u32 = 0;
-        ingest_text_piece(store, cfg, &mut manifest, &mut rows, doc_id, &mut chunk_index, text)?;
+        ingest_text_piece(
+            store,
+            cfg,
+            &mut manifest,
+            &mut rows,
+            doc_id,
+            &mut chunk_index,
+            text,
+        )?;
         docs_seen += 1;
         manifest.docs_total = docs_seen;
     }
@@ -332,7 +340,6 @@ fn ingest_wiki_tsv_impl<R: BufRead, S: ArtifactStore>(
     let mh = store.put(&bytes)?;
     Ok(mh)
 }
-
 
 /// Ingest a Wikipedia XML dump stream into cold storage.
 ///
@@ -373,7 +380,6 @@ fn ingest_wiki_xml_impl<R: BufRead, S: ArtifactStore>(
     cfg: WikiIngestCfg,
     shard: Option<ShardCfgV1>,
 ) -> Result<Hash32, WikiIngestError> {
-
     let mut manifest = WikiIngestManifestV1::new(cfg);
     let mut rows: Vec<FrameRowV1> = Vec::with_capacity(cfg.seg_rows as usize);
 
@@ -463,11 +469,7 @@ fn ingest_wiki_xml_impl<R: BufRead, S: ArtifactStore>(
     let bytes = manifest.encode().map_err(WikiIngestError::Encode)?;
     let mh = store.put(&bytes)?;
     Ok(mh)
-
 }
-
-
-
 
 fn flush_rows<S: ArtifactStore>(
     store: &S,
@@ -480,8 +482,12 @@ fn flush_rows<S: ArtifactStore>(
     let sh = match put_frame_segment_v1(store, &seg) {
         Ok(h) => h,
         Err(e) => match e {
-            crate::frame_store::FrameStoreError::Store(se) => return Err(WikiIngestError::Store(se)),
-            crate::frame_store::FrameStoreError::Encode(ee) => return Err(WikiIngestError::Encode(ee)),
+            crate::frame_store::FrameStoreError::Store(se) => {
+                return Err(WikiIngestError::Store(se))
+            }
+            crate::frame_store::FrameStoreError::Encode(ee) => {
+                return Err(WikiIngestError::Encode(ee))
+            }
             crate::frame_store::FrameStoreError::Decode(de) => {
                 return Err(WikiIngestError::Segment(de.to_string()))
             }
@@ -492,13 +498,12 @@ fn flush_rows<S: ArtifactStore>(
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::artifact::FsArtifactStore;
-    use std::io::Cursor;
     use std::fs;
+    use std::io::Cursor;
 
     fn tmp_dir(name: &str) -> std::path::PathBuf {
         let mut p = std::env::temp_dir();
@@ -539,7 +544,8 @@ mod tests {
         let h2 = ingest_wiki_tsv(&store, Cursor::new(tsv.as_bytes()), cfg).unwrap();
         assert_eq!(h1, h2);
     }
-}fn ingest_text_piece<S: ArtifactStore>(
+}
+fn ingest_text_piece<S: ArtifactStore>(
     store: &S,
     cfg: WikiIngestCfg,
     manifest: &mut WikiIngestManifestV1,

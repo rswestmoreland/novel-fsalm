@@ -14,8 +14,8 @@
 
 use crate::lexicon::{
     derive_lemma_key_id, LemmaId, LemmaKeyId, RelTypeId, POS_ADJ, POS_ADV, POS_NOUN,
-    POS_PROPER_NOUN, POS_VERB, REL_COORDINATE_TERM, REL_DERIVED_TERM, REL_HOLONYM,
-    REL_HYPERNYM, REL_HYPONYM, REL_MERONYM, REL_RELATED, REL_SYNONYM,
+    POS_PROPER_NOUN, POS_VERB, REL_COORDINATE_TERM, REL_DERIVED_TERM, REL_HOLONYM, REL_HYPERNYM,
+    REL_HYPONYM, REL_MERONYM, REL_RELATED, REL_SYNONYM,
 };
 use crate::lexicon_expand_lookup::LexiconExpandLookupV1;
 
@@ -79,7 +79,11 @@ pub fn build_lexicon_cue_neighborhoods_v1(
 /// Optional helper: lookup lemma ids for an ASCII-lowercased seed string.
 ///
 /// This is a thin wrapper around LexiconExpandLookupV1::lemma_ids_for_key.
-pub fn lemma_ids_for_seed_key(view: &LexiconExpandLookupV1, seed: &str, cap: usize) -> Vec<LemmaId> {
+pub fn lemma_ids_for_seed_key(
+    view: &LexiconExpandLookupV1,
+    seed: &str,
+    cap: usize,
+) -> Vec<LemmaId> {
     if cap == 0 {
         return Vec::new();
     }
@@ -336,7 +340,9 @@ mod tests {
         });
         let snap_h = put_lexicon_snapshot_v1(&store, &snap).unwrap();
 
-        load_lexicon_expand_lookup_v1(&store, &snap_h).unwrap().unwrap()
+        load_lexicon_expand_lookup_v1(&store, &snap_h)
+            .unwrap()
+            .unwrap()
     }
 
     #[test]

@@ -7,7 +7,9 @@ use fsa_lm::replay::{ReplayLog, ReplayStep};
 
 #[test]
 fn artifacts_and_replay_smoke() {
-    let dir = std::env::temp_dir().join("fsa_lm_tests").join("artifacts_and_replay_smoke");
+    let dir = std::env::temp_dir()
+        .join("fsa_lm_tests")
+        .join("artifacts_and_replay_smoke");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
 

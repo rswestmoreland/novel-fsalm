@@ -195,7 +195,12 @@ pub struct ForecastIntentV1 {
 
 impl ForecastIntentV1 {
     /// Construct an intent prediction.
-    pub fn new(kind: ForecastIntentKindV1, intent_id: Id64, score: i64, rationale_code: u16) -> Self {
+    pub fn new(
+        kind: ForecastIntentKindV1,
+        intent_id: Id64,
+        score: i64,
+        rationale_code: u16,
+    ) -> Self {
         ForecastIntentV1 {
             kind,
             intent_id,

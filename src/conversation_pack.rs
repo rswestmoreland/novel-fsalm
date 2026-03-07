@@ -442,7 +442,11 @@ impl ConversationPackV1 {
                 _ => return Err(DecodeError::new("invalid has_replay")),
             };
 
-            messages.push(ConversationMessage { role, content, replay_id });
+            messages.push(ConversationMessage {
+                role,
+                content,
+                replay_id,
+            });
         }
 
         if r.remaining() != 0 {
@@ -454,7 +458,9 @@ impl ConversationPackV1 {
             return Err(DecodeError::new("message count exceeds max_messages"));
         }
         if total_bytes > clamp_u32_to_usize(max_total_message_bytes) {
-            return Err(DecodeError::new("total message bytes exceed max_total_message_bytes"));
+            return Err(DecodeError::new(
+                "total message bytes exceed max_total_message_bytes",
+            ));
         }
 
         Ok(Self {
@@ -482,14 +488,8 @@ mod tests {
     #[test]
     fn conversation_pack_round_trip_and_stable_bytes() {
         let limits = ConversationLimits::default_v1();
-        let mut p = ConversationPackV1::new(
-            7,
-            256,
-            z32(b"snap"),
-            z32(b"sig"),
-            Some(z32(b"lex")),
-            limits,
-        );
+        let mut p =
+            ConversationPackV1::new(7, 256, z32(b"snap"), z32(b"sig"), Some(z32(b"lex")), limits);
 
         p.messages.push(ConversationMessage {
             role: ConversationRole::System,

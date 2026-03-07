@@ -35,7 +35,12 @@ fn read_file(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap().replace("\r\n", "\n")
 }
 
-fn write_workspace_with_merged(root: &Path, merged_snapshot: &str, merged_sig_map: &str, default_k: u32) {
+fn write_workspace_with_merged(
+    root: &Path,
+    merged_snapshot: &str,
+    merged_sig_map: &str,
+    default_k: u32,
+) {
     let mut s = String::new();
     s.push_str(&format!("merged_snapshot={}\n", merged_snapshot));
     s.push_str(&format!("merged_sig_map={}\n", merged_sig_map));
@@ -83,7 +88,8 @@ fn load_wiktionary_writes_workspace_lexicon_and_preserves_merged() {
     let stdout = String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n");
     assert!(stdout.contains("workspace_written=1"));
 
-    let lexicon_snapshot = parse_hash_line(&stdout, "lexicon_snapshot").expect("lexicon_snapshot line");
+    let lexicon_snapshot =
+        parse_hash_line(&stdout, "lexicon_snapshot").expect("lexicon_snapshot line");
 
     let ws_text = read_file(&root.join("workspace_v1.txt"));
     assert!(ws_text.contains(&format!("merged_snapshot={}\n", merged_snapshot)));

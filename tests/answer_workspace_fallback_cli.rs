@@ -86,7 +86,12 @@ fn parse_stderr_kv(stderr: &str, key: &str) -> Option<String> {
     None
 }
 
-fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str, lexicon_snapshot: Option<&str>) {
+fn write_workspace(
+    root: &Path,
+    merged_snapshot: &str,
+    merged_sig_map: &str,
+    lexicon_snapshot: Option<&str>,
+) {
     let mut s = String::new();
     s.push_str(&format!("merged_snapshot={}\n", merged_snapshot));
     s.push_str(&format!("merged_sig_map={}\n", merged_sig_map));
@@ -132,7 +137,8 @@ fn answer_uses_workspace_defaults_for_snapshot_and_sig_map() {
 
     let (pcode, pout, perr) = run_cmd(bin, &["prompt", "--root", root.to_str().unwrap(), "banana"]);
     assert_eq!(pcode, 0, "stderr={}", String::from_utf8_lossy(&perr));
-    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n")).expect("prompt hash");
+    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n"))
+        .expect("prompt hash");
 
     let out_path = base.join("answer_ws.txt");
     let (acode, _aout, aerr) = run_cmd(
@@ -152,7 +158,10 @@ fn answer_uses_workspace_defaults_for_snapshot_and_sig_map() {
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
     let s = std::fs::read_to_string(&out_path).unwrap();
     assert!(s.contains("Answer v1"));
-    assert!(s.contains("[E0]"), "expected evidence using workspace defaults");
+    assert!(
+        s.contains("[E0]"),
+        "expected evidence using workspace defaults"
+    );
 }
 
 #[test]
@@ -185,7 +194,8 @@ fn answer_expand_uses_workspace_lexicon_snapshot_when_omitted() {
     );
     assert_eq!(lxcode, 0, "stderr={}", String::from_utf8_lossy(&lxerr));
     let lxout_s = String::from_utf8_lossy(&lxout).replace("\r\n", "\n");
-    let lex_snap_hex = parse_hash_line(&lxout_s, "lexicon_snapshot").expect("lexicon_snapshot line");
+    let lex_snap_hex =
+        parse_hash_line(&lxout_s, "lexicon_snapshot").expect("lexicon_snapshot line");
 
     let (wcode, _wout, werr) = run_cmd(
         bin,
@@ -210,9 +220,13 @@ fn answer_expand_uses_workspace_lexicon_snapshot_when_omitted() {
 
     write_workspace(&root, &idx_snap_hex, &sig_map_hex, Some(&lex_snap_hex));
 
-    let (pcode, pout, perr) = run_cmd(bin, &["prompt", "--root", root.to_str().unwrap(), "bananas"]);
+    let (pcode, pout, perr) = run_cmd(
+        bin,
+        &["prompt", "--root", root.to_str().unwrap(), "bananas"],
+    );
     assert_eq!(pcode, 0, "stderr={}", String::from_utf8_lossy(&perr));
-    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n")).expect("prompt hash");
+    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n"))
+        .expect("prompt hash");
 
     let out_path = base.join("answer_expand_ws.txt");
     let (acode, _aout, aerr) = run_cmd(
@@ -233,7 +247,10 @@ fn answer_expand_uses_workspace_lexicon_snapshot_when_omitted() {
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
     let s = std::fs::read_to_string(&out_path).unwrap();
     assert!(s.contains("Answer v1"));
-    assert!(s.contains("[E0]"), "expected evidence with expansion using workspace lexicon_snapshot");
+    assert!(
+        s.contains("[E0]"),
+        "expected evidence with expansion using workspace lexicon_snapshot"
+    );
 }
 
 #[test]
@@ -263,7 +280,8 @@ fn answer_without_snapshot_and_without_workspace_fails() {
 
     let (pcode, pout, perr) = run_cmd(bin, &["prompt", "--root", root.to_str().unwrap(), "banana"]);
     assert_eq!(pcode, 0, "stderr={}", String::from_utf8_lossy(&perr));
-    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n")).expect("prompt hash");
+    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n"))
+        .expect("prompt hash");
 
     let out_path = base.join("answer_fail.txt");
     let (acode, _aout, aerr) = run_cmd(

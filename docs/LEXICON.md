@@ -67,3 +67,29 @@ Future retrieval
 ---------------
 - MetaphoneticIndex: MetaCodeId -> lemma postings (planned )
 - Relations adjacency lists and sense gloss text are stored disk-first; synthesis uses ids.
+
+Ingesting Wiktionary
+--------------------
+Wiktionary is the primary lexicon source for Novel.
+The ingest contract is defined in docs/WIKTIONARY_INGEST_V1.md.
+It specifies a deterministic extraction of English entries into LexiconSegmentV1
+and LexiconSnapshotV1 artifacts.
+
+Use the CLI command:
+
+ingest-wiktionary-xml --root <dir> (--xml <path> | --xml-bz2 <path>) --segments <n> [--max_pages <n>] [--out-file <path>]
+
+Replication of lexicon artifacts
+-------------------------------
+If you use a separate destination root (for example after index replication),
+lexicon artifacts must also exist in that root.
+
+Index replication copies only the artifacts listed in reduce manifests.
+Lexicon artifacts (LexiconSnapshotV1 and LexiconSegmentV1) are replicated
+separately.
+
+The deterministic replication contract is defined in docs/LEXICON_SYNC_V1.md.
+
+Use the CLI command:
+
+sync-lexicon --root <dir> --addr <ip:port> --lexicon-snapshot <hash32hex> [--out-file <path>] [--max_chunk_kb <n>] [--max_artifact_mb <n>] [--rw_timeout_ms <n>]

@@ -10,7 +10,7 @@ The segment stores only ids and masks. Text payloads (lemma strings, glosses,
 IPA) are referenced by TextId and will be stored via separate artifacts in a
 later stage (dictionary coding / text tables).
 
-This format is introduced in 
+This format is implemented in src/lexicon_segment.rs and is produced by ingest-wiktionary-xml and build-lexicon-snapshot.
 
 Design goals
 ------------

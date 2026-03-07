@@ -62,8 +62,8 @@ Feature sources:
 
 Label/target sources:
 - correctness labels:
- - exact match for definitional tasks (Wiktionary)
- - structured fact checks for frame tasks (Wikipedia-derived)
+ - exact match for definitional lookups (Wiktionary)
+ - structured fact checks for frame lookups (Wikipedia-derived)
  - verifier results for math/logic (BigInt/rational)
 - user feedback labels (optional later):
  - accept/reject or rating bucket

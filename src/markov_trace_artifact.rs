@@ -64,7 +64,7 @@ mod tests {
     use crate::hash::blake3_hash;
     use crate::markov_hints::MarkovChoiceKindV1;
     use crate::markov_model::MarkovTokenV1;
-    use crate::markov_trace::MARKOV_TRACE_V1_VERSION;
+    use crate::markov_trace::{MARKOV_TRACE_V1_VERSION};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     static TMP_I: AtomicUsize = AtomicUsize::new(0);

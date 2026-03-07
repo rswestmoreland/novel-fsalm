@@ -1,9 +1,11 @@
 @echo off
 REM Novel FSA-LM demo: artifact sync over TCP driven by ReduceManifestV1.
 REM
+REM This uses load-wikipedia to generate reduce artifacts deterministically.
+REM
 REM Override knobs via environment variables before running:
-REM set SRC_ROOT=... (default.\_tmp_sync_src)
-REM set DST_ROOT=... (default.\_tmp_sync_dst)
+REM set SRC_ROOT=... (default .\_tmp_sync_src)
+REM set DST_ROOT=... (default .\_tmp_sync_dst)
 REM set SHARDS=... (default 4)
 REM set PORT=... (default 47777)
 REM set RW_TIMEOUT_MS=... (default 30000; 0 disables)
@@ -31,9 +33,7 @@ if not exist "%EXE%" (
 for %%I in ("%EXE%") do set "EXE_ABS=%%~fI"
 
 set "DUMP=%SRC_ROOT%\wiki_tiny.tsv"
-set "OUT1=%SRC_ROOT%\manifest_ingest.txt"
-set "OUT2=%SRC_ROOT%\manifest_index.txt"
-set "OUT3=%SRC_ROOT%\reduce_out.txt"
+set "LOAD_OUT=%SRC_ROOT%\load_wikipedia_out.txt"
 set "SERVER_LOG=%SRC_ROOT%\server.log"
 set "PID_FILE=%SRC_ROOT%\server_pid.txt"
 set "SYNC_OUT=%DST_ROOT%\sync_out.txt"
@@ -52,30 +52,22 @@ if not exist "%DUMP%" (
 )
 
 echo.
-echo Running sharded ingest (source)...
-"%EXE%" ingest-wiki-sharded --root "%SRC_ROOT%" --dump "%DUMP%" --shards %SHARDS% --seg_mb 1 --row_kb 1 --chunk_rows 64 --max_docs 100 --out-file "%OUT1%"
-if errorlevel 1 goto:fail
-for /f "usebackq delims=" %%A in ("%OUT1%") do set "MANIFEST1=%%A"
-echo Ingest ShardManifestV1: %MANIFEST1%
-
-echo.
-echo Running sharded build-index (source)...
-"%EXE%" build-index-sharded --root "%SRC_ROOT%" --shards %SHARDS% --manifest %MANIFEST1% --out-file "%OUT2%"
-if errorlevel 1 goto:fail
-for /f "usebackq delims=" %%A in ("%OUT2%") do set "MANIFEST2=%%A"
-echo Index ShardManifestV1: %MANIFEST2%
-
-echo.
-echo Running reduce-index (source)...
-"%EXE%" reduce-index --root "%SRC_ROOT%" --manifest %MANIFEST2% --out-file "%OUT3%"
+echo Loading Wikipedia (source; writes workspace defaults)...
+"%EXE%" load-wikipedia --root "%SRC_ROOT%" --dump "%DUMP%" --shards %SHARDS% --seg_mb 1 --row_kb 1 --chunk_rows 64 --max_docs 100 --out-file "%LOAD_OUT%" >nul
 if errorlevel 1 goto:fail
 
-set I=0
-for /f "usebackq delims=" %%A in ("%OUT3%") do (
- set /a I+=1
- if !I!==1 set "REDUCE_MAN=%%A"
- if !I!==2 set "MERGED_SNAP=%%A"
- if !I!==3 set "MERGED_SIG=%%A"
+set "REDUCE_MAN="
+set "MERGED_SNAP="
+set "MERGED_SIG="
+for /f "usebackq tokens=1,2 delims==" %%A in ("%LOAD_OUT%") do (
+ if "%%A"=="reduce_manifest" set "REDUCE_MAN=%%B"
+ if "%%A"=="merged_snapshot" set "MERGED_SNAP=%%B"
+ if "%%A"=="merged_sig_map" set "MERGED_SIG=%%B"
+)
+
+if not defined REDUCE_MAN (
+ echo Failed to resolve reduce_manifest from %LOAD_OUT%
+ goto:fail
 )
 
 echo ReduceManifestV1: %REDUCE_MAN%
@@ -91,7 +83,6 @@ powershell -NoProfile -Command "$p=Start-Process -PassThru -WindowStyle Hidden -
 if errorlevel 1 goto:fail
 set /p SERVER_PID=<"%PID_FILE%"
 
-REM Give the server a moment to bind.
 timeout /t 1 >nul
 
 echo.

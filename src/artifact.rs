@@ -91,8 +91,7 @@ impl FsArtifactStore {
     /// Create a filesystem artifact store rooted at `root`.
     pub fn new(root: impl AsRef<Path>) -> ArtifactResult<Self> {
         let root = root.as_ref().to_path_buf();
-        fs::create_dir_all(&root)
-            .map_err(|e| ArtifactError::with_io("create_dir_all failed", e))?;
+        fs::create_dir_all(&root).map_err(|e| ArtifactError::with_io("create_dir_all failed", e))?;
         Ok(Self { root })
     }
 
@@ -120,12 +119,7 @@ impl FsArtifactStore {
         // Temp files are created in the same directory as the final artifact so
         // rename stays on the same filesystem.
         let start = (hash[31] & 0x03) as usize;
-        let mut out = [
-            PathBuf::new(),
-            PathBuf::new(),
-            PathBuf::new(),
-            PathBuf::new(),
-        ];
+        let mut out = [PathBuf::new(), PathBuf::new(), PathBuf::new(), PathBuf::new()];
 
         let parent = final_path.parent().unwrap_or_else(|| Path::new("."));
         let hex = hex32(hash);
@@ -141,8 +135,7 @@ impl FsArtifactStore {
 
     fn write_atomic(&self, final_path: &Path, bytes: &[u8], hash: &Hash32) -> ArtifactResult<()> {
         if let Some(p) = final_path.parent() {
-            fs::create_dir_all(p)
-                .map_err(|e| ArtifactError::with_io("create_dir_all failed", e))?;
+            fs::create_dir_all(p).map_err(|e| ArtifactError::with_io("create_dir_all failed", e))?;
         }
 
         if final_path.exists() {
@@ -153,11 +146,7 @@ impl FsArtifactStore {
         let mut last_err: Option<io::Error> = None;
 
         for tmp_path in tmp_candidates.iter() {
-            match fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(tmp_path)
-            {
+            match fs::OpenOptions::new().write(true).create_new(true).open(tmp_path) {
                 Ok(mut f) => {
                     if let Err(e) = f.write_all(bytes) {
                         let _ = fs::remove_file(tmp_path);

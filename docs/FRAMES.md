@@ -17,13 +17,13 @@ similar to:
 - source_id
 - term_ids and term frequencies (for retrieval)
 
-This module currently defines the schema types and stable integer identifiers.
-Segment formats and indexing are planned in later stages.
+This doc describes the FrameRowV1 schema, the on-disk FrameSegmentV1 format, and how frames participate in retrieval.
 
 Row view vs columnar storage
 ----------------------------
-In, `FrameRowV1` is a row-oriented staging structure for building
-segments. Columnar storage (FrameSegment) will be introduced in 
+In Novel, FrameRowV1 is a row-oriented staging structure used during ingest and tests.
+
+FrameSegmentV1 is the on-disk columnar representation of many FrameRowV1 rows. It is implemented in src/frame_segment.rs and stored via src/frame_store.rs.
 
 Integer-only
 ------------

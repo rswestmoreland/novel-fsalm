@@ -39,14 +39,14 @@ To bump the version:
 
 ## Tagging
 
-Example for version `0.1.0`:
+Example for version `X.Y.Z`:
 
 1) Commit the version and changelog updates:
    - `git add Cargo.toml CHANGELOG.md`
-   - `git commit -m "Release 0.1.0"`
+   - `git commit -m "Release X.Y.Z"`
 
 2) Create an annotated tag:
-   - `git tag -a v0.1.0 -m "v0.1.0"`
+   - `git tag -a vX.Y.Z -m "vX.Y.Z"`
 
 3) Push commit and tag:
    - `git push`

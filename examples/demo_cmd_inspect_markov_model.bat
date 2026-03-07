@@ -1,13 +1,22 @@
 @echo off
 setlocal enableextensions enabledelayedexpansion
 
-REM: inspect a stored MarkovModelV1.
+REM Novel FSA-LM demo: inspect a stored MarkovModelV1.
 REM
 REM Prereq:
 REM - Run examples\demo_cmd_build_markov_model.bat to produce:
-REM %ROOT%\markov_model.txt
+REM   %ROOT%\markov_model.txt
 
-set ROOT=%~dp0..\_tmp_markov_model
+set "ROOT=%~dp0..\_tmp_markov_model"
+set "EXE=target\debug\fsa_lm.exe"
+
+if not exist "%EXE%" (
+ echo Building %EXE%...
+ pushd "%~dp0.." >nul || exit /b 1
+ cargo build --quiet --bin fsa_lm
+ popd >nul
+ if errorlevel 1 exit /b 1
+)
 
 if not exist "%ROOT%\markov_model.txt" (
  echo Missing %ROOT%\markov_model.txt. Run demo_cmd_build_markov_model.bat first.
@@ -25,7 +34,7 @@ if "%MODEL_HASH%"=="" (
 )
 
 echo Inspecting Markov model %MODEL_HASH%...
-cargo run --quiet --release --bin fsa_lm -- inspect-markov-model --root "%ROOT%" --model "%MODEL_HASH%" --top-states 5 --top-next 5 --out-file "%ROOT%\markov_model_inspect.txt" || exit /b 1
+"%EXE%" inspect-markov-model --root "%ROOT%" --model "%MODEL_HASH%" --top-states 5 --top-next 5 --out-file "%ROOT%\markov_model_inspect.txt" || exit /b 1
 
 echo.
 type "%ROOT%\markov_model_inspect.txt"

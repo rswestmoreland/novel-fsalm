@@ -96,6 +96,8 @@ Rhetoric/intent
  - bit 5: is_meta_prompt (talking about the system itself)
  - bit 6: is_follow_up (short question referencing earlier turn)
  - bit 7: safety_sensitive (self-harm/violence cues) (rules-only, conservative)
+ - bit 8: is_problem_solve (troubleshooting, debugging, reverse engineering, retrospection)
+ - bit 9: is_logic_puzzle (logic puzzle / constraint satisfaction intent)
 
 Punctuation/emphasis summary
 ----------------------------
@@ -127,6 +129,23 @@ not raw string scanning, so the same machinery works for forum/blog/social sourc
  - "thanks", "appreciate"
 - insult_count: u16
  - "idiot", "stupid" (conservative)
+
+Lexicon cue neighborhoods (optional)
+-----------------------------------
+When a lexicon snapshot is loaded, Novel can build small, bounded lemma-id neighborhoods
+from seed lemma keys expanded via lexicon relations (synonym/related/hypernym/etc.).
+
+Pragmatics can use neighborhood membership to infer higher-level intent signals
+(planning, problem solving, logic puzzles) without relying on large hardcoded keyword
+lists.
+
+In v1, these higher-level intent signals map to intent flag bits (is_problem_solve,
+is_logic_puzzle) when lexicon cues co-occur with request/question/constraints structure. This remains rules-first and deterministic:
+- identical lexicon artifacts + identical cfg => identical neighborhoods
+- strict caps and depth limits keep memory and CPU bounded
+
+If no lexicon snapshot is available, pragmatics should fall back to the existing small
+cue sets.
 
 Computation (rules-first)
 -------------------------

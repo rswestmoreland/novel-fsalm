@@ -87,8 +87,11 @@ Track is wired as a library feature through the retrieval policy wrapper:
  - Applies apply_retrieval_policy_v1(...) and returns hits + stats.
 
 Important:
-- The answer CLI currently uses apply_retrieval_policy_v1 on pre-derived terms.
- It does not expose a query expansion toggle yet.
+- The answer CLI supports lexicon-backed query expansion.
+- Enable it with: answer ... --expand --lexicon-snapshot <hash32hex>
+- When enabled, the last user message is tokenized into base terms, then expansion adds
+  depth-1 variant terms only if the lexicon snapshot confirms the lemma_key_id exists.
+- See docs/CLI.md for flags and docs/LEXICON_SNAPSHOT_V1.md for building a snapshot.
 
 Stats
 -----

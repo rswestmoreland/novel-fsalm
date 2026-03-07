@@ -3,19 +3,17 @@ CLI
 
 Purpose
 -------
-The CLI is the primary developer interface:
-- create and inspect artifacts
-- build PromptPack artifacts from text
-- decode ReplayLog artifacts
-- provide a baseline workflow before the full pipeline exists
+The CLI is the primary interface for end users, operators, and developers:
+- load and inspect artifacts
+- build indexes and lexicon snapshots
+- run evidence-first answering (`ask`) and interactive sessions (`chat`)
 
 Note:
-- The CLI usage string printed by `fsa_lm` (run with no args or -h) is the authoritative
- reference for exact flags. This document is a human summary and is kept in sync
- as part of 
+- The CLI usage string printed by `fsa_lm` (run with no args or -h) is the authoritative reference for exact flags.
+- This document is a human summary of the most common commands.
 
-Core commands (introduced in )
-----------------------------------------
+Core commands
+-------------
 - fsa_lm hash [--file <path>]
  Compute BLAKE3 hash of bytes from a file or stdin.
 
@@ -24,6 +22,9 @@ Core commands (introduced in )
 
 - fsa_lm get [--root <dir>] <hash_hex>
  Fetch artifact bytes and write to stdout.
+
+- fsa_lm show-workspace [--root <dir>]
+ Print workspace defaults and readiness flags in a stable key=value form.
 
 - fsa_lm prompt [--root <dir>] [--seed <u64>] [--max_tokens <u32>] [--role <role>] <text>
  Build a PromptPack with a single message. Stores the PromptPack bytes as an artifact.
@@ -52,7 +53,17 @@ Core commands (introduced in )
 
  Output:
  - One line with sync stats:
- needed_total=<n> already_present=<n> fetched=<n> bytes_fetched=<n>
+ sync_stats needed_total=<n> already_present=<n> fetched=<n> bytes_fetched=<n>
+
+
+- fsa_lm sync-lexicon --root <dir> --addr <ip:port> --lexicon-snapshot <hash32hex> [--out-file <path>] [--max_chunk_kb <n>] [--max_artifact_mb <n>] [--rw_timeout_ms <n>]
+ Replicate a LexiconSnapshotV1 and all referenced LexiconSegmentV1 artifacts into the local root.
+ This is intended to replicate a lexicon closure to another machine.
+ See docs/LEXICON_SYNC_V1.md.
+
+ Output:
+ - One line with sync stats:
+ sync_lexicon_stats needed_total=<n> already_present=<n> fetched=<n> bytes_fetched=<n>
 
  Notes:
  - --rw_timeout_ms sets the socket read/write timeout (default 30000 ms). Set to 0 to disable.
@@ -101,8 +112,8 @@ Frame and ingestion commands
  See docs/INGEST_WIKI.md for details.
 
 Sharded ingest
------------------------
-These flags and commands are introduced in 
+-------------
+Sharded ingest runs per-shard ingestion into <root>/shards/<k_hex4>/ and supports deterministic merge later.
 
 Per-shard ingest:
 - ingest-wiki --dump <path> [--root <dir>] [--seg_mb <u32>] [--row_kb <u32>] [--chunk_rows <u32>] [--max_docs <u64>] [--shards <n> --shard-id <k>]
@@ -121,9 +132,8 @@ Convenience drivers (sequential):
 See docs/SHARDED_INGEST_V1.md.
 
 Sharded reduce
--------------------------
- adds a deterministic reduce/merge step that produces a global view in
-the primary root.
+-------------
+Sharded reduce performs a deterministic merge step that produces a global view in the primary root.
 
 - reduce-index --root <dir> --manifest <hash32hex> [--out-file <path>]
  Merge per-shard index outputs referenced by ShardManifestV1 and copy
@@ -142,13 +152,11 @@ Example scripts:
 - examples/demo_cmd_reduce_index.bat
 - examples/demo_cmd_reduce_index.sh
 
-Orchestrator
--------------------------
- adds a sequential "one command" driver for the pipeline.
-It runs sharded ingest , sharded index build , and reduce-index 
-in one process.
+Workflow driver
+---------------
+`run-workflow` is a sequential driver for the pipeline. It runs sharded ingest, sharded index build, and reduce-index in one process.
 
-- run-phase6 --root <dir> --dump <path> --shards <n> [--seg_mb <u32>] [--row_kb <u32>] [--chunk_rows <u32>] [--max_docs <u64>] [--out-file <path>] [--sync-addr <ip:port> --sync-root <dir>] [--max_chunk_kb <n>] [--max_artifact_mb <n>] [--rw_timeout_ms <n>]
+- run-workflow --root <dir> --dump <path> --shards <n> [--seg_mb <u32>] [--row_kb <u32>] [--chunk_rows <u32>] [--max_docs <u64>] [--out-file <path>] [--sync-addr <ip:port> --sync-root <dir>] [--max_chunk_kb <n>] [--max_artifact_mb <n>] [--rw_timeout_ms <n>]
  Build a reduced primary root from a TSV dump.
 
  Output (stdout and --out-file):
@@ -167,9 +175,43 @@ in one process.
 
 See docs/SHARDED_INGEST_V1.md, docs/SHARDED_REDUCE_V1.md, and docs/ARTIFACT_SYNC_V1.md.
 
+- load-wikipedia (--dump <path> | --xml <path> | --xml-bz2 <path>) --shards <n> [--root <dir>] [--seg_mb <u32>] [--row_kb <u32>] [--chunk_rows <u32>] [--max_docs <u64>] [--out-file <path>]
+ Build a reduced primary root from a Wikipedia dump (TSV or XML).
+ This command performs sharded ingest, sharded index build, and deterministic reduce/merge.
+
+ In addition, it writes workspace defaults into <root>/workspace_v1.txt:
+ - merged_snapshot
+ - merged_sig_map
+
+ Output (stdout and --out-file):
+ - key=value lines:
+ shard_manifest_ingest=<hash32hex>
+ shard_manifest_index=<hash32hex>
+ reduce_manifest=<hash32hex>
+ merged_snapshot=<hash32hex>
+ merged_sig_map=<hash32hex>
+ workspace_written=1
+
+ This command is intended for end-user flows with `ask` and `chat`.
+
+- load-wiktionary (--xml <path> | --xml-bz2 <path>) --segments <n> [--root <dir>] [--max_pages <n>] [--stats] [--out-file <path>]
+ Ingest a Wiktionary dump into a LexiconSnapshotV1 and referenced LexiconSegmentV1 artifacts.
+
+ In addition, it writes workspace defaults into <root>/workspace_v1.txt:
+ - lexicon_snapshot
+
+ Output (stdout and --out-file):
+ - key=value lines:
+ lexicon_snapshot=<hash32hex>
+ segments_written=<n>
+ [stats lines, if --stats is set]
+ workspace_written=1
+
+ This command is intended for end-user flows with `ask --expand` and `chat --expand`.
+
 Debug bundle
-------------------------
- adds a small debug bundle exporter for sharing metadata and manifests.
+-----------
+A debug bundle is a zip export for sharing metadata and selected artifacts.
 By default it does NOT include raw artifact bytes.
 
 - export-debug-bundle --root <dir> --out <path> [--include-hash <hash32hex>...]
@@ -184,20 +226,32 @@ By default it does NOT include raw artifact bytes.
  - Prints the output path to stdout.
 
 Artifact sync
------------------------
- adds deterministic replication of reduced stores over TCP.
+------------
+Artifact sync supports deterministic replication of artifact closures over TCP.
+
+See docs/ARTIFACT_SYNC_V1.md and docs/LEXICON_SYNC_V1.md.
 
 Example scripts:
 - examples/demo_cmd_sync_reduce.bat
 - examples/demo_cmd_sync_reduce.sh
 
-- ingest-wiki-xml: ingest Wikipedia XML dump (docs/INGEST_WIKI_XML.md)
-
-
-`ingest-wiki-xml` accepts either `--xml <path>` or `--xml-bz2 <path>`.
-
 Lexicon commands
 ----------------
+
+- ingest-wiktionary-xml --root <dir> (--xml <path> | --xml-bz2 <path>) --segments <n> [--max_pages <n>] [--stats] [--out-file <path>]
+ Ingest a Wiktionary dump into LexiconSegmentV1 artifacts and a LexiconSnapshotV1.
+
+ Behavior:
+ - Extracts English-only lexicon signals using the rules in docs/WIKTIONARY_INGEST_V1.md.
+ - Stores one or more LexiconSegmentV1 artifacts.
+ - Builds and stores a LexiconSnapshotV1 artifact.
+ - Prints stable hash lines for each stored segment and the final snapshot.
+ - If --stats is set, prints deterministic count lines after the hash lines (pages_seen, pages_english, lemmas, senses, rel_edges, prons, segments_written).
+ - If --out-file is set, writes the same lines to that file (hash lines and, when enabled, stats lines).
+
+ Example scripts:
+ - examples/demo_cmd_ingest_wiktionary_xml.bat
+ - examples/demo_cmd_ingest_wiktionary_xml.sh
 
 - build-lexicon-snapshot --root <dir> --segment <hash32hex> [--segment <hash32hex>...] [--out-file <path>]
  Build a LexiconSnapshotV1 manifest from a list of LexiconSegmentV1 artifact hashes.
@@ -224,7 +278,7 @@ Lexicon commands
 Pragmatics commands
 ------------------
 
-- build-pragmatics --root <dir> --prompt <hash32hex> [--source-id <u64>] [--tok-max-bytes <n>] [--out-file <path>]
+- build-pragmatics --root <dir> --prompt <hash32hex> [--source-id <u64>] [--tok-max-bytes <n>] [--lexicon-snapshot <hash32hex>] [--out-file <path>]
  Build PragmaticsFrameV1 artifacts for each message in a PromptPack.
 
  Behavior:
@@ -288,6 +342,92 @@ Index and evidence commands
  - --score_model sets score_model_id in the bundle (default: 0).
  - --verbose prints a brief summary to stderr.
  - --cache-stats prints cache statistics to stderr after the command completes.
+
+
+Ask command
+-----------
+
+- ask --root <dir> [--seed <u64>] [--max_tokens <u32>] [--role <role>] [--session-file <path>] [--conversation <hash32hex>] [answer flags...] <text>
+ Create a PromptPack internally and run the full answering loop.
+
+ Notes:
+ - This is a convenience wrapper around `prompt` + `answer`.
+ - All flags accepted by `answer` are supported except `--prompt`.
+ - When --snapshot/--sig-map are omitted, the command uses workspace defaults (see docs/WORKSPACE_V1.md).
+ - When --session-file is set, the command resumes from the session file when it exists, and
+   stores an updated ConversationPackV1 after the answer. It updates the session file and prints
+   `conversation_pack=<hash32hex>` to stderr.
+ - When --conversation is set, the command resumes from that ConversationPackV1 and stores an updated
+   ConversationPackV1 after the answer, printing the new `conversation_pack=<hash32hex>` to stderr.
+ - When resuming a conversation (via --session-file or --conversation), overriding --snapshot/--sig-map
+   (and --lexicon-snapshot) is rejected to keep the session deterministic.
+
+ - Use --text <string> if you prefer passing the prompt as a flagged value.
+
+ Logic puzzles:
+ - The answer loop may ask clarifying questions to avoid guessing.
+ - An optional [puzzle]...[/puzzle] block is accepted for reproducible inputs.
+   See docs/LOGIC_SOLVER_V1.md.
+
+
+Chat command
+------------
+
+- chat --root <dir> [--seed <u64>] [--max_tokens <u32>] [--system <text>] [--resume <hash32hex>] [--session-file <path>] [--autosave] [answer flags...]
+ Start an interactive chat loop and print answers for each prompt line.
+
+ Behavior:
+ - Reads one prompt per line from stdin.
+ - Prints the realized answer to stdout.
+ - Maintains an in-session message history (User + Assistant), bounded by PromptLimits::default_v1().
+
+ Slash commands:
+ - /help prints the available commands.
+ - /reset clears conversation history (System message, if provided, is kept).
+ - /save stores a ConversationPack artifact and prints its hash to stderr.
+ - /exit or /quit exits the loop.
+
+ Notes:
+ - This is a convenience wrapper around `prompt` + `answer`.
+ - All flags accepted by `answer` are supported except `--prompt` and `--out-file`.
+ - When --snapshot/--sig-map are omitted, the command uses workspace defaults (see docs/WORKSPACE_V1.md).
+
+ Resume and persistence:
+ - When --resume is set, the command loads message history from that ConversationPackV1.
+   If the caller did not provide snapshot/sig-map ids, the pack ids are used.
+ - When --session-file is set, the command attempts to read `conversation_pack=<hash32hex>` from the file and resumes when present.
+ - /save stores a ConversationPackV1 and prints `conversation_pack=<hash32hex>` to stderr.
+   If --session-file is set, /save also updates the session file.
+ - --autosave requires --session-file and stores a ConversationPackV1 after each assistant reply, updating the session file.
+
+ Markov context:
+ - When --markov-model is set, the command may derive Markov hint context from prior assistant turns
+   in the current session (bounded tail). See docs/MARKOV_CHAT_CONTEXT_V1.md.
+
+ Logic puzzles:
+ - The chat loop may ask clarifying questions to avoid guessing.
+ - An optional [puzzle]...[/puzzle] block is accepted for reproducible inputs.
+   See docs/LOGIC_SOLVER_V1.md.
+
+
+Show-workspace command
+----------------------
+
+- show-workspace [--root <dir>]
+ Print workspace_v1.txt defaults and readiness flags in a stable key=value form.
+
+ Output fields include:
+ - merged_snapshot, merged_sig_map, lexicon_snapshot
+ - default_k, default_expand, default_meta
+ - workspace_present, workspace_pair_ok, workspace_ready
+
+
+
+Show-conversation command
+------------------------
+
+- show-conversation --root <dir> <hash32hex>
+ Print a ConversationPackV1 in a stable, parse-friendly form.
 
 
 Answer command

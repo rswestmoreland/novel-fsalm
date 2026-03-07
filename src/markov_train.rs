@@ -16,12 +16,10 @@
 
 use crate::frame::{derive_id64, Id64};
 use crate::hash::{blake3_hash, Hash32};
-use crate::markov_hints::{
-    MarkovChoiceV1, MarkovHintsFlagsV1, MarkovHintsV1, MARKOV_HINTS_V1_VERSION, MH_FLAG_USED_PPM,
-};
+use crate::markov_hints::{MarkovChoiceV1, MarkovHintsFlagsV1, MarkovHintsV1, MH_FLAG_USED_PPM, MARKOV_HINTS_V1_VERSION};
 use crate::markov_model::{
-    MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1, MARKOV_MODEL_V1_MAX_NEXT_PER_STATE,
-    MARKOV_MODEL_V1_MAX_ORDER_N, MARKOV_MODEL_V1_MAX_STATES, MARKOV_MODEL_V1_VERSION,
+    MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1, MARKOV_MODEL_V1_MAX_NEXT_PER_STATE, MARKOV_MODEL_V1_MAX_ORDER_N,
+    MARKOV_MODEL_V1_MAX_STATES, MARKOV_MODEL_V1_VERSION,
 };
 use crate::markov_trace::MarkovTraceV1;
 use core::cmp::Ordering;
@@ -44,9 +42,7 @@ impl MarkovTrainCfgV1 {
         if self.order_n_max == 0 || self.order_n_max > MARKOV_MODEL_V1_MAX_ORDER_N {
             return Err(MarkovTrainError::BadOrder);
         }
-        if self.max_next_per_state == 0
-            || (self.max_next_per_state as usize) > MARKOV_MODEL_V1_MAX_NEXT_PER_STATE
-        {
+        if self.max_next_per_state == 0 || (self.max_next_per_state as usize) > MARKOV_MODEL_V1_MAX_NEXT_PER_STATE {
             return Err(MarkovTrainError::BadMaxNext);
         }
         if self.max_states == 0 || (self.max_states as usize) > MARKOV_MODEL_V1_MAX_STATES {
@@ -125,10 +121,7 @@ fn encode_cfg_bytes(cfg: &MarkovTrainCfgV1) -> [u8; 6] {
 ///
 /// Domain separation:
 /// blake3("markov_corpus_v1" || cfg_bytes || sorted_unique(input_hashes))
-pub fn markov_corpus_hash_v1(
-    cfg: &MarkovTrainCfgV1,
-    input_hashes: &[Hash32],
-) -> Result<Hash32, MarkovTrainError> {
+pub fn markov_corpus_hash_v1(cfg: &MarkovTrainCfgV1, input_hashes: &[Hash32]) -> Result<Hash32, MarkovTrainError> {
     cfg.validate()?;
     let mut hs: Vec<Hash32> = input_hashes.to_vec();
     hs.sort();
@@ -222,10 +215,7 @@ impl MarkovTrainerV1 {
         for (ctx, next_map) in counts {
             let mut next: Vec<MarkovNextV1> = Vec::with_capacity(next_map.len());
             for (tok, ct) in next_map {
-                next.push(MarkovNextV1 {
-                    token: tok,
-                    count: ct,
-                });
+                next.push(MarkovNextV1 { token: tok, count: ct });
             }
             next.sort_by(cmp_next_canon);
             let cap = self.cfg.max_next_per_state as usize;
@@ -283,9 +273,7 @@ fn find_state<'a>(model: &'a MarkovModelV1, ctx: &[MarkovTokenV1]) -> Option<&'a
     if model.states.is_empty() {
         return None;
     }
-    let res = model
-        .states
-        .binary_search_by(|s| cmp_ctx_canon(&s.context, ctx));
+    let res = model.states.binary_search_by(|s| cmp_ctx_canon(&s.context, ctx));
     match res {
         Ok(ix) => Some(&model.states[ix]),
         Err(_) => None,
@@ -302,10 +290,7 @@ pub fn derive_markov_hints_v1(
     max_choices: usize,
 ) -> MarkovHintsV1 {
     let mut choices: Vec<MarkovChoiceV1> = Vec::new();
-    let max_out = core::cmp::min(
-        max_choices,
-        crate::markov_hints::MARKOV_HINTS_V1_MAX_CHOICES,
-    );
+    let max_out = core::cmp::min(max_choices, crate::markov_hints::MARKOV_HINTS_V1_MAX_CHOICES);
 
     let mut used_ctx_len: usize = 0;
 
@@ -323,12 +308,7 @@ pub fn derive_markov_hints_v1(
                 if choices.len() >= max_out {
                     break;
                 }
-                choices.push(MarkovChoiceV1::new(
-                    n.token.kind,
-                    n.token.choice_id,
-                    n.count as i64,
-                    0,
-                ));
+                choices.push(MarkovChoiceV1::new(n.token.kind, n.token.choice_id, n.count as i64, 0));
             }
             break;
         }
@@ -339,8 +319,7 @@ pub fn derive_markov_hints_v1(
     }
 
     let ctx_hash = markov_context_hash_v1(context_tokens);
-    let state_id =
-        markov_state_id_v1(&context_tokens[context_tokens.len().saturating_sub(used_ctx_len)..]);
+    let state_id = markov_state_id_v1(&context_tokens[context_tokens.len().saturating_sub(used_ctx_len)..]);
     let order_n = core::cmp::max(1, used_ctx_len + 1) as u8;
 
     MarkovHintsV1 {
@@ -389,15 +368,8 @@ mod tests {
         };
         let corpus = markov_corpus_hash_v1(&cfg, &[blake3_hash(b"x")]).unwrap();
         let mut tr = MarkovTrainerV1::new(cfg).unwrap();
-        tr.observe_stream(&[
-            tok(MarkovChoiceKindV1::Opener, 1),
-            tok(MarkovChoiceKindV1::Transition, 2),
-            tok(MarkovChoiceKindV1::Closer, 3),
-        ]);
-        tr.observe_stream(&[
-            tok(MarkovChoiceKindV1::Opener, 1),
-            tok(MarkovChoiceKindV1::Closer, 3),
-        ]);
+        tr.observe_stream(&[tok(MarkovChoiceKindV1::Opener, 1), tok(MarkovChoiceKindV1::Transition, 2), tok(MarkovChoiceKindV1::Closer, 3)]);
+        tr.observe_stream(&[tok(MarkovChoiceKindV1::Opener, 1), tok(MarkovChoiceKindV1::Closer, 3)]);
         let model = tr.build_model(corpus).unwrap();
         assert!(model.validate().is_ok());
         assert!(model.is_canonical());
@@ -416,24 +388,11 @@ mod tests {
         };
         let corpus = markov_corpus_hash_v1(&cfg, &[]).unwrap();
         let mut tr = MarkovTrainerV1::new(cfg).unwrap();
-        tr.observe_stream(&[
-            tok(MarkovChoiceKindV1::Opener, 1),
-            tok(MarkovChoiceKindV1::Closer, 9),
-        ]);
-        tr.observe_stream(&[
-            tok(MarkovChoiceKindV1::Opener, 1),
-            tok(MarkovChoiceKindV1::Closer, 8),
-        ]);
+        tr.observe_stream(&[tok(MarkovChoiceKindV1::Opener, 1), tok(MarkovChoiceKindV1::Closer, 9)]);
+        tr.observe_stream(&[tok(MarkovChoiceKindV1::Opener, 1), tok(MarkovChoiceKindV1::Closer, 8)]);
         let model = tr.build_model(corpus).unwrap();
         let model_hash = blake3_hash(b"model");
-        let hints = derive_markov_hints_v1(
-            blake3_hash(b"q"),
-            0,
-            model_hash,
-            &model,
-            &[tok(MarkovChoiceKindV1::Opener, 1)],
-            3,
-        );
+        let hints = derive_markov_hints_v1(blake3_hash(b"q"), 0, model_hash, &model, &[tok(MarkovChoiceKindV1::Opener, 1)], 3);
         assert!(hints.validate().is_ok());
         assert!(hints.is_canonical());
         assert!(hints.choices.len() <= 3);

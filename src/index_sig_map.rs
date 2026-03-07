@@ -44,10 +44,7 @@ pub struct IndexSigMapV1 {
 impl IndexSigMapV1 {
     /// Create an empty map.
     pub fn new(source_id: SourceId) -> Self {
-        Self {
-            source_id,
-            entries: Vec::new(),
-        }
+        Self { source_id, entries: Vec::new() }
     }
 
     /// Insert a mapping entry.
@@ -73,11 +70,7 @@ impl IndexSigMapV1 {
 
         // Canonicalize: sort by (index_seg, sig).
         let mut entries = self.entries.clone();
-        entries.sort_by(|a, b| {
-            a.index_seg
-                .cmp(&b.index_seg)
-                .then_with(|| a.sig.cmp(&b.sig))
-        });
+        entries.sort_by(|a, b| a.index_seg.cmp(&b.index_seg).then_with(|| a.sig.cmp(&b.sig)));
 
         // Validate: no duplicate index_seg.
         for i in 1..entries.len() {
@@ -90,7 +83,7 @@ impl IndexSigMapV1 {
         w.write_raw(&INDEX_SIG_MAP_MAGIC);
         w.write_u16(INDEX_SIG_MAP_VERSION);
         w.write_u16(0);
-        w.write_u64(self.source_id.0 .0);
+        w.write_u64(self.source_id.0.0);
         w.write_u32(entries.len() as u32);
 
         for e in entries.iter() {

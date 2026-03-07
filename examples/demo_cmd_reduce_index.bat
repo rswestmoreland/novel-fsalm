@@ -1,8 +1,11 @@
 @echo off
-REM Novel FSA-LM demo: sharded ingest + build-index-sharded + reduce-index + global query snippet.
+REM Novel FSA-LM demo: load-wikipedia (sharded) + global query snippet.
+REM
+REM This script uses the end-user command load-wikipedia, which performs:
+REM   ingest + build-index + reduce into a single root, and writes workspace defaults.
 REM
 REM Override knobs via environment variables before running:
-REM set ROOT=... (default.\_tmp_reduce_index)
+REM set ROOT=... (default .\_tmp_reduce_index)
 REM set SHARDS=... (default 4)
 REM set KEEP_TMP=0|1 (default 0)
 REM set EXE=... (optional; default target\debug\fsa_lm.exe)
@@ -24,9 +27,7 @@ if not exist "%EXE%" (
 )
 
 set "DUMP=%ROOT%\wiki_tiny.tsv"
-set "OUT1=%ROOT%\manifest_ingest.txt"
-set "OUT2=%ROOT%\manifest_index.txt"
-set "OUT3=%ROOT%\reduce_out.txt"
+set "WS_OUT=%ROOT%\workspace_out.txt"
 
 if "%KEEP_TMP%"=="0" (
  if exist "%ROOT%" rmdir /S /Q "%ROOT%"
@@ -40,38 +41,43 @@ if not exist "%DUMP%" (
 )
 
 echo.
-echo Running sharded ingest...
-"%EXE%" ingest-wiki-sharded --root "%ROOT%" --dump "%DUMP%" --shards %SHARDS% --seg_mb 1 --row_kb 1 --chunk_rows 64 --max_docs 100 --out-file "%OUT1%"
+echo Loading Wikipedia (writes workspace defaults)...
+"%EXE%" load-wikipedia --root "%ROOT%" --dump "%DUMP%" --shards %SHARDS% --seg_mb 1 --row_kb 1 --chunk_rows 64 --max_docs 100
 if errorlevel 1 goto:fail
-for /f "usebackq delims=" %%A in ("%OUT1%") do set "MANIFEST1=%%A"
-echo Ingest ShardManifestV1: %MANIFEST1%
 
 echo.
-echo Running sharded build-index...
-"%EXE%" build-index-sharded --root "%ROOT%" --shards %SHARDS% --manifest %MANIFEST1% --out-file "%OUT2%"
-if errorlevel 1 goto:fail
-for /f "usebackq delims=" %%A in ("%OUT2%") do set "MANIFEST2=%%A"
-echo Index ShardManifestV1: %MANIFEST2%
-
-echo.
-echo Running reduce-index (global merge into primary root)...
-"%EXE%" reduce-index --root "%ROOT%" --manifest %MANIFEST2% --out-file "%OUT3%"
+echo Workspace:
+"%EXE%" show-workspace --root "%ROOT%" > "%WS_OUT%"
 if errorlevel 1 goto:fail
 
-set I=0
-for /f "usebackq delims=" %%A in ("%OUT3%") do (
- set /a I+=1
- if !I!==1 set "REDUCE_MAN=%%A"
- if !I!==2 set "MERGED_SNAP=%%A"
- if !I!==3 set "MERGED_SIG=%%A"
+type "%WS_OUT%"
+
+set "MERGED_SNAP="
+set "MERGED_SIG="
+for /f "usebackq tokens=1,2 delims==" %%A in ("%WS_OUT%") do (
+ if "%%A"=="merged_snapshot" set "MERGED_SNAP=%%B"
+ if "%%A"=="merged_sig_map" set "MERGED_SIG=%%B"
 )
 
-echo ReduceManifestV1: %REDUCE_MAN%
-echo Merged IndexSnapshotV1: %MERGED_SNAP%
-echo Merged IndexSigMapV1: %MERGED_SIG%
+if not defined MERGED_SNAP (
+ echo Failed to resolve merged_snapshot from workspace
+ goto:fail
+)
+if "%MERGED_SNAP%"=="MISSING" (
+ echo Failed to resolve merged_snapshot from workspace
+ goto:fail
+)
+if not defined MERGED_SIG (
+ echo Failed to resolve merged_sig_map from workspace
+ goto:fail
+)
+if "%MERGED_SIG%"=="MISSING" (
+ echo Failed to resolve merged_sig_map from workspace
+ goto:fail
+)
 
 echo.
-echo Global query snippet (primary root)...
+echo Global query snippet (uses workspace snapshot ids)...
 "%EXE%" query-index --root "%ROOT%" --snapshot %MERGED_SNAP% --sig-map %MERGED_SIG% --text "Ada Lovelace" --k 5
 if errorlevel 1 goto:fail
 

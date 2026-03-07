@@ -23,9 +23,9 @@ use crate::compaction_report::{CompactionCfgV1, CompactionGroupV1, CompactionRep
 use crate::hash::Hash32;
 use crate::index_pack::{IndexPackEntryV1, IndexPackV1};
 use crate::index_segment::IndexSegmentV1;
+use crate::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
 use crate::index_sig_map::IndexSigMapV1;
 use crate::index_sig_map_store::{put_index_sig_map_v1, IndexSigMapStoreError};
-use crate::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
 use crate::segment_sig::{SegmentSigBuildError, SegmentSigV1};
 use crate::segment_sig_store::{put_segment_sig_v1, SegmentSigStoreError};
 
@@ -39,6 +39,7 @@ pub struct IndexCompactionResultV1 {
     /// Hash of the stored IndexSigMapV1 artifact for the output snapshot, if written.
     pub output_sig_map_id: Option<Hash32>,
 }
+
 
 /// Errors produced by index compaction.
 #[derive(Debug)]
@@ -94,10 +95,7 @@ impl From<crate::artifact::ArtifactError> for IndexCompactionError {
     }
 }
 
-fn artifact_len_bytes<S: ArtifactStore>(
-    store: &S,
-    hash: &Hash32,
-) -> Result<u64, IndexCompactionError> {
+fn artifact_len_bytes<S: ArtifactStore>(store: &S, hash: &Hash32) -> Result<u64, IndexCompactionError> {
     let p = store.path_for(hash);
     match std::fs::metadata(&p) {
         Ok(m) => Ok(m.len()),
@@ -111,10 +109,7 @@ fn artifact_len_bytes<S: ArtifactStore>(
     }
 }
 
-fn load_snapshot_v1<S: ArtifactStore>(
-    store: &S,
-    snapshot_id: &Hash32,
-) -> Result<IndexSnapshotV1, IndexCompactionError> {
+fn load_snapshot_v1<S: ArtifactStore>(store: &S, snapshot_id: &Hash32) -> Result<IndexSnapshotV1, IndexCompactionError> {
     let bytes_opt = store.get(snapshot_id)?;
     let bytes = match bytes_opt {
         Some(b) => b,
@@ -218,9 +213,7 @@ pub fn compact_index_snapshot_v1<S: ArtifactStore>(
     mut cfg: CompactionCfgV1,
 ) -> Result<IndexCompactionResultV1, IndexCompactionError> {
     if cfg.max_out_segments == 0 {
-        return Err(IndexCompactionError::BadCfg(
-            "max_out_segments must be >= 1",
-        ));
+        return Err(IndexCompactionError::BadCfg("max_out_segments must be >= 1"));
     }
     if cfg.target_bytes_per_out_segment == 0 {
         return Err(IndexCompactionError::BadCfg(
@@ -265,11 +258,7 @@ pub fn compact_index_snapshot_v1<S: ArtifactStore>(
         report.bytes_output_total = 0;
         report.output_index_segments.clear();
         report.output_snapshot_id = None;
-        return Ok(IndexCompactionResultV1 {
-            report,
-            report_id: None,
-            output_sig_map_id: None,
-        });
+        return Ok(IndexCompactionResultV1 { report, report_id: None, output_sig_map_id: None });
     }
 
     // Build a map from old index_seg hash -> out pack hash.
@@ -303,24 +292,17 @@ pub fn compact_index_snapshot_v1<S: ArtifactStore>(
             for te in &idx.terms {
                 pack_terms.push(te.term);
             }
-            entries.push(IndexPackEntryV1 {
-                frame_seg: idx.seg_hash,
-                index_bytes: b,
-            });
+            entries.push(IndexPackEntryV1 { frame_seg: idx.seg_hash, index_bytes: b });
         }
 
         pack_terms.sort_by_key(|t| (t.0).0);
         pack_terms.dedup_by_key(|t| (t.0).0);
 
-        let pack = IndexPackV1 {
-            source_id: snap.source_id,
-            entries,
-        };
+        let pack = IndexPackV1 { source_id: snap.source_id, entries };
         let pack_bytes = pack.encode().map_err(IndexCompactionError::PackEncode)?;
         let pack_id = store.put(&pack_bytes)?;
 
-        let sig = SegmentSigV1::build(pack_id, &pack_terms, bloom_bytes, bloom_k)
-            .map_err(IndexCompactionError::SigBuild)?;
+        let sig = SegmentSigV1::build(pack_id, &pack_terms, bloom_bytes, bloom_k).map_err(IndexCompactionError::SigBuild)?;
         let sig_id = put_segment_sig_v1(store, &sig).map_err(IndexCompactionError::SigStore)?;
         sig_pairs.push((pack_id, sig_id));
 
@@ -334,9 +316,7 @@ pub fn compact_index_snapshot_v1<S: ArtifactStore>(
             old_to_pack.push((old, pack_id));
         }
         out_ids.push(pack_id);
-        report.bytes_output_total = report
-            .bytes_output_total
-            .saturating_add(pack_bytes.len() as u64);
+        report.bytes_output_total = report.bytes_output_total.saturating_add(pack_bytes.len() as u64);
     }
 
     // Canonicalize output segment list.
@@ -363,11 +343,10 @@ pub fn compact_index_snapshot_v1<S: ArtifactStore>(
         });
     }
 
-    let out_bytes = out_snap
-        .encode()
-        .map_err(IndexCompactionError::SnapshotEncode)?;
+    let out_bytes = out_snap.encode().map_err(IndexCompactionError::SnapshotEncode)?;
     let out_snapshot_id = store.put(&out_bytes)?;
     report.output_snapshot_id = Some(out_snapshot_id);
+
 
     // Store report artifact.
     let report_id = {
@@ -385,9 +364,7 @@ pub fn compact_index_snapshot_v1<S: ArtifactStore>(
         if let Some((last_idx, last_sig)) = uniq_pairs.last() {
             if last_idx == &idx_id {
                 if last_sig != &sig_id {
-                    return Err(IndexCompactionError::BadPack(
-                        "duplicate pack id with different sig",
-                    ));
+                    return Err(IndexCompactionError::BadPack("duplicate pack id with different sig"));
                 }
                 continue;
             }
@@ -399,8 +376,7 @@ pub fn compact_index_snapshot_v1<S: ArtifactStore>(
     for (idx_id, sig_id) in uniq_pairs {
         sig_map.push(idx_id, sig_id);
     }
-    let sig_map_id =
-        put_index_sig_map_v1(store, &sig_map).map_err(IndexCompactionError::SigMapStore)?;
+    let sig_map_id = put_index_sig_map_v1(store, &sig_map).map_err(IndexCompactionError::SigMapStore)?;
 
     Ok(IndexCompactionResultV1 {
         report,
@@ -408,6 +384,7 @@ pub fn compact_index_snapshot_v1<S: ArtifactStore>(
         output_sig_map_id: Some(sig_map_id),
     })
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -419,16 +396,13 @@ mod tests {
     use crate::hash::blake3_hash;
     use crate::index_query::{search_snapshot, QueryTerm, SearchCfg};
     use crate::index_segment::IndexBuildError;
-    use crate::index_snapshot_store::put_index_snapshot_v1;
     use crate::index_store::put_index_segment_v1;
+    use crate::index_snapshot_store::put_index_snapshot_v1;
 
     fn mk_row(doc: u64, sid: SourceId, terms: &[(u64, u32)]) -> crate::frame::FrameRowV1 {
         let mut r = crate::frame::FrameRowV1::new(DocId(Id64(doc)), sid);
         for (t, tf) in terms {
-            r.terms.push(TermFreq {
-                term: TermId(Id64(*t)),
-                tf: *tf,
-            });
+            r.terms.push(TermFreq { term: TermId(Id64(*t)), tf: *tf });
         }
         r.recompute_doc_len();
         r
@@ -458,7 +432,10 @@ mod tests {
         ]);
         let seg1_id = put_frame_segment_v1(&store, &seg1).unwrap();
 
-        let seg2 = mk_seg(&[mk_row(3, sid, &[(1001, 1)]), mk_row(4, sid, &[(3001, 1)])]);
+        let seg2 = mk_seg(&[
+            mk_row(3, sid, &[(1001, 1)]),
+            mk_row(4, sid, &[(3001, 1)]),
+        ]);
         let seg2_id = put_frame_segment_v1(&store, &seg2).unwrap();
 
         let seg3 = mk_seg(&[
@@ -503,10 +480,7 @@ mod tests {
         let snap_id = put_index_snapshot_v1(&store, &snap).unwrap();
 
         // Query before.
-        let terms = vec![QueryTerm {
-            term: TermId(Id64(1001)),
-            qtf: 1,
-        }];
+        let terms = vec![QueryTerm { term: TermId(Id64(1001)), qtf: 1 }];
         let mut cfg = SearchCfg::new();
         cfg.k = 32;
         let before = search_snapshot(&store, &snap_id, &terms, &cfg).unwrap();
@@ -527,6 +501,7 @@ mod tests {
         assert_eq!(before, after);
     }
 
+
     #[test]
     fn compaction_emits_index_sig_map_for_output_snapshot() {
         let mut root = std::env::temp_dir();
@@ -535,10 +510,8 @@ mod tests {
         let store = FsArtifactStore::new(&root).unwrap();
 
         let sid = SourceId(Id64(7));
-        let seg1 =
-            FrameSegmentV1::from_rows(&[mk_row(1, sid, &[(1001, 3), (1002, 1)])], 16).unwrap();
-        let seg2 =
-            FrameSegmentV1::from_rows(&[mk_row(2, sid, &[(1001, 1), (2001, 1)])], 16).unwrap();
+        let seg1 = FrameSegmentV1::from_rows(&[mk_row(1, sid, &[(1001, 3), (1002, 1)])], 16).unwrap();
+        let seg2 = FrameSegmentV1::from_rows(&[mk_row(2, sid, &[(1001, 1), (2001, 1)])], 16).unwrap();
         let seg1_id = put_frame_segment_v1(&store, &seg1).unwrap();
         let seg2_id = put_frame_segment_v1(&store, &seg2).unwrap();
         let idx1 = IndexSegmentV1::build_from_segment(seg1_id, &seg1).unwrap();
@@ -582,11 +555,7 @@ mod tests {
         let out_snap = crate::index_snapshot_store::get_index_snapshot_v1(&store, &out_snap_id)
             .unwrap()
             .expect("output snapshot");
-        let mut pack_ids = out_snap
-            .entries
-            .iter()
-            .map(|e| e.index_seg)
-            .collect::<Vec<_>>();
+        let mut pack_ids = out_snap.entries.iter().map(|e| e.index_seg).collect::<Vec<_>>();
         pack_ids.sort();
         pack_ids.dedup();
         assert_eq!(map.entries.len(), pack_ids.len());

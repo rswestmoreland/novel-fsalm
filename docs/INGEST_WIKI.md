@@ -6,7 +6,7 @@ Ingest a disk-first Wikipedia text dump into Novel's cold storage as immutable F
 
 Input format (v1 TSV)
 ---------------------
- uses a simple, streaming TSV adapter:
+Novel uses a simple, streaming TSV adapter:
 
 - UTF-8, one document per line
 - Columns:
@@ -17,7 +17,7 @@ Example line (tabs shown as "\t"):
 
  Ada Lovelace\tAugusta Ada King, Countess of Lovelace (1815-1852)...
 
-This is intentionally minimal. A later stage will add a Wikipedia XML extractor that produces the same title+text stream.
+For Wikipedia XML input, use ingest-wiki-xml/ingest-wiki-xml-sharded or the higher-level load-wikipedia wrapper.
 
 Output artifacts
 ----------------
@@ -61,5 +61,5 @@ Common flags:
 
 Notes
 -----
-- This stage does not build warm/hot indexes yet. It only fills cold storage.
-- Retrieval will use segment sketches and postings in later stages.
+- This command writes cold FrameSegment artifacts and a manifest. Index snapshots are built separately (build-index) or via load-wikipedia.
+- Retrieval uses IndexSnapshot/IndexSigMap built from ingested segments (see docs/RETRIEVAL_PIPELINE.md).

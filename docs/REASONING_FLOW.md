@@ -1,128 +1,137 @@
-Reasoning flow model (text)
-==========================
+# Reasoning flow
 
-Overview
---------
-Novel separates memory selection from synthesis.
+This document explains how Novel answers a prompt in a way that is:
 
-- Retrieval selects small structured evidence (frames + lexicon rows), not paragraphs.
-- Pragmatics (tone/tact) produces control signals that shape how the answer is rendered.
-- Synthesis turns evidence into claims and renders a conversational answer.
-- Deterministic reflexes (math/logic) verify or compute when needed.
+- evidence-first (retrieve small structured evidence, not paragraphs)
+- deterministic (stable ordering, canonical artifacts, no RNG)
+- replayable (ReplayLog records the dependency chain)
 
-Flow diagram
-------------
+It is a pipeline description of the current implementation. It is not a theory of
+"general reasoning".
 
-+--------------------------------------------------------------+
-| INPUT |
-| PromptPack (conversation turns + constraints + limits) |
-+-------------------------------+------------------------------+
- |
- v
-+--------------------------------------------------------------+
-| 1) NORMALIZE + FEATURE EXTRACT |
-| - Tokenize -> TermIds (deterministic) |
-| - Metaphone -> MetaCodeIds (deterministic) |
-| - Detect numbers -> BigInt / Rational tokens |
-| - Intent classify (definition/factoid/compare/math/...) |
-| - Build Query Feature Vector (QFV): |
-| Q_terms, Q_meta, Q_intent, Q_required, Q_optional |
-+-------------------------------+------------------------------+
- |
- v
-+--------------------------------------------------------------+
-| 2) BRIDGE EXPANSION (bounded, deterministic) |
-| - Lexicon expansion: morphology, synonyms, sense variants |
-| - Entity identity expansion: aliases/canonical ids |
-| - Metaphonetic expansion: phonetic codes + neighbors |
-| - Graph hints (future): related entities/verbs |
-| Output: ExpandedQFV with strict budgets and integer weights |
-| See: docs/BRIDGE_EXPANSION.md |
-+-------------------------------+------------------------------+
- |
- v
-+--------------------------------------------------------------+
-| 3) MEMORY PLANNING (deterministic planner) |
-| - Decide evidence types needed (Frames vs Lexicon vs Proof) |
-| - Choose required anchors for exact match |
-| - Choose optional expansions for recall |
-| - Set budgets: segments_touched, postings_reads, topK |
-+-------------------------------+------------------------------+
- |
- v
-+--------------------------------------------------------------+
-| 4) MEMORY GATING (D) |
-| - Bloom reject on TermId/MetaCodeId |
-| - Sketch overlap score |
-| - Keep top S segments/chunks (stable sort + ties) |
-+-------------------------------+------------------------------+
- |
- v
-+--------------------------------------------------------------+
-| 5) EXACT CANDIDATE SELECTION (C, later B) |
-| - Fetch postings for required anchors |
-| - Intersect by smallest df first (stable order) |
-| - Score candidates with MRS (integer-only) |
-| - Apply diversity caps |
-| Output: SearchHits (row refs + scores); EvidenceBuilder -> EvidenceBundleV1 |
-+-------------------------------+------------------------------+
- |
- v
-+--------------------------------------------------------------+
-| 6) CLAIM SYNTHESIS (reasoning over evidence) |
-| - Normalize evidence into propositions (claim candidates) |
-| - Merge duplicates (hash-based) |
-| - Detect gaps and contradictions |
-| - Assign claim confidence (fixed-point) |
-| Output: ClaimSet + AnswerTrace (optional) |
-+-------------------------------+------------------------------+
- |
- v
-+--------------------------------------------------------------+
-| 7) VERIFIERS / REFLEXES |
-| - Math: BigInt/rational evaluator |
-| - Logic: small proof/consistency rules |
-| - Update or reject claims deterministically |
-+-------------------------------+------------------------------+
- |
- v
-+--------------------------------------------------------------+
-| 8) ANSWER RENDERING (conversational synthesis) |
-| - Select top claims supporting the intent |
-| - Paraphrase into natural language (no copying) |
-| - Include uncertainty / ask clarifying question if weak |
-| Output: AnswerDraft (final text) |
-+--------------------------------------------------------------+
- |
- v
-+--------------------------------------------------------------+
-| 9) REPLAY + MEMORY UPDATE (deterministic) |
-| - Store AnswerTrace + evidence ids (no big text) |
-| - Update hot context sets (recent terms/entities) |
-| - Optional: update coprocessor stats (future) |
-+--------------------------------------------------------------+
+## Big picture
 
-Notes
------
-- The key to "different words, same answer" is Step 2 (Bridge Expansion) plus
- iterative retrieval passes with strict caps.
-- Novel remains "thinking-oriented" because evidence is structured and synthesis
- is claim-based, with verifiers for correctness.
+Novel separates three concerns:
 
-Implementation status
--------------------------------
- implements a minimal answer loop suitable for developer smoke tests:
+1. **Select evidence** (frames, lexicon rows, and optional proof artifacts)
+2. **Shape a plan** (planner hints, forecast questions, and a bounded answer plan)
+3. **Render text** (realizer directives, optional surface template hints, and a
+   deterministic clarifying-question append)
 
-- Query term extraction: src/tokenizer.rs (QueryTermsCfg and query_terms_from_text)
-- Retrieval policy wrapper: src/retrieval_policy.rs (apply_retrieval_policy_v1)
-- Evidence bundle construction: src/evidence_builder.rs (build_evidence_bundle_v1_from_hits)
-- Planning: src/answer_plan.rs and src/planner_v1.rs
-- Rendering: src/realizer_v1.rs
-- CLI entrypoint: fsa_lm answer (src/bin/fsa_lm.rs)
+## End-to-end answering flow
 
-This loop is intentionally conservative:
-- Bridge expansion (Step 2) is not yet wired into the answer command beyond the optional --meta path.
-- Claim synthesis/verifiers (Steps 6-7) are placeholders for future stages.
-- Answer rendering (Step 8) is developer-oriented and includes an evidence appendix.
+The main pipeline used by `fsa_lm ask`, `fsa_lm chat`, and `fsa_lm answer` is:
 
-See: docs/ANSWERING_LOOP.md
+```mermaid
+flowchart TD
+  A[PromptPack] --> B[Query terms and signals]
+
+  B --> C{Prior conversation in PromptPack?}
+  C -->|yes| D[ContextAnchorsV1\ncontext-anchors-v1]
+  C -->|no| E[No anchors]
+
+  B --> F{LexiconSnapshot available?}
+  F -->|yes| G[Bridge expansion (bounded)\nExpanded QFV]
+  F -->|no| H[Base QFV only]
+
+  D --> I[RetrievalPolicy apply]
+  E --> I
+  G --> I
+  H --> I
+
+  I --> J[retrieve-v1\nHitListV1]
+  J --> K[build-evidence-v1\nEvidenceBundleV1]
+
+  K --> L[planner\nAnswerPlanV1 + PlannerHintsV1 + ForecastV1]
+
+  L --> M[quality gate\nDirectives + Markov hints (optional)\nClarify append (bounded)]
+
+  M --> N[realizer\nanswer text]
+  N --> O[EvidenceSetV1]
+  O --> P[ReplayLog steps]
+
+  %% Optional: Markov trace is observational
+  N --> Q[markov-trace-v1\nMarkovTraceV1]
+  Q --> P
+```
+
+### Notes
+
+- **Context anchors** are low-weight terms derived from recent messages. They
+  improve retrieval continuity for follow-ups that omit key nouns. Anchors only
+  influence retrieval and are capped. See `docs/CONTEXT_ANCHORS_V1.md`.
+
+- **Bridge expansion** is deterministic and budgeted. It expands the query feature
+  vector using lexicon relations and other rule-driven channels. See
+  `docs/BRIDGE_EXPANSION.md`.
+
+- **Quality gate** consolidates post-planning control signals (directives, Markov
+  opener hints, and clarifying question policy) without introducing new claims.
+  See `docs/QUALITY_GATE_V1.md`.
+
+## Optional branches
+
+These branches are not the "main" pipeline, but they plug into it in replayable
+ways.
+
+### Logic puzzles (optional)
+
+Logic puzzles are handled by a deterministic solver when the input is
+sufficiently structured. If the solver runs, it emits a content-addressed proof
+artifact and the answer includes a ProofRef evidence item.
+
+```mermaid
+flowchart TD
+  A[PromptPack] --> B{Puzzle detected?}
+  B -->|no| Z[Continue normal retrieval]
+
+  B -->|yes| C[Puzzle sketch (optional)\npuzzle-sketch-v1]
+  C --> D{Compile-ready?}
+  D -->|no| E[Ask one clarifying question\nForecastV1]
+  D -->|yes| F[Solve (bounded)\nproof-artifact-v1]
+  F --> G[Attach ProofRef into EvidenceBundleV1]
+  G --> Z
+```
+
+See `docs/LOGIC_SOLVER_V1.md` for the user-facing behavior and the supported
+constraint forms.
+
+### Safety reflex (optional)
+
+Safety handling is rules-first and deterministic. It can:
+
+- refuse or redirect when required
+- downrank unsafe plan shapes
+- force bounded clarifying questions
+
+This is integrated as a control-signal path; it does not add evidence.
+
+See `docs/SAFETY_REFLEX_V1.md`.
+
+### Math and other coprocessors (optional)
+
+Math and other verifiers are designed to be small, deterministic coprocessors
+that compute or verify results. When used, they emit replayable artifacts.
+
+## Replay and observability
+
+Novel records work as stable steps with content-addressed artifacts. The exact
+step sets are defined in `docs/REPLAY_STEP_CONVENTIONS.md`. In the answering
+flow, you will commonly see:
+
+- `context-anchors-v1` when the prompt contains prior messages
+- `retrieve-v1` and `build-evidence-v1`
+- `planner-hints-v1` and `forecast-v1`
+- `answer-v1` and `markov-trace-v1`
+- `puzzle-sketch-v1` and `proof-artifact-v1` when the logic solver path is used
+
+This is the core mechanism that makes answers auditable and reproducible.
+
+## Determinism rules (summary)
+
+- Canonical encoding for artifacts and step input/output sets.
+- Stable ordering for all ranked lists, with explicit tie-breakers.
+- No wall-clock time, no RNG, no non-deterministic iteration.
+- All bounded work uses strict caps (terms, expansions, hits, evidence, steps).
+
+For more detail, see `docs/DETERMINISM.md` and `docs/ANSWERING_LOOP.md`.

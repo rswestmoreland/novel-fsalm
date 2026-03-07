@@ -180,6 +180,21 @@ pub fn segment_lexicon_rows_v1(
     Ok(out)
 }
 
+/// Compute the segment index for an owner `LemmaId`.
+///
+/// This is the same mixer and modulus used by `segment_lexicon_rows_v1`.
+/// Callers can use this to assign rows incrementally without buffering the full
+/// lexicon in memory.
+pub fn segment_index_for_lemma_id_v1(
+    lemma_id: LemmaId,
+    segment_count: usize,
+) -> Result<usize, LexiconSegmentationError> {
+    if segment_count == 0 {
+        return Err(LexiconSegmentationError::InvalidSegmentCount);
+    }
+    Ok(seg_ix_for_lemma(lemma_id, segment_count))
+}
+
 // Deterministic 64-bit mixer (SplitMix64-like).
 fn mix64(x: u64) -> u64 {
     let mut z = x.wrapping_add(0x9E3779B97F4A7C15);
@@ -190,7 +205,7 @@ fn mix64(x: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+     use super::*;
 
     use crate::frame::Id64;
     use crate::lexicon::{derive_lemma_id, POS_NOUN, REL_SYNONYM};
@@ -275,20 +290,8 @@ mod tests {
         let b = segment_lexicon_rows_v1(rows_b, 8).unwrap();
 
         for i in 0..8usize {
-            let sa = LexiconSegmentV1::build_from_rows(
-                &a[i].lemmas,
-                &a[i].senses,
-                &a[i].rels,
-                &a[i].prons,
-            )
-            .unwrap();
-            let sb = LexiconSegmentV1::build_from_rows(
-                &b[i].lemmas,
-                &b[i].senses,
-                &b[i].rels,
-                &b[i].prons,
-            )
-            .unwrap();
+            let sa = LexiconSegmentV1::build_from_rows(&a[i].lemmas, &a[i].senses, &a[i].rels, &a[i].prons).unwrap();
+            let sb = LexiconSegmentV1::build_from_rows(&b[i].lemmas, &b[i].senses, &b[i].rels, &b[i].prons).unwrap();
             assert_eq!(sa.encode().unwrap(), sb.encode().unwrap());
         }
     }
@@ -302,12 +305,7 @@ mod tests {
             derive_lemma_id("x"),
         ));
         let err = segment_lexicon_rows_v1(rows, 4).unwrap_err();
-        assert_eq!(
-            err,
-            LexiconSegmentationError::UnknownSense {
-                sense_id: SenseId(Id64(999))
-            }
-        );
+        assert_eq!(err, LexiconSegmentationError::UnknownSense { sense_id: SenseId(Id64(999)) });
     }
 
     #[test]

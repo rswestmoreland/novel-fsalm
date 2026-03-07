@@ -28,10 +28,7 @@ fn replay_log_can_reference_prompt_pack_hash() {
     };
 
     let mut p = PromptPack::new(1, 32, ids);
-    p.messages.push(Message {
-        role: Role::User,
-        content: "hi".to_string(),
-    });
+    p.messages.push(Message { role: Role::User, content: "hi".to_string() });
 
     let limits = PromptLimits::default_v1();
     let prompt_hash = put_prompt_pack(&store, &mut p, limits).unwrap();

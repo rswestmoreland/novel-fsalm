@@ -102,6 +102,8 @@ DONE (Pragmatics coprocessor)
   - 2p1b DONE: Pragmatics extractor v1 (PromptPack -> PragmaticsFrameV1) + unit tests
   - 2p2 DONE: Codec + store helpers + build-pragmatics CLI + tests
   - 2p3 DONE: Retrieval integration as a control-signal track (tie-break only; evidence stable)
+  - 2p4 DONE: Lexicon cue neighborhoods utility (seed lemma keys -> bounded neighborhood ids)
+  - 2p5 DONE: Lexicon-driven intent flags (problem_solve, logic_puzzle) + clarify triggers
 
 Phase 3 - Ingestion pipelines + indexing + hot/warm/cold storage tiers
 ---------------------------------------------------------------------
@@ -113,6 +115,24 @@ DONE (Wikipedia ingest)
   - Input v1: UTF-8 TSV (title + text). See docs/INGEST_WIKI.md.
 - 3b: Streaming Wikipedia XML ingest (DONE)
   - Supports raw .xml and .xml.bz2 (streaming).
+
+PENDING (Wiktionary ingest)
+- WKT0 DONE: Ingest contract doc and doc alignment
+  - docs/WIKTIONARY_INGEST_V1.md
+  - docs/LEXICON_QUERY_EXPANSION.md (answer CLI expand flags documented)
+- WKT1 DONE: Deterministic English-section wikitext scanner
+  - POS detection, sense extraction, relation extraction, IPA extraction
+  - src/wiktionary_ingest.rs (scanner + unit tests)
+- WKT2 DONE: Build lexicon rows and segments (full rows) and write LexiconSnapshotV1
+  - src/wiktionary_build.rs (XML adapter wiring + row mapping + segment + snapshot)
+- WKT3 DONE: ingest-wiktionary-xml CLI + docs/CLI.md wiring + example scripts
+  - ingest-wiktionary-xml (CLI)
+  - examples/demo_cmd_ingest_wiktionary_xml.bat
+  - examples/demo_cmd_ingest_wiktionary_xml.sh
+- WKT4 DONE: E2E integration test and determinism lock (ingest -> snapshot -> validate -> answer --expand)
+  - tests/wiktionary_ingest_expand_e2e.rs
+- WKT5 DONE: Operator workflow doc update (Wikipedia + Wiktionary + prompt + answer)
+
 - 3c: Index build v1 (DONE core pieces)
   - Term stats + segment postings metadata + optional bloom filters.
   - Deterministic scoring and tie-breaking.
@@ -410,6 +430,41 @@ Notes:
   turn-pairs golden pack and validates their hashes.
 - Adds a determinism test for the bundled pack over two independent runs.
 
+7e - Conversational retrieval continuity (context anchors)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+DONE
+- 7e1 DONE: ContextAnchorsV1 artifact (schema + canonical codec + store helpers)
+  - Replay step: context-anchors-v1
+  - Docs: docs/CONTEXT_ANCHORS_V1.md
+  - Tests: unit + integration coverage
+- 7e2 DONE: Answer/chat wiring to derive bounded anchor terms from prior turns
+  - Lexicon-assisted when available (content POS preference), conservative fallback otherwise
+  - Anchors are merged into retrieval within query-term caps (never dominate the current prompt)
+  - ReplayLog links anchors hash into answer-v1 inputs for auditability
+- 7e3 DONE: Session-file coverage
+  - ask and chat both persist anchors deterministically when a prior turn exists
+  - Integration tests cover in-session behavior and session-file flows
+
+7f - Logic puzzles (sketch persistence + proof evidence)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+DONE
+- 7f1 DONE: PuzzleSketchV1 (free text) + clarifier selection
+  - No mandatory DSL; the system prefers one best clarifying question when incomplete
+  - Optional structured [puzzle]...[/puzzle] block supported for reproducible inputs
+- 7f2 DONE: Pending puzzle persistence across turns
+  - PuzzleSketchArtifactV1 stored content-addressed
+  - Replay step: puzzle-sketch-v1
+  - Deterministic merge of short clarification replies (vars/domain/shape)
+- 7f3 DONE: Deterministic solver + proof artifacts
+  - ProofArtifactV1 stored content-addressed
+  - Replay step: proof-artifact-v1
+  - EvidenceBundle ProofRef is active and attached when a proof is produced
+- 7f4 DONE: User-facing rendering + docs
+  - Realizer emits a short Proof solution line in steps-oriented outputs
+  - Docs: docs/LOGIC_SOLVER_V1.md and EvidenceBundle notes
+  - Tests: replay step presence, artifact decode, and hash stability
+
+
 Phase 8 - Consolidation and hardening (recommended)
 --------------------------------------------------
 Goal: no new features; tighten consistency, operator UX, and regression locks.
@@ -425,7 +480,7 @@ Goal: no new features; tighten consistency, operator UX, and regression locks.
 
 8c DONE: Phase 6 operator E2E golden pack
 - Added an operator-style end-to-end regression pack that executes:
-  run-phase6 -> serve-sync/sync-reduce -> query-index -> answer.
+  run-workflow -> serve-sync/sync-reduce -> query-index -> answer.
 - Locks hashes + key stats lines (not raw content).
 - Test: tests/operator_workflow_golden_pack_v1.rs
 - Optional lock env var: FSA_LM_REGRESSION_OPERATOR_WORKFLOW_PACK_V1_REPORT_HEX
@@ -520,3 +575,15 @@ Release quality
 - DONE: Repo hygiene docs (CONTRIBUTING.md, SECURITY.md, CHANGELOG.md, .gitignore).
 - DONE: Versioning and release procedure docs (docs/RELEASING.md).
 - DONE: Release readiness audit checklist (docs/RELEASE_AUDIT.md).
+
+Release quality follow-ups (optional)
+-------------------------------------
+- Lexicon replication support (lexicon segments and lexicon snapshots) in addition to index replication.
+  - A0 DONE: docs/LEXICON_SYNC_V1.md contract.
+  - A1 DONE: sync-lexicon client command.
+  - A2 DONE: integration tests and resilience coverage.
+  - A3 DONE: examples and operator docs updates.
+
+- Broader Wiktionary extraction coverage (more POS headers and templates) while keeping deterministic caps and stable ordering.
+- Performance pass on Wiktionary ingest and segment building (streaming throughput and allocation trimming) without semantic changes.
+

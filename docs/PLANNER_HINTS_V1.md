@@ -141,8 +141,16 @@ Rules (high level):
 
 - Prefer clarify when evidence is empty or weak (0 items), or when we see a follow-up question with low evidence.
 - Prefer steps when we see constraints, code, or math.
+- Prefer steps when pragmatics indicates problem-solving or a logic puzzle.
 - Prefer caveats when the conversation is safety-sensitive or evidence is empty.
 - Emit SummaryFirst when we have enough evidence (>= 3 items).
 - Emit Compare when evidence spans multiple segments.
 
 Ordering, dedupe, and caps follow the canonical rules described above (score desc; tie-break kind asc then id asc).
+
+
+Clarifying append behavior (v1):
+
+- The quality gate appends at most one clarifying question when `PH_FLAG_PREFER_CLARIFY` is set and directives allow questions.
+- The question text comes from the top-ranked `ForecastV1.questions[0]` entry.
+- For problem-solving and logic puzzles, the forecast should prioritize specific disambiguation questions (expected vs actual, minimal reproduction, variables/domains).

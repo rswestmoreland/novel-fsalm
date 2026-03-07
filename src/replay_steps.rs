@@ -29,6 +29,23 @@ pub const STEP_PLANNER_HINTS_V1: &str = "planner-hints-v1";
 /// Derive ForecastV1 from evidence + PlannerHintsV1 + pragmatics (if present).
 pub const STEP_FORECAST_V1: &str = "forecast-v1";
 
+/// Derive ContextAnchorsV1 from PromptPack history.
+///
+/// This step records low-weight query terms derived from recent conversation
+/// messages to improve follow-up retrieval continuity.
+pub const STEP_CONTEXT_ANCHORS_V1: &str = "context-anchors-v1";
+
+/// Derive PuzzleSketchArtifactV1 from prompt text (logic puzzle sketch).
+///
+/// This step records a bounded sketch artifact when Novel asks a clarifying
+/// question for a likely logic/constraint puzzle.
+pub const STEP_PUZZLE_SKETCH_V1: &str = "puzzle-sketch-v1";
+
+/// Derive a ProofArtifactV1 from a structured puzzle input.
+///
+/// This step records the deterministic solver output when the logic solver runs.
+pub const STEP_PROOF_ARTIFACT_V1: &str = "proof-artifact-v1";
+
 /// Derive MarkovTraceV1 from the realized answer and guidance inputs.
 ///
 /// This step records the per-turn surface-choice token stream used by the realizer.
@@ -38,6 +55,8 @@ pub const STEP_MARKOV_TRACE_V1: &str = "markov-trace-v1";
 ///
 /// MarkovHintsV1 is advisory-only guidance used for surface-template selection.
 pub const STEP_MARKOV_HINTS_V1: &str = "markov-hints-v1";
+
+
 
 /// Step name for ingest-wiki (TSV dump -> FrameSegments).
 pub const STEP_INGEST_WIKI_V1: &str = "ingest-wiki-v1";

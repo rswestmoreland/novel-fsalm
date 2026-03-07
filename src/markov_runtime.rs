@@ -146,14 +146,8 @@ mod tests {
         assert!(h.validate().is_ok());
         assert_eq!(h.choices.len(), 2);
         assert_eq!(h.choices[0].kind, MarkovChoiceKindV1::Opener);
-        assert_eq!(
-            h.choices[0].choice_id,
-            preface_choice_id_v1(ToneV1::Supportive, 0)
-        );
-        assert_eq!(
-            h.choices[1].choice_id,
-            preface_choice_id_v1(ToneV1::Supportive, 1)
-        );
+        assert_eq!(h.choices[0].choice_id, preface_choice_id_v1(ToneV1::Supportive, 0));
+        assert_eq!(h.choices[1].choice_id, preface_choice_id_v1(ToneV1::Supportive, 1));
     }
 
     #[test]

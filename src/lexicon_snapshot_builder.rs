@@ -33,9 +33,7 @@ pub enum LexiconSnapshotBuildError {
 impl core::fmt::Display for LexiconSnapshotBuildError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            LexiconSnapshotBuildError::MissingLexiconSegment => {
-                f.write_str("missing lexicon segment")
-            }
+            LexiconSnapshotBuildError::MissingLexiconSegment => f.write_str("missing lexicon segment"),
             LexiconSnapshotBuildError::CountOverflow => f.write_str("lexicon count overflow"),
             LexiconSnapshotBuildError::SegmentStore(s) => write!(f, "segment: {}", s),
             LexiconSnapshotBuildError::SnapshotStore(s) => write!(f, "snapshot: {}", s),
@@ -66,6 +64,7 @@ pub fn build_lexicon_snapshot_v1_from_segments<S: ArtifactStore>(
     }
 
     let mut snap = LexiconSnapshotV1::new();
+    snap.entries.reserve(seg_hashes.len());
 
     for h in seg_hashes {
         let seg = match get_lexicon_segment_v1(store, h).map_err(map_seg_err)? {

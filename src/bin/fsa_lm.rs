@@ -10,62 +10,71 @@
 // artifact exchange server/client for experimentation.
 
 use fsa_lm::artifact::{ArtifactStore, FsArtifactStore};
-use fsa_lm::cache::{Cache2Q, CacheCfgV1, CacheStatsV1};
-use fsa_lm::evidence_artifact::put_evidence_bundle_v1;
-use fsa_lm::evidence_builder::{
-    build_evidence_bundle_v1_from_hits, build_evidence_bundle_v1_from_hits_cached,
-    EvidenceBuildCfgV1,
-};
-use fsa_lm::evidence_bundle::EvidenceLimitsV1;
-use fsa_lm::evidence_set::{EvidenceRowRefV1, EvidenceSetItemV1, EvidenceSetV1};
-use fsa_lm::evidence_set_artifact::put_evidence_set_v1;
-use fsa_lm::evidence_set_verify::verify_evidence_set_v1;
-use fsa_lm::forecast_artifact::put_forecast_v1;
-use fsa_lm::frame::{DocId, FrameRowV1, Id64, SourceId};
-use fsa_lm::frame_segment::FrameSegmentV1;
-use fsa_lm::frame_segment::FRAME_SEGMENT_MAGIC;
 use fsa_lm::hash::{blake3_hash, hex32, Hash32};
-use fsa_lm::hit_list::{HitListV1, HitV1};
-use fsa_lm::hit_list_artifact::put_hit_list_v1;
-use fsa_lm::index_query::{
-    query_terms_from_text, search_snapshot, search_snapshot_cached, search_snapshot_cached_gated,
-    search_snapshot_gated, QueryTermsCfg, SearchCfg,
-};
-use fsa_lm::index_segment::IndexSegmentV1;
-use fsa_lm::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
-use fsa_lm::markov_hints::MarkovHintsV1;
-use fsa_lm::markov_hints_artifact::put_markov_hints_v1;
-use fsa_lm::markov_model::MarkovTokenV1;
-use fsa_lm::markov_model_artifact::{get_markov_model_v1, put_markov_model_v1};
-use fsa_lm::markov_trace::{MarkovTraceV1, MARKOV_TRACE_V1_VERSION};
-use fsa_lm::markov_trace_artifact::{get_markov_trace_v1, put_markov_trace_v1};
-use fsa_lm::markov_train::{markov_corpus_hash_v1, MarkovTrainCfgV1, MarkovTrainerV1};
-use fsa_lm::planner_hints_artifact::put_planner_hints_v1;
-use fsa_lm::planner_v1::{
-    plan_from_evidence_bundle_v1_with_guidance, PlannerCfgV1, PlannerOutputV1,
-};
-use fsa_lm::prompt_artifact::{get_prompt_pack, put_prompt_pack};
 use fsa_lm::prompt_pack::{Message, PromptIds, PromptLimits, PromptPack, Role};
-use fsa_lm::quality_gate_v1::{
-    build_markov_trace_tokens_v1, derive_directives_opt, derive_markov_hints_opener_preface_opt,
-    realize_with_quality_gate_v1,
-};
-use fsa_lm::realizer_v1::RealizerCfgV1;
-use fsa_lm::reduce_index::{reduce_index_v1, ReduceIndexResultV1};
+use fsa_lm::prompt_artifact::{get_prompt_pack, put_prompt_pack};
 use fsa_lm::replay::{ReplayLog, ReplayStep};
 use fsa_lm::replay_artifact::{append_prompt_step, get_replay_log, put_replay_log};
 use fsa_lm::replay_steps::{
-    step_from_slices, STEP_ANSWER_V1, STEP_BUILD_EVIDENCE_V1, STEP_FORECAST_V1,
-    STEP_MARKOV_HINTS_V1, STEP_MARKOV_TRACE_V1, STEP_PLANNER_HINTS_V1, STEP_REALIZER_DIRECTIVES_V1,
-    STEP_RETRIEVE_V1,
+    step_from_slices, STEP_ANSWER_V1, STEP_BUILD_EVIDENCE_V1, STEP_RETRIEVE_V1,
+    STEP_REALIZER_DIRECTIVES_V1, STEP_PLANNER_HINTS_V1, STEP_FORECAST_V1,
+    STEP_MARKOV_HINTS_V1, STEP_MARKOV_TRACE_V1, STEP_CONTEXT_ANCHORS_V1, STEP_PUZZLE_SKETCH_V1,
+    STEP_PROOF_ARTIFACT_V1,
 };
+use fsa_lm::frame::{DocId, FrameRowV1, Id64, SourceId};
+use fsa_lm::frame_segment::FrameSegmentV1;
+use fsa_lm::frame_segment::FRAME_SEGMENT_MAGIC;
+use fsa_lm::index_segment::IndexSegmentV1;
+use fsa_lm::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
+use fsa_lm::index_query::{query_terms_from_text, search_snapshot, search_snapshot_cached, search_snapshot_gated, search_snapshot_cached_gated, QueryTermsCfg, SearchCfg};
 use fsa_lm::retrieval_control::RetrievalControlV1;
-use fsa_lm::retrieval_policy::{apply_retrieval_policy_from_text_v1, RetrievalPolicyCfgV1};
-use fsa_lm::shard_manifest::{
-    ShardEntryV1, ShardManifestV1, ShardOutputV1, SHARD_MANIFEST_V1_VERSION,
+use fsa_lm::retrieval_policy::{apply_retrieval_policy_from_text_v1_with_anchors, RetrievalPolicyCfgV1};
+
+use fsa_lm::logic_solver_v1::{extract_puzzle_block, parse_puzzle_block_v1, solve_puzzle_v1, LogicSolveCfgV1};
+use fsa_lm::puzzle_compile_v1::{try_compile_puzzle_spec_from_sketch_and_constraints_v1, PuzzleCompileErrV1};
+use fsa_lm::proof_artifact_store::put_proof_artifact_v1;
+use fsa_lm::planner_hints::{PH_FLAG_PREFER_CLARIFY, PH_FLAG_PREFER_STEPS};
+use fsa_lm::forecast::{
+    ForecastIntentKindV1, ForecastIntentV1, ForecastQuestionV1, FORECAST_V1_MAX_INTENTS,
+    FORECAST_V1_MAX_QUESTIONS,
 };
+use fsa_lm::realizer_directives::{
+    RealizerDirectivesV1, REALIZER_DIRECTIVES_V1_VERSION, StyleV1, ToneV1,
+};
+use fsa_lm::frame::derive_id64;
+
+use fsa_lm::context_anchors::{build_context_anchors_v1, ContextAnchorsCfgV1};
+use fsa_lm::context_anchors_artifact::put_context_anchors_v1;
+use fsa_lm::planner_v1::{plan_from_evidence_bundle_v1_with_guidance, PlannerCfgV1, PlannerOutputV1};
+use fsa_lm::planner_hints_artifact::put_planner_hints_v1;
+use fsa_lm::forecast_artifact::put_forecast_v1;
+use fsa_lm::quality_gate_v1::{
+    build_markov_trace_tokens_v1, derive_directives_opt,
+    derive_markov_hints_opener_preface_opt, realize_with_quality_gate_v1,
+};
+use fsa_lm::shard_manifest::{ShardEntryV1, ShardManifestV1, ShardOutputV1, SHARD_MANIFEST_V1_VERSION};
 use fsa_lm::shard_manifest_artifact::{get_shard_manifest_v1, put_shard_manifest_v1};
 use fsa_lm::sharding_v1::{ShardCfgV1, SHARD_MAPPING_DOC_ID_HASH32_V1};
+use fsa_lm::reduce_index::{reduce_index_v1, ReduceIndexResultV1};
+use fsa_lm::realizer_v1::{
+    RealizerCfgV1,
+};
+use fsa_lm::markov_hints::MarkovHintsV1;
+use fsa_lm::markov_hints_artifact::put_markov_hints_v1;
+use fsa_lm::markov_model::MarkovTokenV1;
+use fsa_lm::markov_trace::{MarkovTraceV1, MARKOV_TRACE_V1_VERSION};
+use fsa_lm::markov_model_artifact::{get_markov_model_v1, put_markov_model_v1};
+use fsa_lm::markov_trace_artifact::{get_markov_trace_v1, put_markov_trace_v1};
+use fsa_lm::markov_train::{markov_corpus_hash_v1, MarkovTrainCfgV1, MarkovTrainerV1};
+use fsa_lm::evidence_builder::{build_evidence_bundle_v1_from_hits, build_evidence_bundle_v1_from_hits_cached, EvidenceBuildCfgV1};
+use fsa_lm::evidence_bundle::{EvidenceItemDataV1, EvidenceItemV1, EvidenceLimitsV1, ProofRefV1};
+use fsa_lm::evidence_artifact::put_evidence_bundle_v1;
+use fsa_lm::evidence_set::{EvidenceRowRefV1, EvidenceSetItemV1, EvidenceSetV1};
+use fsa_lm::evidence_set_artifact::put_evidence_set_v1;
+use fsa_lm::evidence_set_verify::verify_evidence_set_v1;
+use fsa_lm::hit_list::{HitListV1, HitV1};
+use fsa_lm::hit_list_artifact::put_hit_list_v1;
+use fsa_lm::cache::{Cache2Q, CacheCfgV1, CacheStatsV1};
 
 use fsa_lm::scale_report_artifact::put_scale_demo_scale_report_v1;
 
@@ -73,40 +82,42 @@ use fsa_lm::lexicon_snapshot_builder::build_lexicon_snapshot_v1_from_segments;
 
 use fsa_lm::lexicon_snapshot_validate::validate_lexicon_snapshot_v1_disjoint_owners;
 
-use fsa_lm::pragmatics_extract::{
-    extract_pragmatics_frames_for_prompt_pack_v1, PragmaticsExtractCfg,
-};
-use fsa_lm::pragmatics_frame_store::get_pragmatics_frame_v1;
+use fsa_lm::workspace::{read_workspace_v1, write_workspace_v1_atomic, WorkspaceV1, WORKSPACE_V1_FILENAME};
+
+use fsa_lm::conversation_pack::{ConversationLimits, ConversationMessage, ConversationPackV1, ConversationRole};
+use fsa_lm::conversation_pack_artifact::{get_conversation_pack, put_conversation_pack};
+
+use fsa_lm::wiktionary_build::ingest_wiktionary_xml_to_lexicon_snapshot_v1;
+use fsa_lm::wiktionary_ingest::WiktionaryParseCfg;
+
+use fsa_lm::pragmatics_extract::{extract_pragmatics_frames_for_prompt_pack_v1, PragmaticsExtractCfg};
 use fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1;
+use fsa_lm::pragmatics_frame_store::get_pragmatics_frame_v1;
 
 use fsa_lm::realizer_directives_artifact::put_realizer_directives_v1;
 
 use fsa_lm::compaction_report::CompactionCfgV1;
 use fsa_lm::index_compaction::compact_index_snapshot_v1;
 
-use bzip2::read::BzDecoder;
-use fsa_lm::artifact_sync::{
-    run_sync_server_v1, sync_reduce_batch_v1, sync_reduce_v1, SyncClientCfgV1, SyncServerCfgV1,
-};
-use fsa_lm::debug_bundle::{export_debug_bundle_v1, DebugBundleCfgV1};
 use fsa_lm::frame_store::{get_frame_segment_v1, put_frame_segment_v1};
-use fsa_lm::net;
-use fsa_lm::scale_demo::{
-    build_scale_demo_scale_report_v1, run_scale_demo_build_answers_v1,
-    run_scale_demo_build_evidence_bundles_v1, run_scale_demo_build_index_from_manifest_v1,
-    run_scale_demo_generate_and_ingest_frames_v1, run_scale_demo_generate_and_store_prompts_v1,
-    run_scale_demo_generate_only_v1, ScaleDemoCfgV1, SCALE_DEMO_V1_VERSION,
-};
 use fsa_lm::tokenizer::{term_freqs_from_text, TokenizerCfg};
-use fsa_lm::wiki_ingest::{
-    ingest_wiki_tsv, ingest_wiki_tsv_sharded, ingest_wiki_xml, ingest_wiki_xml_sharded,
-    WikiIngestCfg,
+use fsa_lm::wiki_ingest::{ingest_wiki_tsv, ingest_wiki_tsv_sharded, WikiIngestCfg, ingest_wiki_xml, ingest_wiki_xml_sharded};
+use fsa_lm::scale_demo::{
+    run_scale_demo_build_answers_v1, run_scale_demo_build_evidence_bundles_v1,
+    run_scale_demo_build_index_from_manifest_v1, run_scale_demo_generate_and_ingest_frames_v1,
+    run_scale_demo_generate_and_store_prompts_v1, run_scale_demo_generate_only_v1,
+    build_scale_demo_scale_report_v1,
+    ScaleDemoCfgV1, SCALE_DEMO_V1_VERSION,
 };
 use fsa_lm::workload_gen::{WorkloadCfgV1, WORKLOAD_GEN_V1_VERSION};
+use fsa_lm::net;
+use fsa_lm::artifact_sync::{run_sync_server_v1, sync_reduce_v1, sync_reduce_batch_v1, sync_lexicon_v1, SyncClientCfgV1, SyncServerCfgV1};
+use fsa_lm::debug_bundle::{export_debug_bundle_v1, DebugBundleCfgV1};
+use bzip2::read::BzDecoder;
 
 use std::env;
 use std::fs;
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -119,6 +130,10 @@ Commands:
   hash [--file <path>]
   put [--root <dir>] [--file <path>]
   get [--root <dir>] <hash_hex>
+  show-workspace [--root <dir>]
+  show-conversation [--root <dir>] <conversation_pack_hash_hex>
+  ask [--root <dir>] [--seed <u64>] [--max_tokens <u32>] [--role <role>] [--session-file <path>] [--conversation <hash32hex>] [--text <text>] [answer flags...] [<text> ...]  (logic puzzles: may ask clarifying questions; optional [puzzle] block)
+  chat [--root <dir>] [--seed <u64>] [--max_tokens <u32>] [--system <text>] [--resume <conversation_pack_hash_hex>] [--session-file <path>] [--autosave] [answer flags...]  (logic puzzles: may ask clarifying questions; optional [puzzle] block)
   prompt [--root <dir>] [--seed <u64>] [--max_tokens <u32>] [--role <role>] <text>
   replay-decode [--root <dir>] <hash_hex>
   replay-new [--root <dir>]
@@ -129,18 +144,21 @@ Commands:
   ingest-wiki-xml (--xml <path> | --xml-bz2 <path>) [--root <dir>] [--seg_mb <u32>] [--row_kb <u32>] [--chunk_rows <u32>] [--max_docs <u64>] [--shards <n> --shard-id <k>]
   ingest-wiki-sharded --dump <path> --shards <n> [--root <dir>] [--seg_mb <u32>] [--row_kb <u32>] [--chunk_rows <u32>] [--max_docs <u64>] [--out-file <path>]
   ingest-wiki-xml-sharded (--xml <path> | --xml-bz2 <path>) --shards <n> [--root <dir>] [--seg_mb <u32>] [--row_kb <u32>] [--chunk_rows <u32>] [--max_docs <u64>] [--out-file <path>]
+  load-wikipedia (--dump <path> | --xml <path> | --xml-bz2 <path>) --shards <n> [--root <dir>] [--seg_mb <u32>] [--row_kb <u32>] [--chunk_rows <u32>] [--max_docs <u64>] [--out-file <path>]
+  load-wiktionary (--xml <path> | --xml-bz2 <path>) --segments <n> [--root <dir>] [--max_pages <n>] [--stats] [--out-file <path>]
   build-index [--root <dir>]
   build-index-sharded --shards <n> [--root <dir>] [--manifest <hash32hex>] [--out-file <path>]
   reduce-index --root <dir> --manifest <hash32hex> [--out-file <path>]
-  run-phase6 --root <dir> --dump <path> --shards <n> [--seg_mb <u32>] [--row_kb <u32>] [--chunk_rows <u32>] [--max_docs <u64>] [--out-file <path>] [--sync-addr <ip:port> --sync-root <dir>] [--max_chunk_kb <n>] [--max_artifact_mb <n>] [--rw_timeout_ms <n>]
+  run-workflow --root <dir> --dump <path> --shards <n> [--seg_mb <u32>] [--row_kb <u32>] [--chunk_rows <u32>] [--max_docs <u64>] [--out-file <path>] [--sync-addr <ip:port> --sync-root <dir>] [--max_chunk_kb <n>] [--max_artifact_mb <n>] [--rw_timeout_ms <n>]
   export-debug-bundle --root <dir> --out <path> [--include-hash <hash32hex> ...]
 
+  ingest-wiktionary-xml --root <dir> (--xml <path> | --xml-bz2 <path>) --segments <n> [--max_pages <n>] [--stats] [--out-file <path>]
   build-lexicon-snapshot --root <dir> --segment <hash32hex> [--segment <hash32hex> ...] [--out-file <path>]
   validate-lexicon-snapshot --root <dir> --snapshot <hash32hex>
-  build-pragmatics --root <dir> --prompt <hash32hex> [--source-id <u64>] [--tok-max-bytes <n>] [--out-file <path>]
+  build-pragmatics --root <dir> --prompt <hash32hex> [--source-id <u64>] [--tok-max-bytes <n>] [--lexicon-snapshot <hash32hex>] [--out-file <path>]
   query-index --root <dir> --snapshot <hash32hex> [--sig-map <hash32hex>] --text <string> [--k <n>] [--meta] [--cache-stats]
   build-evidence --root <dir> --snapshot <hash32hex> [--sig-map <hash32hex>] --text <string> [--k <n>] [--meta] [--max_items <n>] [--max_bytes <n>] [--no_sketch] [--no_verify] [--score_model <id>] [--verbose] [--cache-stats]
-  answer --root <dir> --prompt <hash32hex> --snapshot <hash32hex> [--sig-map <hash32hex>] [--pragmatics <hash32hex> ...] [--k <n>] [--meta] [--max_terms <n>] [--no_ties] [--expand --lexicon-snapshot <hash32hex>] [--plan_items <n>] [--verify-trace <0|1>] [--markov-model <hash32hex>] [--markov-max-choices <n>] [--out-file <path>]
+  answer --root <dir> --prompt <hash32hex> [--snapshot <hash32hex> [--sig-map <hash32hex>]] [--pragmatics <hash32hex> ...] [--k <n>] [--meta] [--max_terms <n>] [--no_ties] [--expand [--lexicon-snapshot <hash32hex>]] [--plan_items <n>] [--verify-trace <0|1>] [--markov-model <hash32hex>] [--markov-max-choices <n>] [--out-file <path>]
   build-markov-model --root <dir> --replay <hash32hex> [--replay <hash32hex> ...] [--replay-file <path>] [--max-replays <n>] [--max-traces <n>] [--order <n>] [--max-next <n>] [--max-states <n>] [--out-file <path>]
   inspect-markov-model --root <dir> --model <hash32hex> [--top-states <n>] [--top-next <n>] [--out-file <path>]
   scale-demo [--seed <u64>] [--docs <n>] [--queries <n>] [--min_doc_tokens <n>] [--max_doc_tokens <n>] [--vocab <n>] [--query_tokens <n>] [--tie_pair <0|1>] [--ingest <0|1>] [--build_index <0|1>] [--prompts <0|1>] [--evidence <0|1>] [--answer <0|1>] [--root <dir>] [--out-file <path>]
@@ -154,6 +172,7 @@ Commands:
   send-get [--addr <ip:port>] <hash_hex>
   sync-reduce --root <dir> --addr <ip:port> --reduce-manifest <hash32hex> [--out-file <path>] [--max_chunk_kb <n>] [--max_artifact_mb <n>] [--rw_timeout_ms <n>]
   sync-reduce-batch --root <dir> --addr <ip:port> --reduce-manifests <path> [--out-file <path>] [--max_chunk_kb <n>] [--max_artifact_mb <n>] [--rw_timeout_ms <n>]
+  sync-lexicon --root <dir> --addr <ip:port> --lexicon-snapshot <hash32hex> [--out-file <path>] [--max_chunk_kb <n>] [--max_artifact_mb <n>] [--rw_timeout_ms <n>]
 
 Roles:
 
@@ -199,6 +218,7 @@ fn collect_bin_paths(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
+
 fn read_all_from(path_opt: Option<&str>) -> io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     match path_opt {
@@ -219,6 +239,130 @@ fn write_all_to_stdout(bytes: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
+const CONVERSATION_SESSION_FILE_KEY: &str = "conversation_pack";
+
+fn read_conversation_session_file(path: &Path) -> Result<Option<Hash32>, String> {
+    let bytes = match std::fs::read(path) {
+        Ok(b) => b,
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                return Ok(None);
+            }
+            return Err(format!("read failed: {}", e));
+        }
+    };
+
+    let s = match String::from_utf8(bytes) {
+        Ok(v) => v,
+        Err(_) => return Err("invalid utf-8".to_string()),
+    };
+
+    let mut last: Option<Hash32> = None;
+    for raw in s.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((k, v)) = line.split_once('=') else {
+            continue;
+        };
+        let key = k.trim();
+        if key != CONVERSATION_SESSION_FILE_KEY {
+            continue;
+        }
+        let val = v.trim();
+        if val.is_empty() {
+            continue;
+        }
+        let h = parse_hash32_hex(val).map_err(|e| format!("bad conversation_pack hash: {}", e))?;
+        last = Some(h);
+    }
+
+    match last {
+        Some(h) => Ok(Some(h)),
+        None => Err(format!("missing {} key (expected line: {}=<hash32hex>)", CONVERSATION_SESSION_FILE_KEY, CONVERSATION_SESSION_FILE_KEY)),
+    }
+}
+
+fn write_conversation_session_file_atomic(path: &Path, h: &Hash32) -> Result<(), String> {
+    let parent = path.parent().unwrap_or(Path::new("."));
+    if let Err(e) = std::fs::create_dir_all(parent) {
+        return Err(format!("mkdir failed: {}", e));
+    }
+
+    let fname = path
+        .file_name()
+        .ok_or_else(|| "bad session-file path".to_string())?;
+    let tmp_name = format!("{}.tmp.{}", fname.to_string_lossy(), std::process::id());
+    let tmp_path = parent.join(tmp_name);
+
+    let content = format!("{}={}\n", CONVERSATION_SESSION_FILE_KEY, hex32(h));
+    if let Err(e) = std::fs::write(&tmp_path, content.as_bytes()) {
+        return Err(format!("write tmp failed: {}", e));
+    }
+
+    if path.exists() {
+        let _ = std::fs::remove_file(path);
+    }
+    if let Err(e) = std::fs::rename(&tmp_path, path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(format!("rename failed: {}", e));
+    }
+    Ok(())
+}
+
+fn rebuild_markov_ctx_tail_from_conversation<S: ArtifactStore>(
+    store: &S,
+    msgs: &[ConversationMessage],
+    tail_max: usize,
+) -> Vec<MarkovTokenV1> {
+    let mut out: Vec<MarkovTokenV1> = Vec::new();
+
+    for m in msgs {
+        if m.role != ConversationRole::Assistant {
+            continue;
+        }
+        let rh = match m.replay_id {
+            Some(h) => h,
+            None => continue,
+        };
+
+        let log = match get_replay_log(store, &rh) {
+            Ok(Some(l)) => l,
+            _ => continue,
+        };
+
+        let mut mt_hash_opt: Option<Hash32> = None;
+        for st in log.steps.iter() {
+            if st.name == STEP_MARKOV_TRACE_V1 {
+                if !st.outputs.is_empty() {
+                    mt_hash_opt = Some(st.outputs[0]);
+                    break;
+                }
+            }
+        }
+        let mt_hash = match mt_hash_opt {
+            Some(h) => h,
+            None => continue,
+        };
+
+        let trace = match get_markov_trace_v1(store, &mt_hash) {
+            Ok(Some(t)) => t,
+            _ => continue,
+        };
+
+        if !trace.tokens.is_empty() {
+            out.extend_from_slice(&trace.tokens);
+            if out.len() > tail_max {
+                let drop = out.len() - tail_max;
+                out.drain(0..drop);
+            }
+        }
+    }
+
+    out
+}
+
 fn parse_u64(s: &str) -> Result<u64, String> {
     s.parse::<u64>().map_err(|_| "invalid u64".to_string())
 }
@@ -230,6 +374,7 @@ fn parse_u32(s: &str) -> Result<u32, String> {
 fn parse_u8(s: &str) -> Result<u8, String> {
     s.parse::<u8>().map_err(|_| "invalid u8".to_string())
 }
+
 
 fn env_u64(name: &str) -> Option<u64> {
     match env::var(name) {
@@ -470,6 +615,1216 @@ fn cmd_get(args: &[String]) -> i32 {
     }
 }
 
+fn cmd_show_workspace(args: &[String]) -> i32 {
+    let mut root = default_root();
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --root value");
+                    return 2;
+                }
+                root = PathBuf::from(&args[i]);
+            }
+            _ => {
+                eprintln!("unknown arg: {}", args[i]);
+                return 2;
+            }
+        }
+        i += 1;
+    }
+
+    let (present, ws) = match read_workspace_v1(&root) {
+        Ok(Some(ws)) => (true, ws),
+        Ok(None) => (false, fsa_lm::workspace::WorkspaceV1::default()),
+        Err(e) => {
+            eprintln!("read {} failed: {}", WORKSPACE_V1_FILENAME, e);
+            return 1;
+        }
+    };
+
+    let pair_ok = ws.validate_pair_consistency().is_ok();
+    let ready = ws.has_required_answer_keys();
+    let err = if pair_ok {
+        String::new()
+    } else {
+        ws.validate_pair_consistency().unwrap_err()
+    };
+
+    println!("workspace_file={}", WORKSPACE_V1_FILENAME);
+    println!("workspace_present={}", if present { 1 } else { 0 });
+
+    match ws.merged_snapshot {
+        Some(h) => println!("merged_snapshot={}", hex32(&h)),
+        None => println!("merged_snapshot=MISSING"),
+    }
+    match ws.merged_sig_map {
+        Some(h) => println!("merged_sig_map={}", hex32(&h)),
+        None => println!("merged_sig_map=MISSING"),
+    }
+    match ws.lexicon_snapshot {
+        Some(h) => println!("lexicon_snapshot={}", hex32(&h)),
+        None => println!("lexicon_snapshot=MISSING"),
+    }
+
+    match ws.default_k {
+        Some(v) => println!("default_k={}", v),
+        None => println!("default_k=MISSING"),
+    }
+    match ws.default_expand {
+        Some(v) => println!("default_expand={}", if v { 1 } else { 0 }),
+        None => println!("default_expand=MISSING"),
+    }
+    match ws.default_meta {
+        Some(v) => println!("default_meta={}", if v { 1 } else { 0 }),
+        None => println!("default_meta=MISSING"),
+    }
+
+    println!("workspace_pair_ok={}", if pair_ok { 1 } else { 0 });
+    println!("workspace_ready={}", if ready { 1 } else { 0 });
+    println!("workspace_error={}", err);
+
+    0
+}
+
+fn conversation_role_name(r: ConversationRole) -> &'static str {
+    match r {
+        ConversationRole::System => "system",
+        ConversationRole::User => "user",
+        ConversationRole::Assistant => "assistant",
+    }
+}
+
+fn escape_one_line(s: &str) -> String {
+    // Keep stdout parse-friendly for operator tools.
+    // This does not aim to be reversible for arbitrary bytes; it is intended
+    // for human inspection.
+    s.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n")
+}
+
+fn cmd_show_conversation(args: &[String]) -> i32 {
+    let mut root = default_root();
+    let mut hash_hex: Option<String> = None;
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --root value");
+                    return 2;
+                }
+                root = PathBuf::from(&args[i]);
+            }
+            "-h" | "--help" => {
+                println!("{}", usage());
+                return 0;
+            }
+            other => {
+                if other.starts_with("--") {
+                    eprintln!("unknown arg: {}", other);
+                    return 2;
+                }
+                if hash_hex.is_some() {
+                    eprintln!("unexpected extra arg: {}", other);
+                    return 2;
+                }
+                hash_hex = Some(other.to_string());
+            }
+        }
+        i += 1;
+    }
+
+    let hh = match hash_hex {
+        Some(h) => h,
+        None => {
+            eprintln!("missing conversation pack hash");
+            return 2;
+        }
+    };
+
+    let h = match parse_hash32_hex(&hh) {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("bad conversation pack hash: {}", e);
+            return 2;
+        }
+    };
+
+    let store = store_for(&root);
+    let pack = match get_conversation_pack(&store, &h) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            eprintln!("missing conversation pack {}", hex32(&h));
+            return 3;
+        }
+        Err(e) => {
+            eprintln!("load failed: {}", e);
+            return 1;
+        }
+    };
+
+    println!("conversation_pack={}", hex32(&h));
+    println!("version={}", pack.version);
+    println!("seed={}", pack.seed);
+    println!("max_output_tokens={}", pack.max_output_tokens);
+    println!("snapshot_id={}", hex32(&pack.snapshot_id));
+    println!("sig_map_id={}", hex32(&pack.sig_map_id));
+    match pack.lexicon_snapshot_id {
+        Some(h) => println!("lexicon_snapshot_id={}", hex32(&h)),
+        None => println!("lexicon_snapshot_id=NONE"),
+    }
+
+    println!("limits.max_messages={}", pack.limits.max_messages);
+    println!("limits.max_total_message_bytes={}", pack.limits.max_total_message_bytes);
+    println!("limits.max_message_bytes={}", pack.limits.max_message_bytes);
+    println!("limits.keep_system={}", if pack.limits.keep_system { 1 } else { 0 });
+
+    println!("messages={}", pack.messages.len());
+    for (idx, m) in pack.messages.iter().enumerate() {
+        println!("msg.{}.role={}", idx, conversation_role_name(m.role));
+        match m.replay_id {
+            Some(h) => println!("msg.{}.replay_id={}", idx, hex32(&h)),
+            None => println!("msg.{}.replay_id=NONE", idx),
+        }
+        println!("msg.{}.content={}", idx, escape_one_line(&m.content));
+    }
+
+    0
+}
+
+fn cmd_ask(args: &[String]) -> i32 {
+    let mut root = default_root();
+    let mut seed: u64 = 1;
+    let mut max_tokens: u32 = 256;
+    let mut role: Role = Role::User;
+
+    let mut seed_set: bool = false;
+    let mut max_tokens_set: bool = false;
+
+    let mut session_file: Option<PathBuf> = None;
+    let mut conversation_hex_opt: Option<String> = None;
+
+    let mut forward: Vec<String> = Vec::new();
+    let mut text_parts: Vec<String> = Vec::new();
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --root value");
+                    return 2;
+                }
+                root = PathBuf::from(&args[i]);
+            }
+            "--seed" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --seed value");
+                    return 2;
+                }
+                seed = match parse_u64(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                };
+                seed_set = true;
+            }
+            "--max_tokens" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --max_tokens value");
+                    return 2;
+                }
+                max_tokens = match parse_u32(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                };
+                max_tokens_set = true;
+            }
+            "--role" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --role value");
+                    return 2;
+                }
+                role = match parse_role(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                };
+            }
+            "--session-file" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --session-file value");
+                    return 2;
+                }
+                session_file = Some(PathBuf::from(&args[i]));
+            }
+            "--conversation" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --conversation value");
+                    return 2;
+                }
+                conversation_hex_opt = Some(args[i].to_string());
+            }
+            "--text" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --text value");
+                    return 2;
+                }
+                text_parts.push(args[i].to_string());
+            }
+            "--prompt" => {
+                eprintln!("ask does not accept --prompt (use answer if you already have a prompt hash)");
+                return 2;
+            }
+            "-h" | "--help" => {
+                println!("{}", usage());
+                return 0;
+            }
+            other => {
+                if other.starts_with("--") {
+                    forward.push(other.to_string());
+
+                    let takes_val = matches!(
+                        other,
+                        "--snapshot"
+                            | "--sig-map"
+                            | "--lexicon-snapshot"
+                            | "--pragmatics"
+                            | "--k"
+                            | "--max_terms"
+                            | "--plan_items"
+                            | "--out-file"
+                            | "--verify-trace"
+                            | "--markov-model"
+                            | "--markov-max-choices"
+                    );
+
+                    if takes_val {
+                        i += 1;
+                        if i >= args.len() {
+                            eprintln!("missing value for {}", other);
+                            return 2;
+                        }
+                        forward.push(args[i].to_string());
+                    }
+                } else {
+                    // Remaining args are treated as prompt text.
+                    for t in &args[i..] {
+                        text_parts.push(t.to_string());
+                    }
+                    break;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    if text_parts.is_empty() {
+        eprintln!("missing prompt text");
+        return 2;
+    }
+
+    let text = text_parts.join(" ");
+
+    // IDs are zeros for now; later stages bind these to real snapshots/weights/tokenizers.
+let ids = PromptIds {
+    snapshot_id: [0u8; 32],
+    weights_id: [0u8; 32],
+    tokenizer_id: [0u8; 32],
+};
+
+if session_file.is_some() && conversation_hex_opt.is_some() {
+    eprintln!("ask: cannot use both --session-file and --conversation");
+    return 2;
+}
+
+let store = store_for(&root);
+
+let enable_expand = forward.iter().any(|s| s == "--expand");
+let enable_markov = forward.iter().any(|s| s == "--markov-model");
+
+let override_snapshot = forward.iter().any(|s| s == "--snapshot");
+let override_sig_map = forward.iter().any(|s| s == "--sig-map");
+let override_lexicon = forward.iter().any(|s| s == "--lexicon-snapshot");
+
+let mut resume_hash_opt: Option<Hash32> = None;
+if let Some(ref sf) = session_file {
+    match read_conversation_session_file(sf) {
+        Ok(Some(h)) => resume_hash_opt = Some(h),
+        Ok(None) => {
+            // New session.
+        }
+        Err(e) => {
+            eprintln!("ask: invalid session file: {}", e);
+            return 2;
+        }
+    }
+} else if let Some(ref ch) = conversation_hex_opt {
+    let h = match parse_hash32_hex(ch) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("ask: bad --conversation hash: {}", e);
+            return 2;
+        }
+    };
+    resume_hash_opt = Some(h);
+}
+
+let mut conv_msgs: Vec<ConversationMessage> = Vec::new();
+let mut prior_replay_id_opt: Option<Hash32> = None;
+let mut resolved_snapshot_id: Option<Hash32> = None;
+let mut resolved_sig_map_id: Option<Hash32> = None;
+let mut resolved_lexicon_id: Option<Hash32> = None;
+
+if let Some(h) = resume_hash_opt {
+    if override_snapshot || override_sig_map || override_lexicon {
+        eprintln!("ask: cannot override snapshot/sig-map/lexicon-snapshot when resuming a conversation");
+        return 2;
+    }
+
+    let pack = match get_conversation_pack(&store, &h) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            eprintln!("ask: missing conversation pack {}", hex32(&h));
+            return 3;
+        }
+        Err(e) => {
+            eprintln!("ask: load failed: {}", e);
+            return 1;
+        }
+    };
+
+    if !seed_set {
+        seed = pack.seed;
+    }
+    if !max_tokens_set {
+        max_tokens = pack.max_output_tokens;
+    }
+
+    conv_msgs = pack.messages;
+
+    // Capture the most recent assistant replay id for cross-turn continuation.
+    for m in conv_msgs.iter().rev() {
+        if m.role == ConversationRole::Assistant {
+            if let Some(rid) = m.replay_id {
+                prior_replay_id_opt = Some(rid);
+                break;
+            }
+        }
+    }
+
+    resolved_snapshot_id = Some(pack.snapshot_id);
+    resolved_sig_map_id = Some(pack.sig_map_id);
+    resolved_lexicon_id = pack.lexicon_snapshot_id;
+}
+
+// If we do not have determinism-critical ids yet (new session), bind them to either
+// explicit flags or workspace defaults so the session is resumeable.
+if resolved_snapshot_id.is_none() || resolved_sig_map_id.is_none() {
+    let mut snapshot_hex_opt: Option<String> = None;
+    let mut sig_map_hex_opt: Option<String> = None;
+    let mut lexicon_hex_opt: Option<String> = None;
+
+    let mut j = 0usize;
+    while j < forward.len() {
+        match forward[j].as_str() {
+            "--snapshot" => {
+                if j + 1 < forward.len() {
+                    snapshot_hex_opt = Some(forward[j + 1].clone());
+                }
+            }
+            "--sig-map" => {
+                if j + 1 < forward.len() {
+                    sig_map_hex_opt = Some(forward[j + 1].clone());
+                }
+            }
+            "--lexicon-snapshot" => {
+                if j + 1 < forward.len() {
+                    lexicon_hex_opt = Some(forward[j + 1].clone());
+                }
+            }
+            _ => {}
+        }
+        j += 1;
+    }
+
+    let mut snap: Option<Hash32> = None;
+    let mut sig: Option<Hash32> = None;
+    let mut lex: Option<Hash32> = None;
+
+    if let Some(sh) = snapshot_hex_opt.as_ref() {
+        snap = match parse_hash32_hex(sh) {
+            Ok(h) => Some(h),
+            Err(e) => {
+                eprintln!("ask: bad --snapshot hash: {}", e);
+                return 2;
+            }
+        };
+    }
+    if let Some(sm) = sig_map_hex_opt.as_ref() {
+        sig = match parse_hash32_hex(sm) {
+            Ok(h) => Some(h),
+            Err(e) => {
+                eprintln!("ask: bad --sig-map hash: {}", e);
+                return 2;
+            }
+        };
+    }
+    if enable_expand {
+        if let Some(lh) = lexicon_hex_opt.as_ref() {
+            lex = match parse_hash32_hex(lh) {
+                Ok(h) => Some(h),
+                Err(e) => {
+                    eprintln!("ask: bad --lexicon-snapshot hash: {}", e);
+                    return 2;
+                }
+            };
+        }
+    }
+
+    if snap.is_none() || sig.is_none() {
+        let ws = match read_workspace_v1(&root) {
+            Ok(Some(ws)) => ws,
+            Ok(None) => {
+                eprintln!("ask: need snapshot+sig-map. Provide --snapshot/--sig-map or run load-wikipedia to create {}", WORKSPACE_V1_FILENAME);
+                return 2;
+            }
+            Err(e) => {
+                eprintln!("ask: read {} failed: {}", WORKSPACE_V1_FILENAME, e);
+                return 1;
+            }
+        };
+        if let Err(e) = ws.validate_pair_consistency() {
+            eprintln!("ask: invalid {}: {}", WORKSPACE_V1_FILENAME, e);
+            return 2;
+        }
+        if !ws.has_required_answer_keys() {
+            eprintln!("ask: {} missing merged_snapshot/merged_sig_map (run load-wikipedia or edit the file)", WORKSPACE_V1_FILENAME);
+            return 2;
+        }
+        snap = ws.merged_snapshot;
+        sig = ws.merged_sig_map;
+        if enable_expand && lex.is_none() {
+            lex = ws.lexicon_snapshot;
+        }
+    }
+
+    resolved_snapshot_id = snap;
+    resolved_sig_map_id = sig;
+    resolved_lexicon_id = lex;
+} else if enable_expand && resolved_lexicon_id.is_none() {
+    // Best-effort: bind lexicon id from workspace if expand is enabled.
+    match read_workspace_v1(&root) {
+        Ok(Some(ws)) => {
+            if let Err(_) = ws.validate_pair_consistency() {
+                // ignore
+            } else {
+                resolved_lexicon_id = ws.lexicon_snapshot;
+            }
+        }
+        _ => {}
+    }
+}
+
+let resolved_snapshot_id = match resolved_snapshot_id {
+    Some(h) => h,
+    None => {
+        eprintln!("ask: missing snapshot id");
+        return 2;
+    }
+};
+let resolved_sig_map_id = match resolved_sig_map_id {
+    Some(h) => h,
+    None => {
+        eprintln!("ask: missing sig-map id");
+        return 2;
+    }
+};
+
+// Append this turn's prompt message to the conversation history.
+let conv_role = match role {
+    Role::System => ConversationRole::System,
+    Role::User => ConversationRole::User,
+    Role::Assistant => ConversationRole::Assistant,
+};
+conv_msgs.push(ConversationMessage {
+    role: conv_role,
+    content: text,
+    replay_id: None,
+});
+
+// Canonicalize conversation history deterministically.
+{
+    let mut cp = ConversationPackV1::new(
+        seed,
+        max_tokens,
+        resolved_snapshot_id,
+        resolved_sig_map_id,
+        resolved_lexicon_id,
+        ConversationLimits::default_v1(),
+    );
+    cp.messages = conv_msgs;
+    cp.canonicalize_in_place();
+    conv_msgs = cp.messages;
+}
+
+// Build a PromptPack from the conversation messages.
+let mut pack = PromptPack::new(seed, max_tokens, ids);
+let mut pm: Vec<Message> = Vec::with_capacity(conv_msgs.len());
+for m in conv_msgs.iter() {
+    let role = match m.role {
+        ConversationRole::System => Role::System,
+        ConversationRole::User => Role::User,
+        ConversationRole::Assistant => Role::Assistant,
+    };
+    pm.push(Message { role, content: m.content.clone() });
+}
+pack.messages = pm;
+
+// Apply default canonical limits to make a bounded artifact.
+let limits = PromptLimits::default_v1();
+
+let prompt_hash = match put_prompt_pack(&store, &mut pack, limits) {
+    Ok(h) => h,
+    Err(e) => {
+        eprintln!("put failed: {}", e);
+        return 1;
+    }
+};
+
+let mut aa: Vec<String> = Vec::new();
+aa.push("--root".to_string());
+aa.push(root.to_string_lossy().to_string());
+aa.push("--prompt".to_string());
+aa.push(hex32(&prompt_hash));
+aa.extend(forward);
+
+if let Some(rh) = prior_replay_id_opt {
+    aa.push("--prior-replay".to_string());
+    aa.push(hex32(&rh));
+}
+
+let mut markov_ctx_tail: Vec<MarkovTokenV1> = Vec::new();
+if enable_markov && !conv_msgs.is_empty() {
+    markov_ctx_tail = rebuild_markov_ctx_tail_from_conversation(&store, &conv_msgs, 64);
+}
+
+let (ans_text, out_file, _mt_tokens, replay_hash) = match answer_run_text_inner(&aa, &markov_ctx_tail) {
+    Ok(x) => x,
+    Err(code) => return code,
+};
+
+if let Some(path) = out_file {
+    if let Err(e) = fs::write(&path, ans_text.as_bytes()) {
+        eprintln!("write failed: {}", e);
+        return 1;
+    }
+}
+
+if let Err(e) = write_all_to_stdout(ans_text.as_bytes()) {
+    eprintln!("stdout error: {}", e);
+    return 1;
+}
+
+// Persist the updated conversation when requested (session-file or explicit conversation mode).
+if session_file.is_some() || conversation_hex_opt.is_some() {
+    conv_msgs.push(ConversationMessage {
+        role: ConversationRole::Assistant,
+        content: ans_text,
+        replay_id: Some(replay_hash),
+    });
+
+    let mut cp = ConversationPackV1::new(
+        seed,
+        max_tokens,
+        resolved_snapshot_id,
+        resolved_sig_map_id,
+        resolved_lexicon_id,
+        ConversationLimits::default_v1(),
+    );
+    cp.messages = conv_msgs;
+    cp.canonicalize_in_place();
+
+    let h = match put_conversation_pack(&store, &mut cp) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("save failed: {}", e);
+            return 1;
+        }
+    };
+
+    if let Some(ref sf) = session_file {
+        if let Err(e) = write_conversation_session_file_atomic(sf, &h) {
+            eprintln!("save failed: {}", e);
+            return 1;
+        }
+    }
+
+    eprintln!("conversation_pack={}", hex32(&h));
+}
+
+0
+}
+
+fn cmd_chat(args: &[String]) -> i32 {
+    let mut root = default_root();
+    let mut seed: u64 = 1;
+    let mut seed_set: bool = false;
+    let mut max_tokens: u32 = 256;
+    let mut max_tokens_set: bool = false;
+    let mut system_msg: Option<String> = None;
+    let mut resume_hash: Option<Hash32> = None;
+    let mut session_file: Option<PathBuf> = None;
+    let mut autosave: bool = false;
+
+    let mut forward: Vec<String> = Vec::new();
+
+    let mut snapshot_hex_opt: Option<String> = None;
+    let mut sig_map_hex_opt: Option<String> = None;
+    let mut lexicon_hex_opt: Option<String> = None;
+    let mut enable_expand: bool = false;
+    let mut enable_markov: bool = false;
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --root value");
+                    return 2;
+                }
+                root = PathBuf::from(&args[i]);
+            }
+            "--seed" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --seed value");
+                    return 2;
+                }
+                seed = match parse_u64(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                };
+                seed_set = true;
+            }
+            "--max_tokens" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --max_tokens value");
+                    return 2;
+                }
+                max_tokens = match parse_u32(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                };
+                max_tokens_set = true;
+            }
+            "--system" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --system value");
+                    return 2;
+                }
+                system_msg = Some(args[i].to_string());
+            }
+            "--session-file" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --session-file value");
+                    return 2;
+                }
+                session_file = Some(PathBuf::from(&args[i]));
+            }
+            "--autosave" => {
+                autosave = true;
+            }
+            "--resume" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --resume value");
+                    return 2;
+                }
+                let h = match parse_hash32_hex(&args[i]) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        eprintln!("bad --resume hash: {}", e);
+                        return 2;
+                    }
+                };
+                resume_hash = Some(h);
+            }
+            "--prompt" => {
+                eprintln!("chat does not accept --prompt");
+                return 2;
+            }
+            "--text" => {
+                eprintln!("chat does not accept --text (enter prompts interactively)");
+                return 2;
+            }
+            "-h" | "--help" => {
+                println!("{}", usage());
+                return 0;
+            }
+            other => {
+                if other.starts_with("--") {
+                    if other == "--out-file" {
+                        eprintln!("chat does not accept --out-file");
+                        return 2;
+                    }
+
+                    if other == "--expand" {
+                        enable_expand = true;
+                        forward.push(other.to_string());
+                        i += 1;
+                        continue;
+                    }
+
+                    forward.push(other.to_string());
+
+                    let takes_val = matches!(
+                        other,
+                        "--snapshot"
+                            | "--sig-map"
+                            | "--lexicon-snapshot"
+                            | "--pragmatics"
+                            | "--k"
+                            | "--max_terms"
+                            | "--plan_items"
+                            | "--verify-trace"
+                            | "--markov-model"
+                            | "--markov-max-choices"
+                    );
+
+                    if takes_val {
+                        i += 1;
+                        if i >= args.len() {
+                            eprintln!("missing value for {}", other);
+                            return 2;
+                        }
+
+                        if other == "--snapshot" {
+                            snapshot_hex_opt = Some(args[i].to_string());
+                        } else if other == "--sig-map" {
+                            sig_map_hex_opt = Some(args[i].to_string());
+                        } else if other == "--lexicon-snapshot" {
+                            lexicon_hex_opt = Some(args[i].to_string());
+                        } else if other == "--markov-model" {
+                            enable_markov = true;
+                        }
+
+                        forward.push(args[i].to_string());
+                    }
+                } else {
+                    eprintln!("unexpected arg: {}", other);
+                    return 2;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    if resume_hash.is_some() && session_file.is_some() {
+        eprintln!("chat: cannot use --session-file with --resume");
+        return 2;
+    }
+
+    if autosave && session_file.is_none() {
+        eprintln!("chat: --autosave requires --session-file");
+        return 2;
+    }
+
+    // If a session file is provided and contains a conversation pack pointer, treat it as resume.
+    if resume_hash.is_none() {
+        if let Some(ref sf) = session_file {
+            match read_conversation_session_file(sf) {
+                Ok(Some(h)) => {
+                    resume_hash = Some(h);
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    eprintln!("chat: read session-file failed: {}", e);
+                    return 2;
+                }
+            }
+        }
+    }
+
+    let store = store_for(&root);
+
+    let ids = PromptIds {
+        snapshot_id: [0u8; 32],
+        weights_id: [0u8; 32],
+        tokenizer_id: [0u8; 32],
+    };
+
+    let limits = PromptLimits::default_v1();
+
+    let mut conv_msgs: Vec<ConversationMessage> = Vec::new();
+    if let Some(rh) = resume_hash {
+        if system_msg.is_some() {
+            eprintln!("chat: cannot use --system with --resume");
+            return 2;
+        }
+        let pack = match get_conversation_pack(&store, &rh) {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                eprintln!("chat: missing conversation pack {}", hex32(&rh));
+                return 3;
+            }
+            Err(e) => {
+                eprintln!("chat: load failed: {}", e);
+                return 1;
+            }
+        };
+
+        if !seed_set {
+            seed = pack.seed;
+        }
+        if !max_tokens_set {
+            max_tokens = pack.max_output_tokens;
+        }
+
+        // If the caller did not provide snapshot/sig-map, prefer the pack ids.
+        if snapshot_hex_opt.is_none() {
+            snapshot_hex_opt = Some(hex32(&pack.snapshot_id));
+            forward.push("--snapshot".to_string());
+            forward.push(hex32(&pack.snapshot_id));
+        }
+        if sig_map_hex_opt.is_none() {
+            sig_map_hex_opt = Some(hex32(&pack.sig_map_id));
+            forward.push("--sig-map".to_string());
+            forward.push(hex32(&pack.sig_map_id));
+        }
+        if enable_expand && lexicon_hex_opt.is_none() {
+            if let Some(lh) = pack.lexicon_snapshot_id {
+                lexicon_hex_opt = Some(hex32(&lh));
+                forward.push("--lexicon-snapshot".to_string());
+                forward.push(hex32(&lh));
+            }
+        }
+
+        conv_msgs = pack.messages;
+    } else if let Some(sys) = system_msg {
+        conv_msgs.push(ConversationMessage {
+            role: ConversationRole::System,
+            content: sys,
+            replay_id: None,
+        });
+    }
+
+    // Resolve determinism-critical ids once for save/resume.
+    let (resolved_snapshot_id, resolved_sig_map_id, resolved_lexicon_id) = {
+        let mut snap: Option<Hash32> = None;
+        let mut sig: Option<Hash32> = None;
+        let mut lex: Option<Hash32> = None;
+
+        if let Some(ref sh) = snapshot_hex_opt {
+            snap = match parse_hash32_hex(sh) {
+                Ok(h) => Some(h),
+                Err(e) => {
+                    eprintln!("chat: bad --snapshot hash: {}", e);
+                    return 2;
+                }
+            };
+        }
+        if let Some(ref sm) = sig_map_hex_opt {
+            sig = match parse_hash32_hex(sm) {
+                Ok(h) => Some(h),
+                Err(e) => {
+                    eprintln!("chat: bad --sig-map hash: {}", e);
+                    return 2;
+                }
+            };
+        }
+        if enable_expand {
+            if let Some(ref lh) = lexicon_hex_opt {
+                lex = match parse_hash32_hex(lh) {
+                    Ok(h) => Some(h),
+                    Err(e) => {
+                        eprintln!("chat: bad --lexicon-snapshot hash: {}", e);
+                        return 2;
+                    }
+                };
+            }
+        }
+
+        if snap.is_none() || sig.is_none() {
+            let ws = match read_workspace_v1(&root) {
+                Ok(Some(ws)) => ws,
+                Ok(None) => {
+                    eprintln!("chat: need snapshot+sig-map. Provide --snapshot/--sig-map or run load-wikipedia to create {}", WORKSPACE_V1_FILENAME);
+                    return 2;
+                }
+                Err(e) => {
+                    eprintln!("chat: read {} failed: {}", WORKSPACE_V1_FILENAME, e);
+                    return 1;
+                }
+            };
+            if let Err(e) = ws.validate_pair_consistency() {
+                eprintln!("chat: invalid {}: {}", WORKSPACE_V1_FILENAME, e);
+                return 2;
+            }
+            if !ws.has_required_answer_keys() {
+                eprintln!("chat: {} missing merged_snapshot/merged_sig_map (run load-wikipedia or edit the file)", WORKSPACE_V1_FILENAME);
+                return 2;
+            }
+            snap = ws.merged_snapshot;
+            sig = ws.merged_sig_map;
+            if enable_expand && lex.is_none() {
+                lex = ws.lexicon_snapshot;
+            }
+        }
+
+        (snap.unwrap(), sig.unwrap(), lex)
+    };
+
+    let mut markov_ctx_tail: Vec<MarkovTokenV1> = Vec::new();
+    if enable_markov && !conv_msgs.is_empty() {
+        markov_ctx_tail = rebuild_markov_ctx_tail_from_conversation(&store, &conv_msgs, 64);
+    }
+
+    let stdin = io::stdin();
+    let mut input = stdin.lock();
+
+    use std::io::IsTerminal;
+    let interactive = stdin.is_terminal() && io::stderr().is_terminal();
+
+    loop {
+        if interactive {
+            if let Err(_) = io::stderr().write_all(b"> ") {
+                return 1;
+            }
+            let _ = io::stderr().flush();
+        }
+
+        let mut line = String::new();
+        match input.read_line(&mut line) {
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("chat read error: {}", e);
+                return 1;
+            }
+        }
+
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+
+        if t == "/exit" || t == "/quit" {
+            break;
+        }
+
+        if t == "/help" {
+            eprintln!("Commands:");
+            eprintln!("  /help   show this help");
+            eprintln!("  /reset  clear conversation history");
+            eprintln!("  /save   store a ConversationPack artifact");
+            eprintln!("  /exit   exit chat");
+            continue;
+        }
+
+        if t == "/reset" {
+            let keep_sys: Vec<ConversationMessage> = conv_msgs
+                .iter()
+                .filter(|m| m.role == ConversationRole::System)
+                .cloned()
+                .collect();
+            conv_msgs = keep_sys;
+            markov_ctx_tail.clear();
+            eprintln!("history reset");
+            continue;
+        }
+
+        if t == "/save" {
+            let mut pack = ConversationPackV1::new(
+                seed,
+                max_tokens,
+                resolved_snapshot_id,
+                resolved_sig_map_id,
+                resolved_lexicon_id,
+                ConversationLimits::default_v1(),
+            );
+            pack.messages = conv_msgs.clone();
+            let h = match put_conversation_pack(&store, &mut pack) {
+                Ok(h) => h,
+                Err(e) => {
+                    eprintln!("save failed: {}", e);
+                    return 1;
+                }
+            };
+            if let Some(ref sf) = session_file {
+                if let Err(e) = write_conversation_session_file_atomic(sf, &h) {
+                    eprintln!("save failed: {}", e);
+                    return 1;
+                }
+            }
+            eprintln!("conversation_pack={}", hex32(&h));
+            continue;
+        }
+
+        conv_msgs.push(ConversationMessage {
+            role: ConversationRole::User,
+            content: t.to_string(),
+            replay_id: None,
+        });
+
+        // Canonicalize conversation history so PromptPack canonicalization is stable and
+        // replay ids remain aligned with messages.
+        {
+            let mut cp = ConversationPackV1::new(
+                seed,
+                max_tokens,
+                resolved_snapshot_id,
+                resolved_sig_map_id,
+                resolved_lexicon_id,
+                ConversationLimits::default_v1(),
+            );
+            cp.messages = conv_msgs;
+            cp.canonicalize_in_place();
+            conv_msgs = cp.messages;
+        }
+
+        let mut pack = PromptPack::new(seed, max_tokens, ids);
+        let mut pm: Vec<Message> = Vec::with_capacity(conv_msgs.len());
+        for m in conv_msgs.iter() {
+            let role = match m.role {
+                ConversationRole::System => Role::System,
+                ConversationRole::User => Role::User,
+                ConversationRole::Assistant => Role::Assistant,
+            };
+            pm.push(Message { role, content: m.content.clone() });
+        }
+        pack.messages = pm;
+
+        let prompt_hash = match put_prompt_pack(&store, &mut pack, limits) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("put failed: {}", e);
+                return 1;
+            }
+        };
+
+        // Capture the most recent assistant replay id for cross-turn continuation.
+        let mut prior_replay_id_opt: Option<Hash32> = None;
+        for m in conv_msgs.iter().rev() {
+            if m.role == ConversationRole::Assistant {
+                if let Some(rid) = m.replay_id {
+                    prior_replay_id_opt = Some(rid);
+                    break;
+                }
+            }
+        }
+
+        let mut aa: Vec<String> = Vec::new();
+        aa.push("--root".to_string());
+        aa.push(root.to_string_lossy().to_string());
+        aa.push("--prompt".to_string());
+        aa.push(hex32(&prompt_hash));
+        aa.extend(forward.clone());
+        if let Some(rh) = prior_replay_id_opt {
+            aa.push("--prior-replay".to_string());
+            aa.push(hex32(&rh));
+        }
+
+        let (ans_text, _out_file, mt_tokens, replay_hash) = match answer_run_text_inner(&aa, &markov_ctx_tail) {
+            Ok(x) => x,
+            Err(code) => return code,
+        };
+
+        // Print answer to stdout.
+        if let Err(e) = write_all_to_stdout(ans_text.as_bytes()) {
+            eprintln!("stdout error: {}", e);
+            return 1;
+        }
+
+        // Append assistant reply so the next turn sees history.
+        conv_msgs.push(ConversationMessage {
+            role: ConversationRole::Assistant,
+            content: ans_text,
+            replay_id: Some(replay_hash),
+        });
+
+        {
+            let mut cp = ConversationPackV1::new(
+                seed,
+                max_tokens,
+                resolved_snapshot_id,
+                resolved_sig_map_id,
+                resolved_lexicon_id,
+                ConversationLimits::default_v1(),
+            );
+            cp.messages = conv_msgs;
+            cp.canonicalize_in_place();
+            conv_msgs = cp.messages;
+        }
+
+        if !mt_tokens.is_empty() {
+            markov_ctx_tail.extend_from_slice(&mt_tokens);
+            if markov_ctx_tail.len() > 64 {
+                let drop = markov_ctx_tail.len() - 64;
+                markov_ctx_tail.drain(0..drop);
+            }
+        }
+
+        if autosave {
+            let mut pack = ConversationPackV1::new(
+                seed,
+                max_tokens,
+                resolved_snapshot_id,
+                resolved_sig_map_id,
+                resolved_lexicon_id,
+                ConversationLimits::default_v1(),
+            );
+            pack.messages = conv_msgs.clone();
+            let h = match put_conversation_pack(&store, &mut pack) {
+                Ok(h) => h,
+                Err(e) => {
+                    eprintln!("autosave failed: {}", e);
+                    return 1;
+                }
+            };
+            if let Some(ref sf) = session_file {
+                if let Err(e) = write_conversation_session_file_atomic(sf, &h) {
+                    eprintln!("autosave failed: {}", e);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    0
+}
+
+
+
 fn cmd_prompt(args: &[String]) -> i32 {
     let mut root = default_root();
     let mut seed: u64 = 1;
@@ -553,10 +1908,7 @@ fn cmd_prompt(args: &[String]) -> i32 {
     };
 
     let mut pack = PromptPack::new(seed, max_tokens, ids);
-    pack.messages.push(Message {
-        role,
-        content: text,
-    });
+    pack.messages.push(Message { role, content: text });
 
     // Apply default canonical limits to make a bounded artifact.
     let limits = PromptLimits::default_v1();
@@ -647,6 +1999,7 @@ fn cmd_replay_decode(args: &[String]) -> i32 {
     0
 }
 
+
 fn cmd_replay_new(args: &[String]) -> i32 {
     let mut root = default_root();
 
@@ -682,6 +2035,7 @@ fn cmd_replay_new(args: &[String]) -> i32 {
         }
     }
 }
+
 
 fn cmd_frame_seg_demo(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -981,10 +2335,7 @@ fn cmd_ingest_wiki(args: &[String]) -> i32 {
                 eprintln!("shard-id out of range");
                 return 2;
             }
-            Some(ShardCfgV1 {
-                shard_count: sc,
-                shard_id: sid,
-            })
+            Some(ShardCfgV1 { shard_count: sc, shard_id: sid })
         }
         _ => {
             eprintln!("provide both --shards and --shard-id");
@@ -1013,11 +2364,7 @@ fn cmd_ingest_wiki(args: &[String]) -> i32 {
     // seg_rows is a target row cap, not a hard byte cap.
     let seg_bytes = (seg_mb as u64) * 1024 * 1024;
     let row_bytes = (row_kb as u64) * 1024;
-    let mut seg_rows = if row_bytes == 0 {
-        1
-    } else {
-        seg_bytes / row_bytes
-    };
+    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
     if seg_rows < 1 {
         seg_rows = 1;
     }
@@ -1045,6 +2392,7 @@ fn cmd_ingest_wiki(args: &[String]) -> i32 {
     println!("{}", hex32(&mh));
     0
 }
+
 
 fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -1080,7 +2428,7 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
                 }
                 xml_path = Some(&args[i]);
             }
-
+            
             "--xml-bz2" => {
                 i += 1;
                 if i >= args.len() {
@@ -1090,7 +2438,8 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
                 xml_bz2_path = Some(&args[i]);
             }
 
-            "--seg_mb" => {
+
+"--seg_mb" => {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --seg_mb value");
@@ -1193,17 +2542,17 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
     }
 
     let (xml_path, is_bz2) = match (xml_path, xml_bz2_path) {
-        (Some(p), None) => (p, false),
-        (None, Some(p)) => (p, true),
-        (None, None) => {
-            eprintln!("missing --xml or --xml-bz2 value");
-            return 2;
-        }
-        (Some(_), Some(_)) => {
-            eprintln!("provide only one of --xml or --xml-bz2");
-            return 2;
-        }
-    };
+    (Some(p), None) => (p, false),
+    (None, Some(p)) => (p, true),
+    (None, None) => {
+        eprintln!("missing --xml or --xml-bz2 value");
+        return 2;
+    }
+    (Some(_), Some(_)) => {
+        eprintln!("provide only one of --xml or --xml-bz2");
+        return 2;
+    }
+};
 
     let shard_cfg = match (shards, shard_id) {
         (None, None) => None,
@@ -1212,10 +2561,7 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
                 eprintln!("shard-id out of range");
                 return 2;
             }
-            Some(ShardCfgV1 {
-                shard_count: sc,
-                shard_id: sid,
-            })
+            Some(ShardCfgV1 { shard_count: sc, shard_id: sid })
         }
         _ => {
             eprintln!("provide both --shards and --shard-id");
@@ -1231,6 +2577,7 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
 
     let store = store_for(&root);
 
+
     let file = match std::fs::File::open(xml_path) {
         Ok(f) => f,
         Err(e) => {
@@ -1239,15 +2586,9 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
         }
     };
     // Translate sizing knobs to row/segment parameters.
-    let seg_bytes: u64 = (seg_mb as u64)
-        .saturating_mul(1024u64)
-        .saturating_mul(1024u64);
+    let seg_bytes: u64 = (seg_mb as u64).saturating_mul(1024u64).saturating_mul(1024u64);
     let row_bytes: u64 = (row_kb as u64).saturating_mul(1024u64);
-    let mut seg_rows = if row_bytes == 0 {
-        1
-    } else {
-        seg_bytes / row_bytes
-    };
+    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
     if seg_rows == 0 {
         seg_rows = 1;
     }
@@ -1262,35 +2603,36 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
     cfg.max_docs = max_docs;
 
     let mh = if is_bz2 {
-        let dec = BzDecoder::new(file);
-        let rr = std::io::BufReader::new(dec);
-        match match shard_cfg {
-            Some(sc) => ingest_wiki_xml_sharded(&store, rr, cfg, sc),
-            None => ingest_wiki_xml(&store, rr, cfg),
-        } {
-            Ok(h) => h,
-            Err(e) => {
-                eprintln!("ingest failed: {}", e);
-                return 1;
-            }
+    let dec = BzDecoder::new(file);
+    let rr = std::io::BufReader::new(dec);
+    match match shard_cfg {
+        Some(sc) => ingest_wiki_xml_sharded(&store, rr, cfg, sc),
+        None => ingest_wiki_xml(&store, rr, cfg),
+    } {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("ingest failed: {}", e);
+            return 1;
         }
-    } else {
-        let rr = std::io::BufReader::new(file);
-        match match shard_cfg {
-            Some(sc) => ingest_wiki_xml_sharded(&store, rr, cfg, sc),
-            None => ingest_wiki_xml(&store, rr, cfg),
-        } {
-            Ok(h) => h,
-            Err(e) => {
-                eprintln!("ingest failed: {}", e);
-                return 1;
-            }
+    }
+} else {
+    let rr = std::io::BufReader::new(file);
+    match match shard_cfg {
+        Some(sc) => ingest_wiki_xml_sharded(&store, rr, cfg, sc),
+        None => ingest_wiki_xml(&store, rr, cfg),
+    } {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("ingest failed: {}", e);
+            return 1;
         }
-    };
+    }
+};
 
     println!("{}", hex32(&mh));
     0
 }
+
 
 fn cmd_ingest_wiki_sharded(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -1435,11 +2777,7 @@ fn cmd_ingest_wiki_sharded(args: &[String]) -> i32 {
     // Derive segment sizing deterministically from seg_mb and row_kb.
     let seg_bytes = (seg_mb as u64) * 1024 * 1024;
     let row_bytes = (row_kb as u64) * 1024;
-    let mut seg_rows = if row_bytes == 0 {
-        1
-    } else {
-        seg_bytes / row_bytes
-    };
+    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
     if seg_rows < 1 {
         seg_rows = 1;
     }
@@ -1450,10 +2788,7 @@ fn cmd_ingest_wiki_sharded(args: &[String]) -> i32 {
     let mut entries: Vec<ShardEntryV1> = Vec::with_capacity(shard_count as usize);
 
     for sid in 0..shard_count {
-        let shard = ShardCfgV1 {
-            shard_count,
-            shard_id: sid,
-        };
+        let shard = ShardCfgV1 { shard_count, shard_id: sid };
         if shard.validate().is_err() {
             eprintln!("bad shard cfg");
             return 2;
@@ -1512,11 +2847,8 @@ fn cmd_ingest_wiki_sharded(args: &[String]) -> i32 {
     };
 
     if let Some(p) = out_file {
-        let s = format!(
-            "{}
-",
-            hex32(&man_hash)
-        );
+        let s = format!("{}
+", hex32(&man_hash));
         if let Err(e) = std::fs::write(&p, s.as_bytes()) {
             eprintln!("write error: {}", e);
             return 1;
@@ -1681,15 +3013,9 @@ fn cmd_ingest_wiki_xml_sharded(args: &[String]) -> i32 {
         }
     };
 
-    let seg_bytes: u64 = (seg_mb as u64)
-        .saturating_mul(1024u64)
-        .saturating_mul(1024u64);
+    let seg_bytes: u64 = (seg_mb as u64).saturating_mul(1024u64).saturating_mul(1024u64);
     let row_bytes: u64 = (row_kb as u64).saturating_mul(1024u64);
-    let mut seg_rows = if row_bytes == 0 {
-        1
-    } else {
-        seg_bytes / row_bytes
-    };
+    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
     if seg_rows == 0 {
         seg_rows = 1;
     }
@@ -1700,10 +3026,7 @@ fn cmd_ingest_wiki_xml_sharded(args: &[String]) -> i32 {
     let mut entries: Vec<ShardEntryV1> = Vec::with_capacity(shard_count as usize);
 
     for sid in 0..shard_count {
-        let shard = ShardCfgV1 {
-            shard_count,
-            shard_id: sid,
-        };
+        let shard = ShardCfgV1 { shard_count, shard_id: sid };
         if shard.validate().is_err() {
             eprintln!("bad shard cfg");
             return 2;
@@ -1774,11 +3097,8 @@ fn cmd_ingest_wiki_xml_sharded(args: &[String]) -> i32 {
     };
 
     if let Some(p) = out_file {
-        let s = format!(
-            "{}
-",
-            hex32(&man_hash)
-        );
+        let s = format!("{}
+", hex32(&man_hash));
         if let Err(e) = std::fs::write(&p, s.as_bytes()) {
             eprintln!("write error: {}", e);
             return 1;
@@ -1788,6 +3108,587 @@ fn cmd_ingest_wiki_xml_sharded(args: &[String]) -> i32 {
     println!("{}", hex32(&man_hash));
     0
 }
+
+fn cmd_load_wikipedia(args: &[String]) -> i32 {
+    let mut root = default_root();
+    let mut dump_path: Option<PathBuf> = None;
+    let mut xml_path: Option<PathBuf> = None;
+    let mut xml_bz2_path: Option<PathBuf> = None;
+    let mut out_file: Option<PathBuf> = None;
+
+    // Sizing knobs.
+    let mut seg_mb: u32 = 4;
+    let mut row_kb: u32 = 8;
+    let mut chunk_rows: u32 = 1024;
+    let mut max_docs: Option<u64> = None;
+
+    // Sharding knobs.
+    let mut shards: Option<u16> = None;
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --root value");
+                    return 2;
+                }
+                root = PathBuf::from(&args[i]);
+            }
+            "--dump" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --dump value");
+                    return 2;
+                }
+                dump_path = Some(PathBuf::from(&args[i]));
+            }
+            "--xml" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --xml value");
+                    return 2;
+                }
+                xml_path = Some(PathBuf::from(&args[i]));
+            }
+            "--xml-bz2" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --xml-bz2 value");
+                    return 2;
+                }
+                xml_bz2_path = Some(PathBuf::from(&args[i]));
+            }
+            "--shards" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --shards value");
+                    return 2;
+                }
+                let v = match parse_u32(&args[i]) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                };
+                if v == 0 || v > (u16::MAX as u32) {
+                    eprintln!("invalid --shards value");
+                    return 2;
+                }
+                shards = Some(v as u16);
+            }
+            "--seg_mb" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --seg_mb value");
+                    return 2;
+                }
+                seg_mb = match parse_u32(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                };
+            }
+            "--row_kb" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --row_kb value");
+                    return 2;
+                }
+                row_kb = match parse_u32(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                };
+            }
+            "--chunk_rows" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --chunk_rows value");
+                    return 2;
+                }
+                chunk_rows = match parse_u32(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                };
+            }
+            "--max_docs" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --max_docs value");
+                    return 2;
+                }
+                max_docs = Some(match parse_u64(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                });
+            }
+            "--out-file" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --out-file value");
+                    return 2;
+                }
+                out_file = Some(PathBuf::from(&args[i]));
+            }
+            x => {
+                eprintln!("unexpected arg: {}", x);
+                return 2;
+            }
+        }
+        i += 1;
+    }
+
+    let (source_path, source_kind) = match (dump_path, xml_path, xml_bz2_path) {
+        (Some(p), None, None) => (p, "dump"),
+        (None, Some(p), None) => (p, "xml"),
+        (None, None, Some(p)) => (p, "xml-bz2"),
+        (None, None, None) => {
+            eprintln!("missing --dump, --xml, or --xml-bz2 input");
+            return 2;
+        }
+        _ => {
+            eprintln!("provide only one of --dump, --xml, or --xml-bz2");
+            return 2;
+        }
+    };
+
+    let shard_count = match shards {
+        Some(n) => n,
+        None => {
+            eprintln!("missing --shards <n>");
+            return 2;
+        }
+    };
+
+    // Derive segment sizing deterministically from seg_mb and row_kb.
+    let seg_bytes: u64 = (seg_mb as u64).saturating_mul(1024u64).saturating_mul(1024u64);
+    let row_bytes: u64 = (row_kb as u64).saturating_mul(1024u64);
+    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
+    if seg_rows < 1 {
+        seg_rows = 1;
+    }
+    if seg_rows > (u32::MAX as u64) {
+        seg_rows = u32::MAX as u64;
+    }
+
+    // Sharded ingest.
+    let mut entries: Vec<ShardEntryV1> = Vec::with_capacity(shard_count as usize);
+    for sid in 0..shard_count {
+        let shard = ShardCfgV1 { shard_count, shard_id: sid };
+        if shard.validate().is_err() {
+            eprintln!("bad shard cfg");
+            return 2;
+        }
+
+        let shard_root = root.join(format!("shards/{:04x}", sid));
+        let store = store_for(&shard_root);
+
+        let mut cfg = WikiIngestCfg::default_v1();
+        cfg.chunk_rows = chunk_rows;
+        cfg.seg_rows = seg_rows as u32;
+        cfg.row_max_bytes = row_bytes as usize;
+        cfg.max_docs = max_docs;
+
+        let mh = match source_kind {
+            "dump" => {
+                let f = match fs::File::open(&source_path) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("open failed: {}", e);
+                        return 1;
+                    }
+                };
+                let rr = BufReader::new(f);
+                match ingest_wiki_tsv_sharded(&store, rr, cfg, shard) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        eprintln!("ingest failed: {}", e);
+                        return 1;
+                    }
+                }
+            }
+            "xml" => {
+                let f = match fs::File::open(&source_path) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("open failed: {}", e);
+                        return 1;
+                    }
+                };
+                let rr = BufReader::new(f);
+                match ingest_wiki_xml_sharded(&store, rr, cfg, shard) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        eprintln!("ingest failed: {}", e);
+                        return 1;
+                    }
+                }
+            }
+            "xml-bz2" => {
+                let f = match fs::File::open(&source_path) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("open failed: {}", e);
+                        return 1;
+                    }
+                };
+                let dec = BzDecoder::new(f);
+                let rr = BufReader::new(dec);
+                match ingest_wiki_xml_sharded(&store, rr, cfg, shard) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        eprintln!("ingest failed: {}", e);
+                        return 1;
+                    }
+                }
+            }
+            _ => {
+                eprintln!("internal error: unknown input kind");
+                return 1;
+            }
+        };
+
+        entries.push(ShardEntryV1 {
+            shard_id: sid,
+            shard_root_rel: format!("shards/{:04x}", sid),
+            outputs: vec![ShardOutputV1 {
+                tag: "wiki_ingest_manifest_v1".to_string(),
+                hash: mh,
+            }],
+        });
+    }
+
+    let base_store = store_for(&root);
+
+    let ingest_man = ShardManifestV1 {
+        version: SHARD_MANIFEST_V1_VERSION,
+        shard_count,
+        mapping_id: SHARD_MAPPING_DOC_ID_HASH32_V1.to_string(),
+        shards: entries,
+    };
+
+    let ingest_man_hash = match put_shard_manifest_v1(&base_store, &ingest_man) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("shard manifest store failed: {}", e);
+            return 1;
+        }
+    };
+
+    // Per-shard build-index and updated manifest.
+    let mut idx_entries: Vec<ShardEntryV1> = Vec::with_capacity(shard_count as usize);
+    for se in ingest_man.shards.iter() {
+        let sid = se.shard_id;
+        let shard_root = root.join(&se.shard_root_rel);
+        let shard_store = store_for(&shard_root);
+
+        let mut outputs: Vec<ShardOutputV1> = Vec::new();
+        for o in se.outputs.iter() {
+            if o.tag == "index_snapshot_v1" || o.tag == "index_sig_map_v1" {
+                continue;
+            }
+            outputs.push(o.clone());
+        }
+
+        match try_build_index_v1_in_store(&shard_store) {
+            Ok(Some((snap_id, sig_map_id))) => {
+                outputs.push(ShardOutputV1 {
+                    tag: "index_sig_map_v1".to_string(),
+                    hash: sig_map_id,
+                });
+                outputs.push(ShardOutputV1 {
+                    tag: "index_snapshot_v1".to_string(),
+                    hash: snap_id,
+                });
+            }
+            Ok(None) => {}
+            Err(e) => {
+                eprintln!("build-index failed for shard {}: {}", sid, e);
+                return 1;
+            }
+        }
+
+        outputs.sort_by(|a, b| a.tag.cmp(&b.tag));
+        let mut prev: Option<&str> = None;
+        for o in outputs.iter() {
+            if let Some(p) = prev {
+                if o.tag.as_str() == p {
+                    eprintln!("duplicate output tag in shard {}: {}", sid, o.tag);
+                    return 1;
+                }
+            }
+            prev = Some(o.tag.as_str());
+        }
+
+        idx_entries.push(ShardEntryV1 {
+            shard_id: sid,
+            shard_root_rel: se.shard_root_rel.clone(),
+            outputs,
+        });
+    }
+
+    let index_man = ShardManifestV1 {
+        version: SHARD_MANIFEST_V1_VERSION,
+        shard_count,
+        mapping_id: SHARD_MAPPING_DOC_ID_HASH32_V1.to_string(),
+        shards: idx_entries,
+    };
+
+    let index_man_hash = match put_shard_manifest_v1(&base_store, &index_man) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("shard manifest store failed: {}", e);
+            return 1;
+        }
+    };
+
+    // Deterministic reduce merge.
+    let red: ReduceIndexResultV1 = match reduce_index_v1(&root, &index_man_hash) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("reduce-index failed: {}", e);
+            return 1;
+        }
+    };
+
+    // Update workspace defaults (preserve existing optional values).
+    let mut ws: WorkspaceV1 = match read_workspace_v1(&root) {
+        Ok(Some(w)) => w,
+        Ok(None) => WorkspaceV1::default(),
+        Err(e) => {
+            eprintln!("workspace read error: {}", e);
+            eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+            return 1;
+        }
+    };
+    ws.merged_snapshot = Some(red.merged_snapshot);
+    ws.merged_sig_map = Some(red.merged_sig_map);
+    if let Err(e) = ws.validate_pair_consistency() {
+        eprintln!("workspace error: {}", e);
+        return 1;
+    }
+    if let Err(e) = write_workspace_v1_atomic(&root, &ws) {
+        eprintln!("workspace write error: {}", e);
+        eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+        return 1;
+    }
+
+    let mut out = String::new();
+    out.push_str(&format!("shard_manifest_ingest={}\n", hex32(&ingest_man_hash)));
+    out.push_str(&format!("shard_manifest_index={}\n", hex32(&index_man_hash)));
+    out.push_str(&format!("reduce_manifest={}\n", hex32(&red.reduce_manifest)));
+    out.push_str(&format!("merged_snapshot={}\n", hex32(&red.merged_snapshot)));
+    out.push_str(&format!("merged_sig_map={}\n", hex32(&red.merged_sig_map)));
+    out.push_str(&format!("workspace_written=1\n"));
+
+    if let Some(p) = out_file {
+        if let Err(e) = std::fs::write(&p, out.as_bytes()) {
+            eprintln!("write error: {}", e);
+            return 1;
+        }
+    }
+
+    print!("{}", out);
+    0
+}
+
+
+fn cmd_load_wiktionary(args: &[String]) -> i32 {
+    let mut root = default_root();
+    let mut xml_path: Option<PathBuf> = None;
+    let mut xml_bz2_path: Option<PathBuf> = None;
+    let mut segments: Option<u32> = None;
+    let mut max_pages: Option<u64> = None;
+    let mut out_file: Option<PathBuf> = None;
+    let mut stats = false;
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --root value");
+                    return 2;
+                }
+                root = PathBuf::from(&args[i]);
+            }
+            "--xml" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --xml value");
+                    return 2;
+                }
+                xml_path = Some(PathBuf::from(&args[i]));
+            }
+            "--xml-bz2" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --xml-bz2 value");
+                    return 2;
+                }
+                xml_bz2_path = Some(PathBuf::from(&args[i]));
+            }
+            "--segments" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --segments value");
+                    return 2;
+                }
+                segments = Some(match parse_u32(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                });
+            }
+            "--max_pages" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --max_pages value");
+                    return 2;
+                }
+                max_pages = Some(match parse_u64(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                });
+            }
+            "--out-file" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --out-file value");
+                    return 2;
+                }
+                out_file = Some(PathBuf::from(&args[i]));
+            }
+            "--stats" => {
+                stats = true;
+            }
+            x => {
+                eprintln!("unknown arg: {}", x);
+                return 2;
+            }
+        }
+        i += 1;
+    }
+
+    if xml_path.is_some() && xml_bz2_path.is_some() {
+        eprintln!("choose exactly one of --xml or --xml-bz2");
+        return 2;
+    }
+    let input_path = match (xml_path, xml_bz2_path) {
+        (Some(p), None) => (p, false),
+        (None, Some(p)) => (p, true),
+        _ => {
+            eprintln!("missing --xml <path> or --xml-bz2 <path>");
+            return 2;
+        }
+    };
+
+    let segs = match segments {
+        Some(v) if v > 0 => v as usize,
+        _ => {
+            eprintln!("missing --segments <n>");
+            return 2;
+        }
+    };
+
+    let store = match FsArtifactStore::new(&root) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("open store failed: {}", e);
+            return 1;
+        }
+    };
+
+    let f = match fs::File::open(&input_path.0) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("open failed: {}", e);
+            return 1;
+        }
+    };
+
+    let parse_cfg = WiktionaryParseCfg::default_v1();
+
+    let rep = if input_path.1 {
+        let rr = BufReader::new(BzDecoder::new(BufReader::new(f)));
+        ingest_wiktionary_xml_to_lexicon_snapshot_v1(&store, rr, segs, parse_cfg, max_pages)
+    } else {
+        let rr = BufReader::new(f);
+        ingest_wiktionary_xml_to_lexicon_snapshot_v1(&store, rr, segs, parse_cfg, max_pages)
+    };
+
+    let rep = match rep {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("load-wiktionary failed: {}", e);
+            return 1;
+        }
+    };
+
+    // Update workspace defaults (preserve existing values).
+    let mut ws: WorkspaceV1 = match read_workspace_v1(&root) {
+        Ok(Some(w)) => w,
+        Ok(None) => WorkspaceV1::default(),
+        Err(e) => {
+            eprintln!("workspace read error: {}", e);
+            eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+            return 1;
+        }
+    };
+    ws.lexicon_snapshot = Some(rep.snapshot_hash);
+    if let Err(e) = ws.validate_pair_consistency() {
+        eprintln!("workspace error: {}", e);
+        return 1;
+    }
+    if let Err(e) = write_workspace_v1_atomic(&root, &ws) {
+        eprintln!("workspace write error: {}", e);
+        eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+        return 1;
+    }
+
+    let mut out = String::new();
+    out.push_str(&format!("lexicon_snapshot={}\n", hex32(&rep.snapshot_hash)));
+    out.push_str(&format!("segments_written={}\n", rep.segment_hashes.len() as u64));
+    if stats {
+        out.push_str(&format!("pages_seen={}\n", rep.pages_seen));
+        out.push_str(&format!("pages_english={}\n", rep.pages_kept));
+        out.push_str(&format!("lemmas={}\n", rep.lemmas_total));
+        out.push_str(&format!("senses={}\n", rep.senses_total));
+        out.push_str(&format!("rel_edges={}\n", rep.rels_total));
+        out.push_str(&format!("prons={}\n", rep.prons_total));
+    }
+    out.push_str("workspace_written=1\n");
+
+    if let Some(p) = out_file {
+        if let Err(e) = fs::write(&p, out.as_bytes()) {
+            eprintln!("write out-file failed: {}", e);
+            return 1;
+        }
+    }
+
+    print!("{}", out);
+    0
+}
+
 
 fn cmd_build_index(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -1837,7 +3738,7 @@ fn cmd_build_index(args: &[String]) -> i32 {
         if bytes.len() < FRAME_SEGMENT_MAGIC.len() {
             continue;
         }
-        if &bytes[..FRAME_SEGMENT_MAGIC.len()] != &FRAME_SEGMENT_MAGIC[..] {
+                if &bytes[..FRAME_SEGMENT_MAGIC.len()] != &FRAME_SEGMENT_MAGIC[..] {
             continue;
         }
 
@@ -1859,7 +3760,8 @@ fn cmd_build_index(args: &[String]) -> i32 {
             if idx.source_id != src {
                 eprintln!(
                     "mixed source_id detected; expected {}, saw {}",
-                    src.0 .0, idx.source_id.0 .0
+                    src.0 .0,
+                    idx.source_id.0 .0
                 );
                 eprintln!("build-index currently requires a single source_id per snapshot");
                 return 1;
@@ -1876,6 +3778,7 @@ fn cmd_build_index(args: &[String]) -> i32 {
             }
         };
 
+
         let idx_hash = match store.put(&idx_bytes) {
             Ok(h) => h,
             Err(e) => {
@@ -1890,12 +3793,7 @@ fn cmd_build_index(args: &[String]) -> i32 {
         for t in &idx.terms {
             sig_terms.push(t.term);
         }
-        let sig = match fsa_lm::segment_sig::SegmentSigV1::build(
-            idx_hash,
-            &sig_terms,
-            bloom_bytes,
-            bloom_k,
-        ) {
+        let sig = match fsa_lm::segment_sig::SegmentSigV1::build(idx_hash, &sig_terms, bloom_bytes, bloom_k) {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("segment sig build error: {}", e);
@@ -1959,6 +3857,7 @@ fn cmd_build_index(args: &[String]) -> i32 {
             return 1;
         }
     };
+
 
     // Store IndexSigMapV1 sidecar for this snapshot.
     let mut sig_map = fsa_lm::index_sig_map::IndexSigMapV1::new(src);
@@ -2090,22 +3989,19 @@ fn cmd_compact_index(args: &[String]) -> i32 {
         let r = res.report;
         println!("dry_run=1");
         println!("input_snapshot={}", hex32(&r.input_snapshot_id));
-        println!(
-            "target_bytes_per_out_segment={}",
-            r.cfg.target_bytes_per_out_segment
-        );
+        println!("target_bytes_per_out_segment={}", r.cfg.target_bytes_per_out_segment);
         println!("max_out_segments={}", r.cfg.max_out_segments);
-        println!(
-            "used_even_pack_fallback={}",
-            if r.cfg.used_even_pack_fallback { 1 } else { 0 }
-        );
+        println!("used_even_pack_fallback={}", if r.cfg.used_even_pack_fallback { 1 } else { 0 });
         println!("bytes_input_total={}", r.bytes_input_total);
         println!("groups={}", r.groups.len());
         if verbose {
             for (gi, g) in r.groups.iter().enumerate() {
                 println!(
                     "group={} start_ix={} len={} est_bytes_in={}",
-                    gi, g.start_ix, g.len, g.est_bytes_in
+                    gi,
+                    g.start_ix,
+                    g.len,
+                    g.est_bytes_in
                 );
             }
         }
@@ -2136,11 +4032,7 @@ fn cmd_compact_index(args: &[String]) -> i32 {
         res.report.bytes_input_total,
         res.report.bytes_output_total,
         res.report.groups.len(),
-        if res.report.cfg.used_even_pack_fallback {
-            1
-        } else {
-            0
-        }
+        if res.report.cfg.used_even_pack_fallback { 1 } else { 0 }
     );
 
     if verbose {
@@ -2151,7 +4043,12 @@ fn cmd_compact_index(args: &[String]) -> i32 {
             };
             eprintln!(
                 "group={} start_ix={} len={} est_bytes_in={} out_id={} out_bytes={}",
-                gi, g.start_ix, g.len, g.est_bytes_in, out_id, g.out_bytes
+                gi,
+                g.start_ix,
+                g.len,
+                g.est_bytes_in,
+                out_id,
+                g.out_bytes
             );
         }
     }
@@ -2159,9 +4056,9 @@ fn cmd_compact_index(args: &[String]) -> i32 {
     0
 }
 
-fn try_build_index_v1_in_store(
-    store: &FsArtifactStore,
-) -> Result<Option<(Hash32, Hash32)>, String> {
+
+
+fn try_build_index_v1_in_store(store: &FsArtifactStore) -> Result<Option<(Hash32, Hash32)>, String> {
     let mut paths: Vec<PathBuf> = Vec::new();
     collect_bin_paths(store.root(), &mut paths);
 
@@ -2201,7 +4098,8 @@ fn try_build_index_v1_in_store(
             if idx.source_id != src {
                 return Err(format!(
                     "mixed source_id detected; expected {}, saw {}",
-                    src.0 .0, idx.source_id.0 .0
+                    src.0 .0,
+                    idx.source_id.0 .0
                 ));
             }
         } else {
@@ -2227,12 +4125,7 @@ fn try_build_index_v1_in_store(
         for t in &idx.terms {
             sig_terms.push(t.term);
         }
-        let sig = match fsa_lm::segment_sig::SegmentSigV1::build(
-            idx_hash,
-            &sig_terms,
-            bloom_bytes,
-            bloom_k,
-        ) {
+        let sig = match fsa_lm::segment_sig::SegmentSigV1::build(idx_hash, &sig_terms, bloom_bytes, bloom_k) {
             Ok(s) => s,
             Err(e) => {
                 return Err(format!("segment sig build error: {}", e));
@@ -2498,6 +4391,7 @@ fn cmd_build_index_sharded(args: &[String]) -> i32 {
     0
 }
 
+
 fn cmd_reduce_index(args: &[String]) -> i32 {
     let mut root = default_root();
     let mut manifest_hex: Option<&str> = None;
@@ -2562,8 +4456,7 @@ fn cmd_reduce_index(args: &[String]) -> i32 {
         }
     };
 
-    let out_lines = format!(
-        "{}\n{}\n{}\n",
+    let out_lines = format!("{}\n{}\n{}\n",
         hex32(&res.reduce_manifest),
         hex32(&res.merged_snapshot),
         hex32(&res.merged_sig_map),
@@ -2580,7 +4473,7 @@ fn cmd_reduce_index(args: &[String]) -> i32 {
     0
 }
 
-fn cmd_run_phase6(args: &[String]) -> i32 {
+fn cmd_run_workflow(args: &[String]) -> i32 {
     let mut root = default_root();
     let mut dump_path: Option<PathBuf> = None;
     let mut shards: Option<u16> = None;
@@ -2786,11 +4679,7 @@ fn cmd_run_phase6(args: &[String]) -> i32 {
     // Derive segment sizing deterministically from seg_mb and row_kb.
     let seg_bytes = (seg_mb as u64) * 1024 * 1024;
     let row_bytes = (row_kb as u64) * 1024;
-    let mut seg_rows = if row_bytes == 0 {
-        1
-    } else {
-        seg_bytes / row_bytes
-    };
+    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
     if seg_rows < 1 {
         seg_rows = 1;
     }
@@ -2801,10 +4690,7 @@ fn cmd_run_phase6(args: &[String]) -> i32 {
     // Sharded ingest.
     let mut entries: Vec<ShardEntryV1> = Vec::with_capacity(shard_count as usize);
     for sid in 0..shard_count {
-        let shard = ShardCfgV1 {
-            shard_count,
-            shard_id: sid,
-        };
+        let shard = ShardCfgV1 { shard_count, shard_id: sid };
         if shard.validate().is_err() {
             eprintln!("bad shard cfg");
             return 2;
@@ -2940,31 +4826,16 @@ fn cmd_run_phase6(args: &[String]) -> i32 {
     };
 
     let mut out = String::new();
-    out.push_str(&format!(
-        "shard_manifest_ingest={}
-",
-        hex32(&ingest_man_hash)
-    ));
-    out.push_str(&format!(
-        "shard_manifest_index={}
-",
-        hex32(&index_man_hash)
-    ));
-    out.push_str(&format!(
-        "reduce_manifest={}
-",
-        hex32(&red.reduce_manifest)
-    ));
-    out.push_str(&format!(
-        "merged_snapshot={}
-",
-        hex32(&red.merged_snapshot)
-    ));
-    out.push_str(&format!(
-        "merged_sig_map={}
-",
-        hex32(&red.merged_sig_map)
-    ));
+    out.push_str(&format!("shard_manifest_ingest={}
+", hex32(&ingest_man_hash)));
+    out.push_str(&format!("shard_manifest_index={}
+", hex32(&index_man_hash)));
+    out.push_str(&format!("reduce_manifest={}
+", hex32(&red.reduce_manifest)));
+    out.push_str(&format!("merged_snapshot={}
+", hex32(&red.merged_snapshot)));
+    out.push_str(&format!("merged_sig_map={}
+", hex32(&red.merged_sig_map)));
 
     // Optional: 6c client sync step (assumes server is already running).
     if sync_addr.is_some() || sync_root.is_some() {
@@ -3017,7 +4888,10 @@ fn cmd_run_phase6(args: &[String]) -> i32 {
         out.push_str(&format!(
             "sync_stats needed_total={} already_present={} fetched={} bytes_fetched={}
 ",
-            stats.needed_total, stats.already_present, stats.fetched, stats.bytes_fetched
+            stats.needed_total,
+            stats.already_present,
+            stats.fetched,
+            stats.bytes_fetched
         ));
     }
 
@@ -3030,6 +4904,175 @@ fn cmd_run_phase6(args: &[String]) -> i32 {
     }
     0
 }
+
+
+fn cmd_ingest_wiktionary_xml(args: &[String]) -> i32 {
+    let mut root = default_root();
+    let mut xml_path: Option<PathBuf> = None;
+    let mut xml_bz2_path: Option<PathBuf> = None;
+    let mut segments: Option<u32> = None;
+    let mut max_pages: Option<u64> = None;
+    let mut out_file: Option<PathBuf> = None;
+    let mut stats = false;
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --root value");
+                    return 2;
+                }
+                root = PathBuf::from(&args[i]);
+            }
+            "--xml" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --xml value");
+                    return 2;
+                }
+                xml_path = Some(PathBuf::from(&args[i]));
+            }
+            "--xml-bz2" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --xml-bz2 value");
+                    return 2;
+                }
+                xml_bz2_path = Some(PathBuf::from(&args[i]));
+            }
+            "--segments" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --segments value");
+                    return 2;
+                }
+                segments = Some(match parse_u32(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                });
+            }
+            "--max_pages" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --max_pages value");
+                    return 2;
+                }
+                max_pages = Some(match parse_u64(&args[i]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                });
+            }
+            "--out-file" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --out-file value");
+                    return 2;
+                }
+                out_file = Some(PathBuf::from(&args[i]));
+            }
+            "--stats" => {
+                stats = true;
+            }
+            x => {
+                eprintln!("unknown arg: {}", x);
+                return 2;
+            }
+        }
+        i += 1;
+    }
+
+    if xml_path.is_some() && xml_bz2_path.is_some() {
+        eprintln!("choose exactly one of --xml or --xml-bz2");
+        return 2;
+    }
+    let input_path = match (xml_path, xml_bz2_path) {
+        (Some(p), None) => (p, false),
+        (None, Some(p)) => (p, true),
+        _ => {
+            eprintln!("missing --xml <path> or --xml-bz2 <path>");
+            return 2;
+        }
+    };
+
+    let segs = match segments {
+        Some(v) if v > 0 => v as usize,
+        _ => {
+            eprintln!("missing --segments <n>");
+            return 2;
+        }
+    };
+
+    let store = match FsArtifactStore::new(&root) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("open store failed: {}", e);
+            return 1;
+        }
+    };
+
+    let f = match fs::File::open(&input_path.0) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("open failed: {}", e);
+            return 1;
+        }
+    };
+
+    let parse_cfg = WiktionaryParseCfg::default_v1();
+
+    let rep = if input_path.1 {
+        let rr = BufReader::new(BzDecoder::new(BufReader::new(f)));
+        ingest_wiktionary_xml_to_lexicon_snapshot_v1(&store, rr, segs, parse_cfg, max_pages)
+    } else {
+        let rr = BufReader::new(f);
+        ingest_wiktionary_xml_to_lexicon_snapshot_v1(&store, rr, segs, parse_cfg, max_pages)
+    };
+
+    let rep = match rep {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("ingest-wiktionary-xml failed: {}", e);
+            return 1;
+        }
+    };
+
+    let mut out = String::new();
+    for h in rep.segment_hashes.iter() {
+        out.push_str(&format!("segment={}\n", hex32(h)));
+    }
+    out.push_str(&format!("lexicon_snapshot={}\n", hex32(&rep.snapshot_hash)));
+if stats {
+    out.push_str(&format!("pages_seen={}\n", rep.pages_seen));
+    out.push_str(&format!("pages_english={}\n", rep.pages_kept));
+    out.push_str(&format!("lemmas={}\n", rep.lemmas_total));
+    out.push_str(&format!("senses={}\n", rep.senses_total));
+    out.push_str(&format!("rel_edges={}\n", rep.rels_total));
+    out.push_str(&format!("prons={}\n", rep.prons_total));
+    out.push_str(&format!(
+        "segments_written={}\n",
+        rep.segment_hashes.len() as u64
+    ));
+}
+
+
+    print!("{}", out);
+    if let Some(p) = out_file {
+        if let Err(e) = fs::write(&p, out.as_bytes()) {
+            eprintln!("write out-file failed: {}", e);
+            return 1;
+        }
+    }
+    0
+}
+
 
 fn cmd_build_lexicon_snapshot(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -3117,6 +5160,7 @@ fn cmd_build_lexicon_snapshot(args: &[String]) -> i32 {
     0
 }
 
+
 fn cmd_validate_lexicon_snapshot(args: &[String]) -> i32 {
     let mut root = default_root();
     let mut snap_hex: Option<String> = None;
@@ -3184,11 +5228,13 @@ fn cmd_validate_lexicon_snapshot(args: &[String]) -> i32 {
     }
 }
 
+
 fn cmd_build_pragmatics(args: &[String]) -> i32 {
     let mut root = default_root();
     let mut prompt_hex: Option<String> = None;
     let mut source_id: u64 = 1;
     let mut tok_max_bytes: usize = TokenizerCfg::default().max_token_bytes;
+    let mut lexicon_hex: Option<String> = None;
     let mut out_file: Option<PathBuf> = None;
 
     let mut i = 0usize;
@@ -3238,6 +5284,14 @@ fn cmd_build_pragmatics(args: &[String]) -> i32 {
                     }
                 };
             }
+            "--lexicon-snapshot" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --lexicon-snapshot value");
+                    return 2;
+                }
+                lexicon_hex = Some(args[i].clone());
+            }
             "--out-file" => {
                 i += 1;
                 if i >= args.len() {
@@ -3253,6 +5307,7 @@ fn cmd_build_pragmatics(args: &[String]) -> i32 {
         }
         i += 1;
     }
+
 
     if tok_max_bytes == 0 {
         eprintln!("tok-max-bytes must be > 0");
@@ -3295,13 +5350,52 @@ fn cmd_build_pragmatics(args: &[String]) -> i32 {
         }
     };
 
-    let cfg = PragmaticsExtractCfg {
-        tokenizer_cfg: TokenizerCfg {
-            max_token_bytes: tok_max_bytes,
-        },
+    let mut cfg = PragmaticsExtractCfg::default();
+    cfg.tokenizer_cfg = TokenizerCfg {
+        max_token_bytes: tok_max_bytes,
     };
 
-    let frames = match extract_pragmatics_frames_for_prompt_pack_v1(Id64(source_id), &pack, cfg) {
+    // Optional: lexicon-assisted cue neighborhoods for intent inference.
+    let mut lex_view_opt: Option<fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1> = None;
+    let mut lex_cues_opt: Option<fsa_lm::lexicon_neighborhoods::LexiconCueNeighborhoodsV1> = None;
+
+    if let Some(lx) = lexicon_hex.as_ref() {
+        let lh = match parse_hash32_hex(lx) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("invalid --lexicon-snapshot hash: {}", e);
+                return 2;
+            }
+        };
+
+        let view_opt = match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(&store, &lh) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("lexicon load error: {}", e);
+                return 1;
+            }
+        };
+        let view = match view_opt {
+            Some(v) => v,
+            None => {
+                eprintln!("missing lexicon snapshot: {}", hex32(&lh));
+                return 3;
+            }
+        };
+        let cues = fsa_lm::lexicon_neighborhoods::build_lexicon_cue_neighborhoods_v1(
+            &view,
+            &fsa_lm::lexicon_neighborhoods::LexiconNeighborhoodCfgV1::new(),
+        );
+        lex_view_opt = Some(view);
+        lex_cues_opt = Some(cues);
+    }
+
+    if let (Some(v), Some(c)) = (lex_view_opt.as_ref(), lex_cues_opt.as_ref()) {
+        cfg.lexicon_view = Some(v);
+        cfg.lexicon_cues = Some(c);
+    }
+
+    let frames = match extract_pragmatics_frames_for_prompt_pack_v1(Id64(source_id), &pack, &cfg) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("extract error: {}", e);
@@ -3340,14 +5434,13 @@ fn cmd_build_pragmatics(args: &[String]) -> i32 {
     0
 }
 
+
 #[cfg(test)]
 mod validate_lexicon_snapshot_cli_tests {
     use super::*;
 
     use fsa_lm::frame::Id64;
-    use fsa_lm::lexicon::{
-        LemmaId, LemmaKeyId, LemmaRowV1, SenseId, SenseRowV1, TextId, LEXICON_SCHEMA_V1,
-    };
+    use fsa_lm::lexicon::{LemmaId, LemmaKeyId, LemmaRowV1, SenseId, SenseRowV1, TextId, LEXICON_SCHEMA_V1};
     use fsa_lm::lexicon_segment::LexiconSegmentV1;
     use fsa_lm::lexicon_segment_store::put_lexicon_segment_v1;
     use fsa_lm::lexicon_snapshot::{LexiconSnapshotEntryV1, LexiconSnapshotV1};
@@ -3645,16 +5738,16 @@ mod scale_demo_cli_tests {
     }
 }
 
+
+
 #[cfg(test)]
 mod sharded_ingest_cli_tests {
     use super::*;
 
     use fsa_lm::frame::{derive_id64, DocId};
-    use fsa_lm::index_query::{
-        query_terms_from_text, search_snapshot_gated, QueryTermsCfg, SearchCfg,
-    };
-    use fsa_lm::index_sig_map_store::get_index_sig_map_v1;
     use fsa_lm::index_snapshot_store::get_index_snapshot_v1;
+    use fsa_lm::index_sig_map_store::get_index_sig_map_v1;
+    use fsa_lm::index_query::{query_terms_from_text, search_snapshot_gated, QueryTermsCfg, SearchCfg};
     use fsa_lm::prompt_artifact::put_prompt_pack;
     use fsa_lm::prompt_pack::{Message, PromptIds, PromptLimits, PromptPack, Role};
     use fsa_lm::reduce_manifest_artifact::get_reduce_manifest_v1;
@@ -3708,16 +5801,10 @@ mod sharded_ingest_cli_tests {
         let t1 = title_for_shard(1, shard_count);
 
         let mut data = String::new();
-        data.push_str(&format!(
-            "{}	{}
-",
-            t0, "hello world"
-        ));
-        data.push_str(&format!(
-            "{}	{}
-",
-            t1, "hello world"
-        ));
+        data.push_str(&format!("{}	{}
+", t0, "hello world"));
+        data.push_str(&format!("{}	{}
+", t1, "hello world"));
         std::fs::write(&dump, data.as_bytes()).unwrap();
 
         let args = vec![
@@ -3739,9 +5826,7 @@ mod sharded_ingest_cli_tests {
         let man_hash = parse_hash32_hex(hex).unwrap();
 
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let man = get_shard_manifest_v1(&base_store, &man_hash)
-            .unwrap()
-            .unwrap();
+        let man = get_shard_manifest_v1(&base_store, &man_hash).unwrap().unwrap();
         assert_eq!(man.shard_count, shard_count);
         assert_eq!(man.mapping_id, SHARD_MAPPING_DOC_ID_HASH32_V1.to_string());
         assert_eq!(man.shards.len(), 2);
@@ -3831,9 +5916,7 @@ mod sharded_ingest_cli_tests {
 
         // Verify ReduceManifestV1 references match the printed merged ids.
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let rm = get_reduce_manifest_v1(&base_store, &reduce_hash)
-            .unwrap()
-            .unwrap();
+        let rm = get_reduce_manifest_v1(&base_store, &reduce_hash).unwrap().unwrap();
         let mut got_snap: Option<Hash32> = None;
         let mut got_sig: Option<Hash32> = None;
         for o in rm.outputs.iter() {
@@ -3887,7 +5970,12 @@ mod sharded_ingest_cli_tests {
             for (j, t) in titles.iter().enumerate() {
                 // Keep tokens simple and deterministic.
                 // All rows include "alpha" so we can assert non-empty search hits.
-                let body = format!("alpha beta gamma shard{} doc{} x{}", sid, j, (j % 13));
+                let body = format!(
+                    "alpha beta gamma shard{} doc{} x{}",
+                    sid,
+                    j,
+                    (j % 13)
+                );
                 data.push_str(&format!("{}\t{}\n", t, body));
             }
         }
@@ -3953,12 +6041,8 @@ mod sharded_ingest_cli_tests {
 
         // Load merged artifacts and sanity-check counts.
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let snap = get_index_snapshot_v1(&base_store, &merged_snapshot)
-            .unwrap()
-            .unwrap();
-        let sig_map = get_index_sig_map_v1(&base_store, &merged_sig_map)
-            .unwrap()
-            .unwrap();
+        let snap = get_index_snapshot_v1(&base_store, &merged_snapshot).unwrap().unwrap();
+        let sig_map = get_index_sig_map_v1(&base_store, &merged_sig_map).unwrap().unwrap();
 
         // With seg_rows=16 and docs_per_shard=64, we should usually have >= 24 entries.
         // Keep the bound conservative to avoid brittleness.
@@ -3969,11 +6053,7 @@ mod sharded_ingest_cli_tests {
         let qcfg = QueryTermsCfg::new();
         let qterms = query_terms_from_text("alpha beta", &qcfg);
         assert!(!qterms.is_empty());
-        let scfg = SearchCfg {
-            k: 20,
-            entry_cap: 0,
-            dense_row_threshold: 200_000,
-        };
+        let scfg = SearchCfg { k: 20, entry_cap: 0, dense_row_threshold: 200_000 };
         let (hits, _gate_stats) = search_snapshot_gated(
             &base_store,
             &merged_snapshot,
@@ -3984,6 +6064,7 @@ mod sharded_ingest_cli_tests {
         .unwrap();
         assert!(!hits.is_empty());
     }
+
 
     fn find_output(outputs: &[ShardOutputV1], tag: &str) -> Option<Hash32> {
         for o in outputs.iter() {
@@ -4148,6 +6229,7 @@ mod sharded_ingest_cli_tests {
         assert_eq!(rc, 0);
     }
 
+
     #[test]
     fn cmd_reduce_index_ok_when_primary_root_already_has_some_artifacts() {
         let root = tmp_dir("reduce_preexisting");
@@ -4167,17 +6249,13 @@ mod sharded_ingest_cli_tests {
 
         // Pre-copy one frame segment into the primary root before reduce.
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let man = get_shard_manifest_v1(&base_store, &man1_hash)
-            .unwrap()
-            .unwrap();
+        let man = get_shard_manifest_v1(&base_store, &man1_hash).unwrap().unwrap();
         let se0 = &man.shards[0];
         let shard0_root = root.join(&se0.shard_root_rel);
         let shard0_store = FsArtifactStore::new(&shard0_root).unwrap();
 
         let snap0 = find_output(&se0.outputs, "index_snapshot_v1").unwrap();
-        let snap = get_index_snapshot_v1(&shard0_store, &snap0)
-            .unwrap()
-            .unwrap();
+        let snap = get_index_snapshot_v1(&shard0_store, &snap0).unwrap().unwrap();
         let frame_seg = snap.entries[0].frame_seg;
 
         let bytes = shard0_store.get(&frame_seg).unwrap().unwrap();
@@ -4238,16 +6316,9 @@ mod sharded_ingest_cli_tests {
         // Create a minimal PromptPack and run answer on merged ids.
         let store = FsArtifactStore::new(&root).unwrap();
         let zero: Hash32 = [0u8; 32];
-        let ids = PromptIds {
-            snapshot_id: zero,
-            weights_id: zero,
-            tokenizer_id: zero,
-        };
+        let ids = PromptIds { snapshot_id: zero, weights_id: zero, tokenizer_id: zero };
         let mut pack = PromptPack::new(1, 256, ids);
-        pack.messages.push(Message {
-            role: Role::User,
-            content: "hello world".to_string(),
-        });
+        pack.messages.push(Message { role: Role::User, content: "hello world".to_string() });
         let prompt_hash = put_prompt_pack(&store, &mut pack, PromptLimits::default_v1()).unwrap();
 
         let out_ans = root.join("answer.txt");
@@ -4271,6 +6342,7 @@ mod sharded_ingest_cli_tests {
         let ans_s = std::fs::read_to_string(&out_ans).unwrap();
         assert!(!ans_s.trim().is_empty());
     }
+
 
     #[test]
     fn cmd_run_operator_workflow_pipeline_end_to_end_small() {
@@ -4298,7 +6370,7 @@ mod sharded_ingest_cli_tests {
             out.to_string_lossy().to_string(),
         ];
 
-        let rc = cmd_run_phase6(&args);
+        let rc = cmd_run_workflow(&args);
         assert_eq!(rc, 0);
 
         let out_s = std::fs::read_to_string(&out).unwrap();
@@ -4339,7 +6411,9 @@ mod sharded_ingest_cli_tests {
         assert!(store.get(&snap_h.unwrap()).unwrap().is_some());
         assert!(store.get(&sig_h.unwrap()).unwrap().is_some());
     }
+
 }
+
 
 #[cfg(test)]
 mod sharded_index_cli_tests {
@@ -4351,11 +6425,7 @@ mod sharded_index_cli_tests {
 
     fn tmp_dir(name: &str) -> PathBuf {
         let base = std::env::temp_dir();
-        let p = base.join(format!(
-            "fsa_lm_cli_shard_index_{}_{}",
-            name,
-            std::process::id()
-        ));
+        let p = base.join(format!("fsa_lm_cli_shard_index_{}_{}", name, std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p
@@ -4435,9 +6505,7 @@ mod sharded_index_cli_tests {
         let man1_hash = parse_hash32_hex(man1_hex).unwrap();
 
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let man1 = get_shard_manifest_v1(&base_store, &man1_hash)
-            .unwrap()
-            .unwrap();
+        let man1 = get_shard_manifest_v1(&base_store, &man1_hash).unwrap().unwrap();
         assert_eq!(man1.shard_count, shard_count);
         assert_eq!(man1.shards.len(), 2);
 
@@ -4478,6 +6546,7 @@ mod sharded_index_cli_tests {
         assert_eq!(rc, 0);
     }
 }
+
 
 #[cfg(test)]
 mod markov_model_build_cli_tests {
@@ -4632,6 +6701,8 @@ mod markov_model_build_cli_tests {
         assert!(o.lines().count() >= 1);
     }
 
+
+
     #[test]
     fn cmd_build_markov_model_truncation_is_deterministic() {
         use fsa_lm::scale_report::hash_hash32_list_v1;
@@ -4752,9 +6823,9 @@ mod answer_cli_tests {
     use fsa_lm::frame_segment::FrameSegmentV1;
     use fsa_lm::frame_store::put_frame_segment_v1;
     use fsa_lm::index_segment::IndexSegmentV1;
+    use fsa_lm::index_store::put_index_segment_v1;
     use fsa_lm::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
     use fsa_lm::index_snapshot_store::put_index_snapshot_v1;
-    use fsa_lm::index_store::put_index_segment_v1;
     use fsa_lm::markov_hints::MarkovChoiceKindV1;
     use fsa_lm::prompt_artifact::put_prompt_pack;
     use fsa_lm::prompt_pack::{PromptIds, PromptLimits, PromptPack, Role};
@@ -4787,10 +6858,8 @@ mod answer_cli_tests {
         }
     }
 
-    fn find_markov_trace_hash_for_answer(
-        store_root: &std::path::Path,
-        answer_hash: Hash32,
-    ) -> Hash32 {
+
+    fn find_markov_trace_hash_for_answer(store_root: &std::path::Path, answer_hash: Hash32) -> Hash32 {
         // Locate the replay log that produced this answer (STEP_ANSWER_V1 outputs contain answer_hash),
         // then extract the STEP_MARKOV_TRACE_V1 output hash whose inputs include answer_hash.
         let mut files: Vec<PathBuf> = Vec::new();
@@ -4847,6 +6916,7 @@ mod answer_cli_tests {
 
         panic!("markov trace hash not found");
     }
+
 
     fn parse_query_id_from_answer_text(s: &str) -> Hash32 {
         for line in s.lines() {
@@ -5033,8 +7103,7 @@ mod answer_cli_tests {
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash =
-            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
         let out_path = root.join("answer.txt");
         let rc = cmd_answer(&[
@@ -5056,6 +7125,8 @@ mod answer_cli_tests {
         assert!(s.contains("Plan"));
         assert!(s.contains("Evidence"));
     }
+
+    
 
     #[test]
     fn cmd_answer_markov_trace_records_preface_choice_first() {
@@ -5127,8 +7198,7 @@ mod answer_cli_tests {
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash =
-            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
         let out_path = root.join("answer.txt");
         let rc = cmd_answer(&[
@@ -5152,9 +7222,7 @@ mod answer_cli_tests {
 
         let answer_hash = fsa_lm::hash::blake3_hash(s.as_bytes());
         let mt_hash = find_markov_trace_hash_for_answer(&store_root, answer_hash);
-        let trace = fsa_lm::markov_trace_artifact::get_markov_trace_v1(&store, &mt_hash)
-            .unwrap()
-            .unwrap();
+        let trace = fsa_lm::markov_trace_artifact::get_markov_trace_v1(&store, &mt_hash).unwrap().unwrap();
         assert!(!trace.tokens.is_empty());
 
         // This test targets Option B: if the realizer emits an opener preface line,
@@ -5184,6 +7252,8 @@ mod answer_cli_tests {
             "unexpected plan token id"
         );
     }
+
+
 
     #[test]
     fn cmd_answer_with_markov_model_selects_preface_variant1_and_trace() {
@@ -5255,8 +7325,7 @@ mod answer_cli_tests {
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash =
-            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
         // Store a MarkovModelV1 whose unconditional state prefers the supportive
         // alternate preface template (variant 1).
@@ -5289,8 +7358,7 @@ mod answer_cli_tests {
                 states: vec![s0],
             };
             assert!(model.validate().is_ok());
-            let model_hash =
-                fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
+            let model_hash = fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
 
             let out_path = root.join("answer.txt");
             let rc = cmd_answer(&[
@@ -5324,8 +7392,7 @@ mod answer_cli_tests {
                 .unwrap();
             assert!(!trace.tokens.is_empty());
 
-            let preface_cid =
-                fsa_lm::frame::derive_id64(b"markov_choice_v1", b"preface:supportive:1");
+            let preface_cid = fsa_lm::frame::derive_id64(b"markov_choice_v1", b"preface:supportive:1");
             assert_eq!(
                 trace.tokens[0],
                 MarkovTokenV1::new(MarkovChoiceKindV1::Opener, preface_cid)
@@ -5508,11 +7575,7 @@ fn cmd_query_index(args: &[String]) -> i32 {
     };
 
     // Build the query-id blob for retrieve-v1 so ReplayLog steps are fully hash-addressed.
-    let k_u32 = if k > (u32::MAX as usize) {
-        u32::MAX
-    } else {
-        k as u32
-    };
+    let k_u32 = if k > (u32::MAX as usize) { u32::MAX } else { k as u32 };
     let entry_cap_u32: u32 = 0;
     let dense_row_threshold: u32 = 200_000;
 
@@ -5540,19 +7603,13 @@ fn cmd_query_index(args: &[String]) -> i32 {
 
     let mut qcfg = QueryTermsCfg::new();
     qcfg.include_metaphone = include_meta;
-    let scfg = SearchCfg {
-        k,
-        entry_cap: entry_cap_u32 as usize,
-        dense_row_threshold,
-    };
+    let scfg = SearchCfg { k, entry_cap: entry_cap_u32 as usize, dense_row_threshold };
 
     let qterms = query_terms_from_text(&qtext, &qcfg);
 
     let hits = if cache_stats {
-        let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> =
-            Cache2Q::new(cache_cfg_kind("SNAPSHOT"));
-        let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> =
-            Cache2Q::new(cache_cfg_kind("INDEX"));
+        let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> = Cache2Q::new(cache_cfg_kind("SNAPSHOT"));
+        let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> = Cache2Q::new(cache_cfg_kind("INDEX"));
 
         let (h, gate) = match sig_map_hash {
             Some(ref smh) => match search_snapshot_cached_gated(
@@ -5633,18 +7690,9 @@ fn cmd_query_index(args: &[String]) -> i32 {
     // Store HitList and emit a ReplayLog step for retrieve-v1.
     let mut hl_hits: Vec<HitV1> = Vec::with_capacity(hits.len());
     for h in hits.iter() {
-        hl_hits.push(HitV1 {
-            frame_seg: h.frame_seg,
-            row_ix: h.row_ix,
-            score: h.score,
-        });
+        hl_hits.push(HitV1 { frame_seg: h.frame_seg, row_ix: h.row_ix, score: h.score });
     }
-    let hl = HitListV1 {
-        query_id,
-        snapshot_id: snap_hash,
-        tie_control_id: None,
-        hits: hl_hits,
-    };
+    let hl = HitListV1 { query_id, snapshot_id: snap_hash, tie_control_id: None, hits: hl_hits };
     let hit_list_hash = match put_hit_list_v1(&store, &hl) {
         Ok(h) => h,
         Err(e) => {
@@ -5660,11 +7708,7 @@ fn cmd_query_index(args: &[String]) -> i32 {
         inputs.push(smh);
     }
     inputs.push(query_id);
-    rlog.steps.push(step_from_slices(
-        STEP_RETRIEVE_V1,
-        &inputs,
-        &[hit_list_hash],
-    ));
+    rlog.steps.push(step_from_slices(STEP_RETRIEVE_V1, &inputs, &[hit_list_hash]));
     let _replay_hash = match put_replay_log(&store, &rlog) {
         Ok(h) => h,
         Err(e) => {
@@ -5680,16 +7724,13 @@ fn cmd_query_index(args: &[String]) -> i32 {
 
     for h in hits.iter() {
         // Print as: score frame_seg row_ix
-        println!(
-            "{}\t{}\t{}",
-            h.score,
-            fsa_lm::hash::hex32(&h.frame_seg),
-            h.row_ix
-        );
+        println!("{}\t{}\t{}", h.score, fsa_lm::hash::hex32(&h.frame_seg), h.row_ix);
     }
 
     0
 }
+
+
 
 fn cmd_build_evidence(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -5887,10 +7928,8 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
     };
 
     let hits = if cache_stats {
-        let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> =
-            Cache2Q::new(cache_cfg_kind("SNAPSHOT"));
-        let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> =
-            Cache2Q::new(cache_cfg_kind("INDEX"));
+        let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> = Cache2Q::new(cache_cfg_kind("SNAPSHOT"));
+        let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> = Cache2Q::new(cache_cfg_kind("INDEX"));
 
         let (h, gate) = match sig_map_hash {
             Some(ref smh) => match search_snapshot_cached_gated(
@@ -5968,11 +8007,7 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
         }
     };
 
-    let k_u32 = if k > (u32::MAX as usize) {
-        u32::MAX
-    } else {
-        k as u32
-    };
+    let k_u32 = if k > (u32::MAX as usize) { u32::MAX } else { k as u32 };
     let mi = max_items.unwrap_or(k_u32);
     let mb = max_bytes.unwrap_or(64 * 1024);
 
@@ -6002,11 +8037,8 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
         return 1;
     }
 
-    let limits = EvidenceLimitsV1 {
-        segments_touched: 0,
-        max_items: mi,
-        max_bytes: mb,
-    };
+
+    let limits = EvidenceLimitsV1 { segments_touched: 0, max_items: mi, max_bytes: mb };
 
     let mut bcfg = EvidenceBuildCfgV1::new();
     bcfg.verify_refs = !no_verify;
@@ -6072,11 +8104,7 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
         inputs.push(smh);
     }
     inputs.push(query_id);
-    rlog.steps.push(step_from_slices(
-        STEP_BUILD_EVIDENCE_V1,
-        &inputs,
-        &[ev_hash],
-    ));
+    rlog.steps.push(step_from_slices(STEP_BUILD_EVIDENCE_V1, &inputs, &[ev_hash]));
     let replay_hash = match put_replay_log(&store, &rlog) {
         Ok(h) => h,
         Err(e) => {
@@ -6087,6 +8115,7 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
     if verbose {
         eprintln!("replay_log={}", hex32(&replay_hash));
     }
+
 
     if verbose {
         let mut sketch_count: u32 = 0;
@@ -6111,7 +8140,10 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
     0
 }
 
-fn cmd_answer(args: &[String]) -> i32 {
+fn answer_run_text_inner(
+    args: &[String],
+    markov_context_tokens: &[MarkovTokenV1],
+) -> Result<(String, Option<PathBuf>, Vec<MarkovTokenV1>, Hash32), i32> {
     let mut root: PathBuf = default_root();
     let mut prompt_hash: Option<Hash32> = None;
     let mut snapshot_hash: Option<Hash32> = None;
@@ -6130,6 +8162,8 @@ fn cmd_answer(args: &[String]) -> i32 {
     let mut markov_model_hash: Option<Hash32> = None;
     let mut markov_max_choices: usize = 8;
 
+    let mut prior_replay_hash: Option<Hash32> = None;
+
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -6137,7 +8171,7 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --root value");
-                    return 1;
+                    return Err(1);
                 }
                 root = PathBuf::from(&args[i]);
             }
@@ -6145,13 +8179,13 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --prompt value");
-                    return 1;
+                    return Err(1);
                 }
                 match parse_hash32_hex(&args[i]) {
                     Ok(h) => prompt_hash = Some(h),
                     Err(e) => {
                         eprintln!("bad --prompt: {}", e);
-                        return 1;
+                        return Err(1);
                     }
                 }
             }
@@ -6159,13 +8193,13 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --snapshot value");
-                    return 1;
+                    return Err(1);
                 }
                 match parse_hash32_hex(&args[i]) {
                     Ok(h) => snapshot_hash = Some(h),
                     Err(e) => {
                         eprintln!("bad --snapshot: {}", e);
-                        return 1;
+                        return Err(1);
                     }
                 }
             }
@@ -6173,13 +8207,13 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --sig-map value");
-                    return 1;
+                    return Err(1);
                 }
                 match parse_hash32_hex(&args[i]) {
                     Ok(h) => sig_map_hash = Some(h),
                     Err(e) => {
                         eprintln!("bad --sig-map: {}", e);
-                        return 1;
+                        return Err(1);
                     }
                 }
             }
@@ -6187,13 +8221,13 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --lexicon-snapshot value");
-                    return 1;
+                    return Err(1);
                 }
                 match parse_hash32_hex(&args[i]) {
                     Ok(h) => lexicon_snapshot_hash = Some(h),
                     Err(e) => {
                         eprintln!("bad --lexicon-snapshot: {}", e);
-                        return 1;
+                        return Err(1);
                     }
                 }
             }
@@ -6204,13 +8238,13 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --pragmatics value");
-                    return 1;
+                    return Err(1);
                 }
                 match parse_hash32_hex(&args[i]) {
                     Ok(h) => pragmatics_ids.push(h),
                     Err(e) => {
                         eprintln!("bad --pragmatics: {}", e);
-                        return 1;
+                        return Err(1);
                     }
                 }
             }
@@ -6218,13 +8252,13 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --k value");
-                    return 1;
+                    return Err(1);
                 }
                 match parse_u32(&args[i]) {
                     Ok(v) => k = v as usize,
                     Err(e) => {
                         eprintln!("bad --k: {}", e);
-                        return 1;
+                        return Err(1);
                     }
                 }
             }
@@ -6235,13 +8269,13 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --max_terms value");
-                    return 1;
+                    return Err(1);
                 }
                 match parse_u32(&args[i]) {
                     Ok(v) => max_terms = Some(v),
                     Err(e) => {
                         eprintln!("bad --max_terms: {}", e);
-                        return 1;
+                        return Err(1);
                     }
                 }
             }
@@ -6252,13 +8286,13 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --plan_items value");
-                    return 1;
+                    return Err(1);
                 }
                 match parse_u32(&args[i]) {
                     Ok(v) => plan_items = Some(v),
                     Err(e) => {
                         eprintln!("bad --plan_items: {}", e);
-                        return 1;
+                        return Err(1);
                     }
                 }
             }
@@ -6266,7 +8300,7 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --out-file value");
-                    return 1;
+                    return Err(1);
                 }
                 out_file = Some(PathBuf::from(&args[i]));
             }
@@ -6274,19 +8308,19 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --verify-trace value");
-                    return 1;
+                    return Err(1);
                 }
                 match parse_u8(&args[i]) {
                     Ok(v) => {
                         if v > 1 {
                             eprintln!("verify-trace must be 0 or 1");
-                            return 1;
+                            return Err(1);
                         }
                         verify_trace = v;
                     }
                     Err(e) => {
                         eprintln!("bad --verify-trace: {}", e);
-                        return 1;
+                        return Err(1);
                     }
                 }
             }
@@ -6294,13 +8328,13 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --markov-model value");
-                    return 1;
+                    return Err(1);
                 }
                 match parse_hash32_hex(&args[i]) {
                     Ok(h) => markov_model_hash = Some(h),
                     Err(e) => {
                         eprintln!("bad --markov-model: {}", e);
-                        return 1;
+                        return Err(1);
                     }
                 }
             }
@@ -6308,29 +8342,43 @@ fn cmd_answer(args: &[String]) -> i32 {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --markov-max-choices value");
-                    return 1;
+                    return Err(1);
                 }
                 match parse_u32(&args[i]) {
                     Ok(v) => {
                         if v == 0 || v > 32 {
                             eprintln!("markov-max-choices must be 1..32");
-                            return 1;
+                            return Err(1);
                         }
                         markov_max_choices = v as usize;
                     }
                     Err(e) => {
                         eprintln!("bad --markov-max-choices: {}", e);
-                        return 1;
+                        return Err(1);
+                    }
+                }
+            }
+            "--prior-replay" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --prior-replay value");
+                    return Err(1);
+                }
+                match parse_hash32_hex(&args[i]) {
+                    Ok(h) => prior_replay_hash = Some(h),
+                    Err(e) => {
+                        eprintln!("bad --prior-replay: {}", e);
+                        return Err(1);
                     }
                 }
             }
             "-h" | "--help" => {
-                eprintln!("{}", usage());
-                return 0;
+                println!("{}", usage());
+                return Err(0);
             }
             other => {
                 eprintln!("unknown arg: {}", other);
-                return 1;
+                return Err(1);
             }
         }
         i += 1;
@@ -6340,51 +8388,314 @@ fn cmd_answer(args: &[String]) -> i32 {
         Some(h) => h,
         None => {
             eprintln!("missing --prompt");
-            return 1;
-        }
-    };
-    let snapshot_hash = match snapshot_hash {
-        Some(h) => h,
-        None => {
-            eprintln!("missing --snapshot");
-            return 1;
+            return Err(1);
         }
     };
 
     let store = store_for(&root);
 
+    let mut ws_opt: Option<fsa_lm::workspace::WorkspaceV1> = None;
+
+    if snapshot_hash.is_none() {
+        if sig_map_hash.is_some() {
+            eprintln!("missing --snapshot (must provide --snapshot when using --sig-map)");
+            return Err(1);
+        }
+
+        match read_workspace_v1(&root) {
+            Ok(Some(ws)) => {
+                if let Err(e) = ws.validate_pair_consistency() {
+                    eprintln!("workspace error: {}", e);
+                    eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+                    return Err(1);
+                }
+                if !ws.has_required_answer_keys() {
+                    eprintln!("workspace missing merged_snapshot/merged_sig_map");
+                    eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+                    return Err(1);
+                }
+                snapshot_hash = ws.merged_snapshot;
+                sig_map_hash = ws.merged_sig_map;
+                ws_opt = Some(ws);
+            }
+            Ok(None) => {
+                eprintln!("missing --snapshot and workspace defaults not found");
+                eprintln!("create workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+                return Err(1);
+            }
+            Err(e) => {
+                eprintln!("workspace read error: {}", e);
+                eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+                return Err(1);
+            }
+        }
+    }
+
+    if enable_expand && lexicon_snapshot_hash.is_none() {
+        if ws_opt.is_none() {
+            match read_workspace_v1(&root) {
+                Ok(Some(ws)) => {
+                    if let Err(e) = ws.validate_pair_consistency() {
+                        eprintln!("workspace error: {}", e);
+                        eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+                        return Err(1);
+                    }
+                    ws_opt = Some(ws);
+                }
+                Ok(None) => {
+                    // Leave ws_opt as None.
+                }
+                Err(e) => {
+                    eprintln!("workspace read error: {}", e);
+                    eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+                    return Err(1);
+                }
+            }
+        }
+
+        if let Some(ws) = ws_opt.as_ref() {
+            lexicon_snapshot_hash = ws.lexicon_snapshot;
+        }
+    }
+
+    let snapshot_hash = match snapshot_hash {
+        Some(h) => h,
+        None => {
+            eprintln!("missing --snapshot");
+            return Err(1);
+        }
+    };
+
     let pack = match get_prompt_pack(&store, &prompt_hash) {
         Ok(Some(p)) => p,
         Ok(None) => {
             eprintln!("prompt not found");
-            return 1;
+            return Err(1);
         }
         Err(e) => {
             eprintln!("store error: {}", e);
-            return 1;
+            return Err(1);
         }
     };
 
-    let mut query_text: Option<String> = None;
-    for m in pack.messages.iter().rev() {
-        if m.role == Role::User {
-            query_text = Some(m.content.clone());
-            break;
+    // Identify the query message (last user turn) and keep its index.
+    let mut query_msg_ix: usize = 0;
+    let mut qtext: String = String::new();
+    let mut found_user: bool = false;
+    if !pack.messages.is_empty() {
+        for ix in (0..pack.messages.len()).rev() {
+            if pack.messages[ix].role == Role::User {
+                query_msg_ix = ix;
+                qtext = pack.messages[ix].content.clone();
+                found_user = true;
+                break;
+            }
+        }
+        if !found_user {
+            // Fallback: use the last message.
+            let ix = pack.messages.len() - 1;
+            query_msg_ix = ix;
+            qtext = pack.messages[ix].content.clone();
         }
     }
-    if query_text.is_none() {
-        if let Some(m) = pack.messages.last() {
-            query_text = Some(m.content.clone());
+
+    // If the query contains a structured puzzle block, attempt a strict parse.
+    // v1 only uses this parse status to decide whether to ask for clarification.
+    let mut puzzle_parse_failed: bool = false;
+    if let Some(block) = extract_puzzle_block(&qtext) {
+        if parse_puzzle_block_v1(block).is_err() {
+            puzzle_parse_failed = true;
         }
     }
-    let qtext = query_text.unwrap_or_else(|| "".to_string());
+
+    // If a structured puzzle block is present and parses, attempt to solve it
+    // deterministically and store a ProofArtifactV1. This is optional evidence
+    // that can be attached to the EvidenceBundle.
+    let mut proof_hash_opt: Option<Hash32> = None;
+    let mut puzzle_constraints_parse_failed: bool = false;
+    if !puzzle_parse_failed {
+        if let Some(block) = extract_puzzle_block(&qtext) {
+            if let Ok(spec) = parse_puzzle_block_v1(block) {
+                let cfg = LogicSolveCfgV1::default_v1();
+                match solve_puzzle_v1(&spec, cfg) {
+                    Ok(proof) => {
+                        match put_proof_artifact_v1(&store, &proof) {
+                            Ok(h) => proof_hash_opt = Some(h),
+                            Err(e) => {
+                                eprintln!("proof store failed: {}", e);
+                                return Err(1);
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // If the puzzle is not solvable under the supported constraint
+                        // set or caps, fall back to the normal clarify behavior.
+                    }
+                }
+            }
+        }
+    }
+
+    // Free-text sketch solve (conversational).
+    //
+    // If we have enough information (vars + numeric domain + parseable constraints)
+    // we compile the sketch into a PuzzleSpecV1 and run the deterministic solver.
+    //
+    // This is separate from the structured [puzzle] block flow.
+    if proof_hash_opt.is_none() && !puzzle_parse_failed {
+        // Prefer a pending sketch from the prior assistant replay, if present.
+        // This is the common case for "clarifier reply" turns where the user
+        // provides only constraints.
+        let mut pending_sketch_opt: Option<fsa_lm::puzzle_sketch_v1::PuzzleSketchV1> = None;
+        if let Some(prh) = prior_replay_hash.as_ref() {
+            if let Ok(Some(rlog)) = get_replay_log(&store, prh) {
+                for st in rlog.steps.iter().rev() {
+                    if st.name != STEP_PUZZLE_SKETCH_V1 {
+                        continue;
+                    }
+                    if st.outputs.len() != 1 {
+                        break;
+                    }
+                    let prev_sketch_hash = st.outputs[0];
+                    if let Ok(Some(prev_art)) = fsa_lm::puzzle_sketch_artifact_store::get_puzzle_sketch_artifact_v1(&store, &prev_sketch_hash) {
+                        if (prev_art.flags & fsa_lm::puzzle_sketch_artifact::PSA_FLAG_PENDING) != 0 {
+                            pending_sketch_opt = Some(fsa_lm::puzzle_sketch_v1::PuzzleSketchV1 {
+                                is_logic_puzzle_likely: true,
+                                var_names: prev_art.var_names.clone(),
+                                domain_range: prev_art.domain_range,
+                                has_constraints: prev_art.has_constraints,
+                                shape: prev_art.shape,
+                            });
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        let pending_vars_for_fallback: Option<Vec<String>> = pending_sketch_opt.as_ref().map(|sk| sk.var_names.clone());
+
+        // Parse constraints once and compile/solve using the same parsed list.
+        //
+        // Only attempt constraint parsing when we have a pending sketch (cross-turn
+        // clarification) or when the current turn includes obvious operator signals.
+        // This avoids treating unrelated text as malformed constraints.
+        let q_has_ops = qtext.contains("!=")
+            || qtext.contains("<=")
+            || qtext.contains(">=")
+            || qtext.contains('=')
+            || qtext.contains('<')
+            || qtext.contains('>');
+
+        if pending_sketch_opt.is_some() || q_has_ops {
+            match fsa_lm::logic_solver_v1::parse_constraints_from_text_v1(&qtext, 256) {
+                Ok(mut cs) => {
+                    if cs.is_empty() {
+                        if let Some(vs) = pending_vars_for_fallback.as_ref() {
+                            cs = fsa_lm::logic_solver_v1::extract_eq_constraints_for_vars_v1(&qtext, vs, 256);
+                        }
+                    }
+
+                    if !cs.is_empty() {
+                    // First try: pending sketch (vars/domain/shape from prior turns).
+                    if let Some(mut sk) = pending_sketch_opt {
+                        sk.has_constraints = true;
+                        match try_compile_puzzle_spec_from_sketch_and_constraints_v1(&sk, cs.clone()) {
+                            Ok(Some(spec)) => {
+                                let cfg = LogicSolveCfgV1::default_v1();
+                                match solve_puzzle_v1(&spec, cfg) {
+                                    Ok(proof) => match put_proof_artifact_v1(&store, &proof) {
+                                        Ok(h) => proof_hash_opt = Some(h),
+                                        Err(e) => {
+                                            eprintln!("proof store failed: {}", e);
+                                            return Err(1);
+                                        }
+                                    },
+                                    Err(_) => {
+                                        puzzle_constraints_parse_failed = true;
+                                    }
+                                }
+                            }
+                            Ok(None) => {}
+                            Err(PuzzleCompileErrV1::ConstraintParseFailed) => {
+                                puzzle_constraints_parse_failed = true;
+                            }
+                            Err(_) => {}
+                        }
+                    }
+
+                    // Second try: best-effort sketch from the current turn text.
+                    if proof_hash_opt.is_none() {
+                        let pscfg = fsa_lm::puzzle_sketch_v1::PuzzleSketchCfgV1::default();
+
+                        let mut lex_for_sketch: Option<Hash32> = lexicon_snapshot_hash;
+                        if lex_for_sketch.is_none() {
+                            if let Some(ws) = ws_opt.as_ref() {
+                                lex_for_sketch = ws.lexicon_snapshot;
+                            }
+                        }
+
+                        let mut view_opt: Option<fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1> = None;
+                        let mut cues_opt: Option<fsa_lm::lexicon_neighborhoods::LexiconCueNeighborhoodsV1> = None;
+
+                        if let Some(lh) = lex_for_sketch.as_ref() {
+                            match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(&store, lh) {
+                                Ok(Some(view)) => {
+                                    let ncfg = fsa_lm::lexicon_neighborhoods::LexiconNeighborhoodCfgV1::new();
+                                    let cues = fsa_lm::lexicon_neighborhoods::build_lexicon_cue_neighborhoods_v1(&view, &ncfg);
+                                    view_opt = Some(view);
+                                    cues_opt = Some(cues);
+                                }
+                                _ => {}
+                            }
+                        }
+
+                        let sk = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(
+                            &qtext,
+                            view_opt.as_ref(),
+                            cues_opt.as_ref(),
+                            pscfg,
+                        );
+
+                        match try_compile_puzzle_spec_from_sketch_and_constraints_v1(&sk, cs) {
+                            Ok(Some(spec)) => {
+                                let cfg = LogicSolveCfgV1::default_v1();
+                                match solve_puzzle_v1(&spec, cfg) {
+                                    Ok(proof) => match put_proof_artifact_v1(&store, &proof) {
+                                        Ok(h) => proof_hash_opt = Some(h),
+                                        Err(e) => {
+                                            eprintln!("proof store failed: {}", e);
+                                            return Err(1);
+                                        }
+                                    },
+                                    Err(_) => {
+                                        puzzle_constraints_parse_failed = true;
+                                    }
+                                }
+                            }
+                            Ok(None) => {}
+                            Err(PuzzleCompileErrV1::ConstraintParseFailed) => {
+                                puzzle_constraints_parse_failed = true;
+                            }
+                            Err(_) => {}
+                        }
+                    }
+                    }
+                }
+                Err(_) => {
+                    puzzle_constraints_parse_failed = true;
+                }
+            }
+        }
+    }
+
 
     let mut qcfg = QueryTermsCfg::new();
     qcfg.include_metaphone = include_meta;
     if let Some(mt) = max_terms {
         if mt == 0 {
             eprintln!("max_terms must be >= 1");
-            return 1;
+            return Err(1);
         }
         qcfg.max_terms = mt as usize;
     }
@@ -6395,23 +8706,23 @@ fn cmd_answer(args: &[String]) -> i32 {
     }
     if let Err(e) = control.validate() {
         eprintln!("control error: {}", e);
-        return 1;
+        return Err(1);
     }
 
     let mut pcfg = RetrievalPolicyCfgV1::new();
     if k > (u16::MAX as usize) {
         eprintln!("k too large");
-        return 1;
+        return Err(1);
     }
     pcfg.max_hits = k as u16;
     if pcfg.max_hits == 0 {
         eprintln!("k must be >= 1");
-        return 1;
+        return Err(1);
     }
     if let Some(mt) = max_terms {
         if mt > (u16::MAX as u32) {
             eprintln!("max_terms too large");
-            return 1;
+            return Err(1);
         }
         pcfg.max_query_terms = mt as u16;
     }
@@ -6423,11 +8734,76 @@ fn cmd_answer(args: &[String]) -> i32 {
         pcfg.enable_query_expansion = 1;
         if lexicon_snapshot_hash.is_none() {
             eprintln!("missing --lexicon-snapshot (required when --expand)");
-            return 1;
+            eprintln!("or set lexicon_snapshot in {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+            return Err(1);
         }
     }
 
-    let (hits, _stats) = match apply_retrieval_policy_from_text_v1(
+    // Derive low-weight context anchors from prior conversation messages.
+    // These anchors are intended to improve follow-up retrieval continuity.
+    let mut context_anchors_hash_opt: Option<Hash32> = None;
+    let mut context_anchors_lex_hash_opt: Option<Hash32> = None;
+    let mut anchor_terms_opt: Option<Vec<fsa_lm::index_query::QueryTerm>> = None;
+
+    // Logic puzzle pending sketch artifact hashes (recorded in ReplayLog when present).
+    let mut puzzle_sketch_hash_opt: Option<Hash32> = None;
+    let mut puzzle_sketch_lex_hash_opt: Option<Hash32> = None;
+    if query_msg_ix > 0 && pack.messages.len() >= 2 {
+        let mut lex_for_anchors: Option<fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1> = None;
+        // Best-effort: if a lexicon snapshot is not explicitly in use, try workspace defaults.
+        let mut lex_hash_opt = lexicon_snapshot_hash;
+        if lex_hash_opt.is_none() {
+            if ws_opt.is_none() {
+                if let Ok(Some(ws)) = read_workspace_v1(&root) {
+                    if ws.validate_pair_consistency().is_ok() {
+                        ws_opt = Some(ws);
+                    }
+                }
+            }
+            if let Some(ws) = ws_opt.as_ref() {
+                lex_hash_opt = ws.lexicon_snapshot;
+            }
+        }
+
+        if let Some(lh) = lex_hash_opt.as_ref() {
+            match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(&store, lh) {
+                Ok(Some(v)) => lex_for_anchors = Some(v),
+                Ok(None) => {
+                    // Snapshot missing; proceed without lexicon filtering.
+                }
+                Err(e) => {
+                    eprintln!("context anchors: lexicon load failed: {}", e);
+                    return Err(1);
+                }
+            }
+            if lex_for_anchors.is_some() {
+                context_anchors_lex_hash_opt = Some(*lh);
+            }
+        }
+
+        let cfg_ca = ContextAnchorsCfgV1::default_v1();
+        if let Some(b) = build_context_anchors_v1(
+            prompt_hash,
+            query_msg_ix,
+            &pack.messages,
+            &qcfg,
+            lex_for_anchors.as_ref(),
+            cfg_ca,
+        ) {
+            match put_context_anchors_v1(&store, &b.anchors) {
+                Ok(h) => {
+                    context_anchors_hash_opt = Some(h);
+                    anchor_terms_opt = Some(b.query_terms);
+                }
+                Err(e) => {
+                    eprintln!("context anchors: store failed: {}", e);
+                    return Err(1);
+                }
+            }
+        }
+    }
+
+    let (hits, _stats) = match apply_retrieval_policy_from_text_v1_with_anchors(
         &store,
         &snapshot_hash,
         sig_map_hash.as_ref(),
@@ -6437,11 +8813,12 @@ fn cmd_answer(args: &[String]) -> i32 {
         Some(&control),
         lexicon_snapshot_hash.as_ref(),
         None,
+        anchor_terms_opt.as_deref(),
     ) {
         Ok(x) => x,
         Err(e) => {
             eprintln!("policy error: {}", e);
-            return 1;
+            return Err(1);
         }
     };
 
@@ -6476,32 +8853,45 @@ fn cmd_answer(args: &[String]) -> i32 {
     };
     let score_model_id: u32 = 1;
     let bcfg = EvidenceBuildCfgV1::new();
-    let mut bundle = match build_evidence_bundle_v1_from_hits(
-        &store,
-        query_id,
-        snapshot_hash,
-        limits,
-        score_model_id,
-        &hits,
-        &bcfg,
-    ) {
+    let mut bundle = match build_evidence_bundle_v1_from_hits(&store, query_id, snapshot_hash, limits, score_model_id, &hits, &bcfg) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("build-evidence failed: {}", e);
-            return 1;
+            return Err(1);
         }
     };
 
+    let has_proof: bool = proof_hash_opt.is_some();
+
+// If the logic solver produced a ProofArtifact, attach it as evidence.
+    if let Some(ph) = proof_hash_opt.as_ref() {
+        let ph = *ph;
+        // Increase max_items so canonical validation remains satisfied.
+        if bundle.limits.max_items != 0 {
+            if bundle.limits.max_items == u32::MAX {
+                eprintln!("evidence limits max_items overflow");
+                return Err(1);
+            }
+            bundle.limits.max_items = bundle.limits.max_items.saturating_add(1);
+        }
+
+        // Use a fixed high score so proof evidence is ranked first for puzzle answers.
+        bundle.items.push(EvidenceItemV1 {
+            score: 1_000_000_000,
+            data: EvidenceItemDataV1::Proof(ProofRefV1 { proof_id: ph }),
+        });
+    }
+
     if let Err(e) = bundle.canonicalize_in_place() {
         eprintln!("evidence canonicalize failed: {}", e);
-        return 1;
+        return Err(1);
     }
 
     let ev_hash = match put_evidence_bundle_v1(&store, &bundle) {
         Ok(h) => h,
         Err(e) => {
             eprintln!("store error: {}", e);
-            return 1;
+            return Err(1);
         }
     };
 
@@ -6509,11 +8899,11 @@ fn cmd_answer(args: &[String]) -> i32 {
     if let Some(pi) = plan_items {
         if pi == 0 {
             eprintln!("plan_items must be >= 1");
-            return 1;
+            return Err(1);
         }
         if pi > 16_384 {
             eprintln!("plan_items too large");
-            return 1;
+            return Err(1);
         }
         pl_cfg.max_plan_items = pi;
     }
@@ -6531,27 +8921,49 @@ fn cmd_answer(args: &[String]) -> i32 {
             Ok(x) => x,
             Err(e) => {
                 eprintln!("pragmatics load failed: {}", e);
-                return 1;
+                return Err(1);
             }
         };
         let pf = match pf_opt {
             Some(x) => x,
             None => {
                 eprintln!("missing pragmatics frame: {}", hex32(&pid));
-                return 1;
+                return Err(1);
             }
         };
         Some(pf)
     };
 
-    let directives_opt = derive_directives_opt(pf_opt.as_ref());
+    let mut directives_opt = derive_directives_opt(pf_opt.as_ref());
 
-    let directives_hash_opt = match directives_opt.as_ref() {
+    // If a puzzle block is present but could not be parsed, ensure the
+    // clarifying question path can emit one question even without pragmatics.
+    if puzzle_parse_failed {
+        if let Some(ref mut d) = directives_opt {
+            if d.max_questions == 0 {
+                d.max_questions = 1;
+            }
+        } else {
+            directives_opt = Some(RealizerDirectivesV1 {
+                version: REALIZER_DIRECTIVES_V1_VERSION,
+                tone: ToneV1::Neutral,
+                style: StyleV1::Debug,
+                format_flags: 0,
+                max_softeners: 0,
+                max_preface_sentences: 0,
+                max_hedges: 0,
+                max_questions: 1,
+                rationale_codes: Vec::new(),
+            });
+        }
+    }
+
+    let mut directives_hash_opt = match directives_opt.as_ref() {
         Some(d) => match put_realizer_directives_v1(&store, d) {
             Ok(h) => Some(h),
             Err(e) => {
                 eprintln!("store directives failed: {}", e);
-                return 1;
+                return Err(1);
             }
         },
         None => None,
@@ -6567,14 +8979,14 @@ fn cmd_answer(args: &[String]) -> i32 {
             Ok(x) => x,
             Err(e) => {
                 eprintln!("markov-model load failed: {}", e);
-                return 1;
+                return Err(1);
             }
         };
         let model = match model {
             Some(x) => x,
             None => {
                 eprintln!("missing markov model: {}", hex32(mh));
-                return 1;
+                return Err(1);
             }
         };
 
@@ -6584,6 +8996,7 @@ fn cmd_answer(args: &[String]) -> i32 {
             *mh,
             &model,
             directives_opt.as_ref(),
+            markov_context_tokens,
             markov_max_choices,
         );
 
@@ -6592,7 +9005,7 @@ fn cmd_answer(args: &[String]) -> i32 {
                 Ok(h) => h,
                 Err(e) => {
                     eprintln!("store markov hints failed: {}", e);
-                    return 1;
+                    return Err(1);
                 }
             };
             // Record the hints hash so we can append a replay step and capture
@@ -6602,24 +9015,408 @@ fn cmd_answer(args: &[String]) -> i32 {
         }
     }
 
-    let PlannerOutputV1 {
-        plan,
-        hints: planner_hints,
-        forecast,
-    } = match plan_from_evidence_bundle_v1_with_guidance(&bundle, ev_hash, &pl_cfg, pf_opt.as_ref())
-    {
+    let PlannerOutputV1 { mut plan, hints: mut planner_hints, mut forecast } = match plan_from_evidence_bundle_v1_with_guidance(&bundle, ev_hash, &pl_cfg, pf_opt.as_ref()) {
         Ok(x) => x,
         Err(e) => {
             eprintln!("plan failed: {}", e);
-            return 1;
+            return Err(1);
         }
     };
+    // If we produced a proof artifact for this run, ensure the plan includes
+    // at least one Step item so the base v1 realizer can surface the solution
+    // line deterministically without changing the global default style.
+    if proof_hash_opt.is_some() {
+        planner_hints.flags |= PH_FLAG_PREFER_STEPS;
+        let mut any_step: bool = false;
+        for it in plan.items.iter() {
+            if it.kind == fsa_lm::answer_plan::AnswerPlanItemKindV1::Step {
+                any_step = true;
+                break;
+            }
+        }
+        if !any_step {
+            for it in plan.items.iter_mut() {
+                if it.kind == fsa_lm::answer_plan::AnswerPlanItemKindV1::Bullet {
+                    it.kind = fsa_lm::answer_plan::AnswerPlanItemKindV1::Step;
+                }
+            }
+        }
+    }
+
+
+
+    if !has_proof {
+
+// Logic puzzle sketch + clarify (conversational, deterministic).
+    //
+    // We treat the structured [puzzle] block as optional input. When present and
+    // malformed, we ask a clarifying question without requiring a specific format.
+    // When absent, we attempt a conservative sketch from free text and ask for the
+    // single most useful missing piece.
+
+    let mut puzzle_sketch_opt: Option<fsa_lm::puzzle_sketch_v1::PuzzleSketchV1> = None;
+    let mut puzzle_sketch_used_lexicon: bool = false;
+
+    let mut puzzle_clarify_opt: Option<fsa_lm::puzzle_sketch_v1::PuzzleClarifyV1> = None;
+
+
+    // Pending puzzle continuation (cross-turn).
+    //
+    // If the previous assistant replay produced a pending puzzle sketch, and this
+    // user message looks like a clarification reply, merge the reply into the
+    // prior sketch deterministically and continue the clarify sequence.
+    let mut merged_from_pending: bool = false;
+
+    if let Some(prh) = prior_replay_hash.as_ref() {
+        if !puzzle_parse_failed {
+            if let Ok(Some(rlog)) = fsa_lm::replay_artifact::get_replay_log(&store, prh) {
+                // Find the most recent puzzle sketch step.
+                let mut prev_step_opt: Option<&fsa_lm::replay::ReplayStep> = None;
+                for st in rlog.steps.iter().rev() {
+                    if st.name == STEP_PUZZLE_SKETCH_V1 {
+                        prev_step_opt = Some(st);
+                        break;
+                    }
+                }
+
+                if let Some(st) = prev_step_opt {
+                    if st.outputs.len() == 1 {
+                        let prev_sketch_hash = st.outputs[0];
+                        if let Ok(Some(prev_art)) = fsa_lm::puzzle_sketch_artifact_store::get_puzzle_sketch_artifact_v1(&store, &prev_sketch_hash) {
+                            if (prev_art.flags & fsa_lm::puzzle_sketch_artifact::PSA_FLAG_PENDING) != 0 {
+                                // Treat only short replies as clarifications to avoid pulling a prior
+                                // sketch into an unrelated new question.
+                                if qtext.len() <= 256 {
+                                    let mut reply = fsa_lm::puzzle_sketch_v1::parse_puzzle_clarify_reply_v1(&qtext, 16);
+
+                                    let q_has_ops = qtext.contains("!=")
+                                        || qtext.contains("<=")
+                                        || qtext.contains(">=")
+                                        || qtext.contains("=")
+                                        || qtext.contains("<")
+                                        || qtext.contains(">");
+                                    if q_has_ops {
+                                        reply.has_constraints = true;
+                                    }
+
+                                    let mut provides: bool = false;
+                                    if prev_art.var_names.is_empty() && !reply.var_names.is_empty() {
+                                        provides = true;
+                                    }
+                                    if prev_art.domain_range.is_none() && reply.domain_range.is_some() {
+                                        provides = true;
+                                    }
+                                    if prev_art.shape == fsa_lm::puzzle_sketch_v1::PuzzleShapeHintV1::Unknown && reply.shape.is_some() {
+                                        provides = true;
+                                    }
+                                    if !prev_art.has_constraints && reply.has_constraints {
+                                        provides = true;
+                                    }
+
+                                    if provides {
+                                        let prev_sk = fsa_lm::puzzle_sketch_v1::PuzzleSketchV1 {
+                                            is_logic_puzzle_likely: prev_art.is_logic_puzzle_likely,
+                                            var_names: prev_art.var_names.clone(),
+                                            domain_range: prev_art.domain_range,
+                                            has_constraints: prev_art.has_constraints,
+                                            shape: prev_art.shape,
+                                        };
+
+                                        let merged = fsa_lm::puzzle_sketch_v1::merge_puzzle_sketch_with_reply_v1(&prev_sk, &reply, 16);
+                                        let next_q = fsa_lm::puzzle_sketch_v1::choose_puzzle_clarify_question_v1(&merged);
+
+                                        let used_lex = (prev_art.flags & fsa_lm::puzzle_sketch_artifact::PSA_FLAG_USED_LEXICON) != 0;
+                                        puzzle_sketch_used_lexicon = used_lex;
+
+                                        // Carry forward the lexicon snapshot hash used for the prior sketch step,
+                                        // if it was recorded as an input.
+                                        if st.inputs.len() >= 2 {
+                                            puzzle_sketch_lex_hash_opt = Some(st.inputs[1]);
+                                        }
+
+                                        let src_hash = fsa_lm::puzzle_sketch_artifact::puzzle_sketch_merged_source_hash_v1(&prev_art.source_hash, &qtext);
+                                        let psa = match fsa_lm::puzzle_sketch_artifact::PuzzleSketchArtifactV1::from_sketch(
+                                            prompt_hash,
+                                            query_msg_ix as u32,
+                                            used_lex,
+                                            true,
+                                            next_q.is_some(),
+                                            src_hash,
+                                            &merged,
+                                        ) {
+                                            Ok(x) => x,
+                                            Err(e) => {
+                                                eprintln!("puzzle sketch merge: encode failed: {}", e);
+                                                return Err(1);
+                                            }
+                                        };
+
+                                        let psh = match fsa_lm::puzzle_sketch_artifact_store::put_puzzle_sketch_artifact_v1(&store, &psa) {
+                                            Ok(h) => h,
+                                            Err(e) => {
+                                                eprintln!("puzzle sketch merge: store failed: {}", e);
+                                                return Err(1);
+                                            }
+                                        };
+
+                                        puzzle_sketch_hash_opt = Some(psh);
+                                        puzzle_sketch_opt = Some(merged);
+                                        puzzle_clarify_opt = next_q;
+                                        merged_from_pending = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if !merged_from_pending {
+
+    // If the user supplied a structured puzzle block and it failed to parse, prefer a
+    // bounded clarifying question to repair the intent.
+    if puzzle_parse_failed {
+        planner_hints.flags |= PH_FLAG_PREFER_CLARIFY | PH_FLAG_PREFER_STEPS;
+
+        let qid = derive_id64(b"forecast_question_v1", b"clarify:logic_puzzle:parse_failed");
+        let qtxt = "I could not parse that puzzle description. Could you restate the variables, their possible values, and the constraints? Plain text is fine.";
+        puzzle_clarify_opt = Some(fsa_lm::puzzle_sketch_v1::PuzzleClarifyV1 {
+            question_id: qid,
+            score: 10_000,
+            text: qtxt.to_string(),
+            kind: fsa_lm::puzzle_sketch_v1::PuzzleClarifyKindV1::NeedConstraints,
+        });
+
+        // Build a best-effort sketch so we can persist pending puzzle state.
+        let pscfg = fsa_lm::puzzle_sketch_v1::PuzzleSketchCfgV1::default();
+        let mut lex_for_sketch: Option<Hash32> = lexicon_snapshot_hash;
+        if lex_for_sketch.is_none() {
+            if let Some(ws) = ws_opt.as_ref() {
+                lex_for_sketch = ws.lexicon_snapshot;
+            }
+        }
+
+        let mut view_opt: Option<fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1> = None;
+        let mut cues_opt: Option<fsa_lm::lexicon_neighborhoods::LexiconCueNeighborhoodsV1> = None;
+        if let Some(lh) = lex_for_sketch.as_ref() {
+            match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(&store, lh) {
+                Ok(Some(view)) => {
+                    let ncfg = fsa_lm::lexicon_neighborhoods::LexiconNeighborhoodCfgV1::new();
+                    let cues = fsa_lm::lexicon_neighborhoods::build_lexicon_cue_neighborhoods_v1(&view, &ncfg);
+                    view_opt = Some(view);
+                    cues_opt = Some(cues);
+                    puzzle_sketch_used_lexicon = true;
+                    puzzle_sketch_lex_hash_opt = Some(*lh);
+                }
+                Ok(None) => {}
+                Err(_) => {}
+            }
+        }
+
+        let sk = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(
+            &qtext,
+            view_opt.as_ref(),
+            cues_opt.as_ref(),
+            pscfg,
+        );
+        puzzle_sketch_opt = Some(sk);
+    } else {
+        // Prefer pragmatics flags when present, but allow a lexicon-first free-text sketch
+        // to trigger logic-puzzle clarification even without explicit pragmatics input.
+        let mut is_logic_from_prag: bool = false;
+        if let Some(pf) = pf_opt.as_ref() {
+            let f = pf.flags;
+            is_logic_from_prag = (f & fsa_lm::pragmatics_frame::INTENT_FLAG_IS_LOGIC_PUZZLE) != 0;
+        }
+
+        let pscfg = fsa_lm::puzzle_sketch_v1::PuzzleSketchCfgV1::default();
+        let sk0 = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(&qtext, None, None, pscfg);
+        let mut is_logic = is_logic_from_prag || sk0.is_logic_puzzle_likely;
+
+        if is_logic {
+            // Best-effort lexicon view for lexicon-first sketching.
+            let mut lex_for_sketch: Option<Hash32> = None;
+            if lexicon_snapshot_hash.is_some() {
+                lex_for_sketch = lexicon_snapshot_hash;
+            }
+            if lex_for_sketch.is_none() {
+                if let Some(ws) = ws_opt.as_ref() {
+                    lex_for_sketch = ws.lexicon_snapshot;
+                }
+            }
+
+            let mut view_opt: Option<fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1> = None;
+            let mut cues_opt: Option<fsa_lm::lexicon_neighborhoods::LexiconCueNeighborhoodsV1> = None;
+
+            if let Some(lh) = lex_for_sketch.as_ref() {
+                match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(&store, lh) {
+                    Ok(Some(view)) => {
+                        let ncfg = fsa_lm::lexicon_neighborhoods::LexiconNeighborhoodCfgV1::new();
+                        let cues = fsa_lm::lexicon_neighborhoods::build_lexicon_cue_neighborhoods_v1(&view, &ncfg);
+                        view_opt = Some(view);
+                        cues_opt = Some(cues);
+                    }
+                    Ok(None) => {
+                        // No lexicon; keep fallback sketch.
+                    }
+                    Err(_) => {
+                        // Keep fallback sketch on lexicon load errors.
+                    }
+                }
+            }
+
+            let sk = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(
+                &qtext,
+                view_opt.as_ref(),
+                cues_opt.as_ref(),
+                pscfg,
+            );
+            // Use the refined sketch to determine whether we still treat this as a puzzle.
+            is_logic = is_logic_from_prag || sk.is_logic_puzzle_likely;
+            if is_logic {
+                puzzle_clarify_opt = fsa_lm::puzzle_sketch_v1::choose_puzzle_clarify_question_v1(&sk);
+                puzzle_sketch_opt = Some(sk);
+                if view_opt.is_some() {
+                    puzzle_sketch_used_lexicon = true;
+                    if let Some(lh) = lex_for_sketch.as_ref() {
+                        puzzle_sketch_lex_hash_opt = Some(*lh);
+                    }
+                }
+            }
+        }
+    }
+
+    }
+
+    // If the prompt looks like it contains constraint operators, but we could not
+    // compile a parseable constraint set, ask for a constraint restatement.
+    //
+    // This avoids a "no clarify" outcome when the user provided constraints in a
+    // format the v1 solver does not support.
+    if puzzle_clarify_opt.is_none() && puzzle_constraints_parse_failed {
+        let qid = derive_id64(b"forecast_question_v1", b"clarify:logic_puzzle:constraints_parse_failed");
+        let qtxt = "I could not parse the constraints. Could you provide each constraint on its own line using forms like A != B, A < B, all_different: A,B,C, or if A = 1 then B != 2? Plain text is fine.";
+        puzzle_clarify_opt = Some(fsa_lm::puzzle_sketch_v1::PuzzleClarifyV1 {
+            question_id: qid,
+            score: 10_000,
+            text: qtxt.to_string(),
+            kind: fsa_lm::puzzle_sketch_v1::PuzzleClarifyKindV1::NeedConstraints,
+        });
+    }
+
+    if let Some(pq) = puzzle_clarify_opt.as_ref() {
+        planner_hints.flags |= PH_FLAG_PREFER_CLARIFY | PH_FLAG_PREFER_STEPS;
+
+        if puzzle_sketch_hash_opt.is_none() {
+        // Persist a pending puzzle sketch for cross-turn continuation.
+        if puzzle_sketch_opt.is_none() {
+            let pscfg = fsa_lm::puzzle_sketch_v1::PuzzleSketchCfgV1::default();
+            let sk = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(&qtext, None, None, pscfg);
+            puzzle_sketch_opt = Some(sk);
+        }
+        let src_hash = fsa_lm::puzzle_sketch_artifact::puzzle_sketch_source_hash_v1(&qtext);
+        let psa = match fsa_lm::puzzle_sketch_artifact::PuzzleSketchArtifactV1::from_sketch(
+            prompt_hash,
+            query_msg_ix as u32,
+            puzzle_sketch_used_lexicon,
+            false,
+            true,
+            src_hash,
+            puzzle_sketch_opt.as_ref().expect("puzzle_sketch"),
+        ) {
+            Ok(x) => x,
+            Err(e) => {
+                eprintln!("puzzle sketch: encode failed: {}", e);
+                return Err(1);
+            }
+        };
+        let psh = match fsa_lm::puzzle_sketch_artifact_store::put_puzzle_sketch_artifact_v1(&store, &psa) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("puzzle sketch: store failed: {}", e);
+                return Err(1);
+            }
+        };
+        puzzle_sketch_hash_opt = Some(psh);
+        }
+
+        // Ensure the clarifying-question append can emit one question even when
+        // no pragmatics-derived directives are present.
+        if let Some(ref mut d) = directives_opt {
+            if d.max_questions == 0 {
+                d.max_questions = 1;
+            }
+        } else {
+            directives_opt = Some(RealizerDirectivesV1 {
+                version: REALIZER_DIRECTIVES_V1_VERSION,
+                tone: ToneV1::Neutral,
+                style: StyleV1::Checklist,
+                format_flags: 0,
+                max_softeners: 0,
+                max_preface_sentences: 0,
+                max_hedges: 0,
+                max_questions: 1,
+                rationale_codes: Vec::new(),
+            });
+        }
+
+        // Re-store directives if we had to synthesize or adjust them above.
+        if let Some(d) = directives_opt.as_ref() {
+            match put_realizer_directives_v1(&store, d) {
+                Ok(h) => {
+                    directives_hash_opt = Some(h);
+                }
+                Err(e) => {
+                    eprintln!("store directives failed: {}", e);
+                    return Err(1);
+                }
+            }
+        }
+
+        forecast.questions.retain(|q| q.question_id != pq.question_id);
+        forecast.questions.push(ForecastQuestionV1 {
+            question_id: pq.question_id,
+            score: pq.score as i64,
+            text: pq.text.clone(),
+            rationale_code: 0,
+        });
+        forecast.questions.sort_by(|a, b| match b.score.cmp(&a.score) {
+            core::cmp::Ordering::Equal => a.question_id.0.cmp(&b.question_id.0),
+            o => o,
+        });
+        if forecast.questions.len() > FORECAST_V1_MAX_QUESTIONS {
+            forecast.questions.truncate(FORECAST_V1_MAX_QUESTIONS);
+        }
+
+        let iid = derive_id64(b"forecast_intent_v1", b"clarify:logic_puzzle");
+        forecast.intents.retain(|it| !(it.kind == ForecastIntentKindV1::Clarify && it.intent_id == iid));
+        forecast.intents.push(ForecastIntentV1::new(
+            ForecastIntentKindV1::Clarify,
+            iid,
+            10_000,
+            0,
+        ));
+        forecast.intents.sort_by(|a, b| match b.score.cmp(&a.score) {
+            core::cmp::Ordering::Equal => match (a.kind as u8).cmp(&(b.kind as u8)) {
+                core::cmp::Ordering::Equal => a.intent_id.0.cmp(&b.intent_id.0),
+                o => o,
+            },
+            o => o,
+        });
+        if forecast.intents.len() > FORECAST_V1_MAX_INTENTS {
+            forecast.intents.truncate(FORECAST_V1_MAX_INTENTS);
+        }
+    }
+
+    }
 
     let planner_hints_hash = match put_planner_hints_v1(&store, &planner_hints) {
         Ok(h) => h,
         Err(e) => {
             eprintln!("store planner hints failed: {}", e);
-            return 1;
+            return Err(1);
         }
     };
 
@@ -6627,7 +9424,7 @@ fn cmd_answer(args: &[String]) -> i32 {
         Ok(h) => h,
         Err(e) => {
             eprintln!("store forecast failed: {}", e);
-            return 1;
+            return Err(1);
         }
     };
 
@@ -6644,7 +9441,7 @@ fn cmd_answer(args: &[String]) -> i32 {
         Ok(x) => x,
         Err(e) => {
             eprintln!("realize failed: {}", e);
-            return 1;
+            return Err(1);
         }
     };
 
@@ -6656,7 +9453,7 @@ fn cmd_answer(args: &[String]) -> i32 {
         Ok(h) => h,
         Err(e) => {
             eprintln!("store error: {}", e);
-            return 1;
+            return Err(1);
         }
     };
 
@@ -6673,8 +9470,13 @@ fn cmd_answer(args: &[String]) -> i32 {
     //
     // For the opener preface line, use the realizer-reported surface-choice
     // event as the source of truth (no re-parsing of rendered text).
-    let mt_tokens: Vec<MarkovTokenV1> =
-        build_markov_trace_tokens_v1(&plan, opener_preface_choice, did_append_q);
+    let mt_tokens: Vec<MarkovTokenV1> = build_markov_trace_tokens_v1(
+        &plan,
+        opener_preface_choice,
+        did_append_q,
+    );
+    let mt_tokens_ret: Vec<MarkovTokenV1> = mt_tokens.clone();
+
 
     let trace = MarkovTraceV1 {
         version: MARKOV_TRACE_V1_VERSION,
@@ -6686,9 +9488,10 @@ fn cmd_answer(args: &[String]) -> i32 {
         Ok(h) => h,
         Err(e) => {
             eprintln!("store markov trace failed: {}", e);
-            return 1;
+            return Err(1);
         }
     };
+
 
     //: Build a minimal EvidenceSetV1 that binds the full answer text
     // to the rendered evidence rows (bounded by the realizer limit).
@@ -6736,7 +9539,7 @@ fn cmd_answer(args: &[String]) -> i32 {
     if verify_trace == 1 {
         if let Err(e) = verify_evidence_set_v1(&store, &set) {
             eprintln!("verify-trace failed: {}", e);
-            return 3;
+            return Err(3);
         }
     }
 
@@ -6744,7 +9547,7 @@ fn cmd_answer(args: &[String]) -> i32 {
         Ok(h) => h,
         Err(e) => {
             eprintln!("store error: {}", e);
-            return 1;
+            return Err(1);
         }
     };
 
@@ -6761,6 +9564,30 @@ fn cmd_answer(args: &[String]) -> i32 {
             inputs: dins,
             outputs: vec![dh],
         });
+    }
+
+    if let Some(ch) = context_anchors_hash_opt {
+        let mut ins: Vec<Hash32> = Vec::new();
+        ins.push(prompt_hash);
+        if let Some(lh) = context_anchors_lex_hash_opt.as_ref() {
+            ins.push(*lh);
+        }
+        log.steps.push(step_from_slices(STEP_CONTEXT_ANCHORS_V1, &ins, &[ch]));
+    }
+
+    if let Some(sh) = puzzle_sketch_hash_opt {
+        let mut ins: Vec<Hash32> = Vec::new();
+        ins.push(prompt_hash);
+        if let Some(lh) = puzzle_sketch_lex_hash_opt.as_ref() {
+            ins.push(*lh);
+        }
+        log.steps.push(step_from_slices(STEP_PUZZLE_SKETCH_V1, &ins, &[sh]));
+    }
+
+    if let Some(ph) = proof_hash_opt.as_ref() {
+        let ph = *ph;
+        let ins: [Hash32; 1] = [prompt_hash];
+        log.steps.push(step_from_slices(STEP_PROOF_ARTIFACT_V1, &ins, &[ph]));
     }
 
     //: record MarkovHintsV1 derivation when enabled.
@@ -6783,8 +9610,7 @@ fn cmd_answer(args: &[String]) -> i32 {
             mh_inputs.push(dh);
         }
         mh_inputs.push(model_hash);
-        log.steps
-            .push(step_from_slices(STEP_MARKOV_HINTS_V1, &mh_inputs, &[hh]));
+        log.steps.push(step_from_slices(STEP_MARKOV_HINTS_V1, &mh_inputs, &[hh]));
     }
 
     //: Record planner guidance artifacts in stable steps.
@@ -6796,22 +9622,14 @@ fn cmd_answer(args: &[String]) -> i32 {
         ph_inputs.push(*h);
     }
     ph_inputs.push(ev_hash);
-    log.steps.push(step_from_slices(
-        STEP_PLANNER_HINTS_V1,
-        &ph_inputs,
-        &[planner_hints_hash],
-    ));
+    log.steps.push(step_from_slices(STEP_PLANNER_HINTS_V1, &ph_inputs, &[planner_hints_hash]));
 
     let mut fc_inputs: Vec<Hash32> = Vec::new();
     for h in control.pragmatics_frame_ids.iter() {
         fc_inputs.push(*h);
     }
     fc_inputs.push(planner_hints_hash);
-    log.steps.push(step_from_slices(
-        STEP_FORECAST_V1,
-        &fc_inputs,
-        &[forecast_hash],
-    ));
+    log.steps.push(step_from_slices(STEP_FORECAST_V1, &fc_inputs, &[forecast_hash]));
 
     let mut ins: Vec<Hash32> = Vec::new();
     ins.push(prompt_hash);
@@ -6828,6 +9646,10 @@ fn cmd_answer(args: &[String]) -> i32 {
         ins.push(*h);
     }
     ins.push(ev_hash);
+
+    if let Some(ch) = context_anchors_hash_opt {
+        ins.push(ch);
+    }
 
     // Include guidance hashes so the answer step input set captures the full
     // deterministic dependencies of the planning path.
@@ -6850,16 +9672,33 @@ fn cmd_answer(args: &[String]) -> i32 {
         outputs: vec![answer_hash, set_hash],
     });
 
-    log.steps.push(step_from_slices(
-        STEP_MARKOV_TRACE_V1,
-        &mt_inputs,
-        &[markov_trace_hash],
-    ));
+    log.steps.push(step_from_slices(STEP_MARKOV_TRACE_V1, &mt_inputs, &[markov_trace_hash]));
 
-    if let Err(e) = put_replay_log(&store, &log) {
-        eprintln!("store error: {}", e);
-        return 1;
+    let replay_hash = match put_replay_log(&store, &log) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("store error: {}", e);
+            return Err(1);
+        }
+    };
+
+    Ok((text, out_file, mt_tokens_ret, replay_hash))
+}
+
+
+fn answer_run_text(args: &[String]) -> Result<(String, Option<PathBuf>), i32> {
+    match answer_run_text_inner(args, &[]) {
+        Ok((t, of, _mt, _rh)) => Ok((t, of)),
+        Err(code) => Err(code),
     }
+}
+
+
+fn cmd_answer(args: &[String]) -> i32 {
+    let (text, out_file) = match answer_run_text(args) {
+        Ok(x) => x,
+        Err(code) => return code,
+    };
 
     if let Some(path) = out_file {
         if let Err(e) = fs::write(&path, text.as_bytes()) {
@@ -6875,6 +9714,8 @@ fn cmd_answer(args: &[String]) -> i32 {
 
     0
 }
+
+
 
 fn cmd_build_markov_model(args: &[String]) -> i32 {
     let mut out_file: Option<String> = None;
@@ -7050,11 +9891,7 @@ fn cmd_build_markov_model(args: &[String]) -> i32 {
         return 2;
     }
 
-    let cfg = MarkovTrainCfgV1 {
-        order_n_max,
-        max_next_per_state,
-        max_states,
-    };
+    let cfg = MarkovTrainCfgV1 { order_n_max, max_next_per_state, max_states };
     if let Err(e) = cfg.validate() {
         eprintln!("build-markov-model: invalid cfg: {}", e);
         return 2;
@@ -7095,10 +9932,8 @@ fn cmd_build_markov_model(args: &[String]) -> i32 {
         trace_hashes.truncate(max_traces as usize);
     }
 
-    let replay_summary =
-        fsa_lm::scale_report::HashListSummaryV1::from_list("markov_replays_v1", &replay_hashes);
-    let trace_summary =
-        fsa_lm::scale_report::HashListSummaryV1::from_list("markov_traces_v1", &trace_hashes);
+    let replay_summary = fsa_lm::scale_report::HashListSummaryV1::from_list("markov_replays_v1", &replay_hashes);
+    let trace_summary = fsa_lm::scale_report::HashListSummaryV1::from_list("markov_traces_v1", &trace_hashes);
 
     let corpus_hash = match markov_corpus_hash_v1(&cfg, &trace_hashes) {
         Ok(h) => h,
@@ -7183,6 +10018,7 @@ fn cmd_build_markov_model(args: &[String]) -> i32 {
 
     0
 }
+
 
 fn cmd_inspect_markov_model(args: &[String]) -> i32 {
     use fsa_lm::markov_model_artifact::get_markov_model_v1;
@@ -7384,11 +10220,7 @@ fn cmd_inspect_markov_model(args: &[String]) -> i32 {
             let (out_sum, idx) = sums[rank];
             let st = &model.states[idx];
             let ctx = fmt_ctx(&st.context);
-            let next_s = if nn > 0 {
-                fmt_next(&st.next, nn)
-            } else {
-                "[]".to_string()
-            };
+            let next_s = if nn > 0 { fmt_next(&st.next, nn) } else { "[]".to_string() };
             out.push_str(&format!(
                 "markov_model_state_v1 rank={} idx={} ctx_len={} out={} ctx={} next={}\n",
                 rank,
@@ -7699,6 +10531,7 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
         query_tokens as u16
     };
 
+
     let wcfg = WorkloadCfgV1 {
         version: WORKLOAD_GEN_V1_VERSION,
         seed,
@@ -7710,6 +10543,7 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
         query_tokens: query_tokens_u16,
         include_tie_pair: tie_pair,
     };
+
 
     let cfg = ScaleDemoCfgV1 {
         version: SCALE_DEMO_V1_VERSION,
@@ -7802,15 +10636,8 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
     let evidence_report_opt = if evidence == 0 {
         None
     } else {
-        let ix = index_report_opt
-            .as_ref()
-            .expect("validated --evidence requires index");
-        match run_scale_demo_build_evidence_bundles_v1(
-            &store,
-            cfg,
-            &ix.index_snapshot_hash,
-            &ix.index_sig_map_hash,
-        ) {
+        let ix = index_report_opt.as_ref().expect("validated --evidence requires index");
+        match run_scale_demo_build_evidence_bundles_v1(&store, cfg, &ix.index_snapshot_hash, &ix.index_sig_map_hash) {
             Ok(r) => Some(r),
             Err(e) => {
                 eprintln!("scale-demo evidence: {e}");
@@ -7822,9 +10649,7 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
     let answers_report_opt = if answer == 0 {
         None
     } else {
-        let ev = evidence_report_opt
-            .as_ref()
-            .expect("validated --answer requires evidence");
+        let ev = evidence_report_opt.as_ref().expect("validated --answer requires evidence");
         match run_scale_demo_build_answers_v1(&store, ev) {
             Ok(r) => Some(r),
             Err(e) => {
@@ -7833,6 +10658,7 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
             }
         }
     };
+
 
     let scale_rep = match build_scale_demo_scale_report_v1(
         &report,
@@ -7882,6 +10708,7 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
         out.push_str(&ar.to_string());
         out.push('\n');
     }
+
 
     out.push_str("scale_demo_scale_report_v3 ");
     out.push_str("report=");
@@ -8082,7 +10909,8 @@ fn cmd_golden_pack_turn_pairs(args: &[String]) -> i32 {
     };
 
     let cfg = fsa_lm::golden_pack_turn_pairs_run::GoldenPackTurnPairsRunCfgV1::default_tiny_v1();
-    let out = match fsa_lm::golden_pack_turn_pairs_run::run_golden_pack_turn_pairs_v1(&store, cfg) {
+    let out = match fsa_lm::golden_pack_turn_pairs_run::run_golden_pack_turn_pairs_v1(&store, cfg)
+    {
         Ok(o) => o,
         Err(e) => {
             eprintln!("golden pack turn-pairs failed: {}", e);
@@ -8092,8 +10920,8 @@ fn cmd_golden_pack_turn_pairs(args: &[String]) -> i32 {
 
     let line = fsa_lm::golden_pack_turn_pairs_run::format_golden_pack_turn_pairs_run_line(&out);
 
-    let expect =
-        expect_hex.or_else(|| std::env::var("FSA_LM_GOLDEN_PACK_TURN_PAIRS_V1_REPORT_HEX").ok());
+    let expect = expect_hex
+        .or_else(|| std::env::var("FSA_LM_GOLDEN_PACK_TURN_PAIRS_V1_REPORT_HEX").ok());
     if let Some(hex) = expect {
         match parse_hash32_hex(&hex) {
             Ok(h) => {
@@ -8163,21 +10991,20 @@ fn cmd_golden_pack_conversation(args: &[String]) -> i32 {
         }
     };
 
-    let cfg =
-        fsa_lm::golden_pack_conversation_run::GoldenPackConversationRunCfgV1::default_tiny_v1();
-    let out =
-        match fsa_lm::golden_pack_conversation_run::run_golden_pack_conversation_v1(&store, cfg) {
-            Ok(o) => o,
-            Err(e) => {
-                eprintln!("golden pack conversation failed: {}", e);
-                return 2;
-            }
-        };
+    let cfg = fsa_lm::golden_pack_conversation_run::GoldenPackConversationRunCfgV1::default_tiny_v1();
+    let out = match fsa_lm::golden_pack_conversation_run::run_golden_pack_conversation_v1(&store, cfg)
+    {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("golden pack conversation failed: {}", e);
+            return 2;
+        }
+    };
 
     let line = fsa_lm::golden_pack_conversation_run::format_golden_pack_conversation_run_line(&out);
 
-    let expect =
-        expect_hex.or_else(|| std::env::var("FSA_LM_GOLDEN_PACK_CONVERSATION_V1_REPORT_HEX").ok());
+    let expect = expect_hex
+        .or_else(|| std::env::var("FSA_LM_GOLDEN_PACK_CONVERSATION_V1_REPORT_HEX").ok());
     if let Some(hex) = expect {
         match parse_hash32_hex(&hex) {
             Ok(h) => {
@@ -8325,26 +11152,19 @@ fn handle_client(mut stream: TcpStream, root: PathBuf) -> io::Result<()> {
 
         match req {
             net::Request::Put(bytes) => {
-                let h = store
-                    .put(&bytes)
-                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "put failed"))?;
-                let resp = net::encode_put_resp(&h)
-                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
+                let h = store.put(&bytes).map_err(|_| io::Error::new(io::ErrorKind::Other, "put failed"))?;
+                let resp = net::encode_put_resp(&h).map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
                 net::write_frame(&mut stream, &resp)?;
             }
             net::Request::Get(hash) => {
-                let got = store
-                    .get(&hash)
-                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "get failed"))?;
+                let got = store.get(&hash).map_err(|_| io::Error::new(io::ErrorKind::Other, "get failed"))?;
                 match got {
                     Some(bytes) => {
-                        let resp = net::encode_get_resp(true, &bytes)
-                            .map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
+                        let resp = net::encode_get_resp(true, &bytes).map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
                         net::write_frame(&mut stream, &resp)?;
                     }
                     None => {
-                        let resp = net::encode_get_resp(false, &[])
-                            .map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
+                        let resp = net::encode_get_resp(false, &[]).map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
                         net::write_frame(&mut stream, &resp)?;
                     }
                 }
@@ -8588,8 +11408,7 @@ fn cmd_send_get(args: &[String]) -> i32 {
 }
 
 fn bytes_from_kb(v: u32) -> Result<u32, String> {
-    v.checked_mul(1024)
-        .ok_or_else(|| "kb too large".to_string())
+    v.checked_mul(1024).ok_or_else(|| "kb too large".to_string())
 }
 
 fn bytes_from_mb(v: u32) -> Result<u32, String> {
@@ -8706,6 +11525,176 @@ fn cmd_serve_sync(args: &[String]) -> i32 {
             1
         }
     }
+}
+
+fn cmd_sync_lexicon(args: &[String]) -> i32 {
+    let mut root = default_root();
+    let mut addr: Option<String> = None;
+    let mut snapshot_hex: Option<String> = None;
+    let mut out_file: Option<String> = None;
+    let mut max_chunk_kb: Option<u32> = None;
+    let mut max_artifact_mb: Option<u32> = None;
+    let mut rw_timeout_ms: Option<u32> = None;
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --root value");
+                    return 2;
+                }
+                root = PathBuf::from(&args[i]);
+            }
+            "--addr" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --addr value");
+                    return 2;
+                }
+                addr = Some(args[i].clone());
+            }
+            "--lexicon-snapshot" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --lexicon-snapshot value");
+                    return 2;
+                }
+                snapshot_hex = Some(args[i].clone());
+            }
+            "--out-file" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --out-file value");
+                    return 2;
+                }
+                out_file = Some(args[i].clone());
+            }
+            "--max_chunk_kb" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --max_chunk_kb value");
+                    return 2;
+                }
+                match parse_u32(&args[i]) {
+                    Ok(v) => max_chunk_kb = Some(v),
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                }
+            }
+            "--max_artifact_mb" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --max_artifact_mb value");
+                    return 2;
+                }
+                match parse_u32(&args[i]) {
+                    Ok(v) => max_artifact_mb = Some(v),
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                }
+            }
+            "--rw_timeout_ms" => {
+                i += 1;
+                if i >= args.len() {
+                    eprintln!("missing --rw_timeout_ms value");
+                    return 2;
+                }
+                match parse_u32(&args[i]) {
+                    Ok(v) => rw_timeout_ms = Some(v),
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return 2;
+                    }
+                }
+            }
+            _ => {
+                eprintln!("unknown arg: {}", args[i]);
+                return 2;
+            }
+        }
+        i += 1;
+    }
+
+    let addr = match addr {
+        Some(a) => a,
+        None => {
+            eprintln!("missing --addr");
+            return 2;
+        }
+    };
+    let snapshot_hex = match snapshot_hex {
+        Some(h) => h,
+        None => {
+            eprintln!("missing --lexicon-snapshot");
+            return 2;
+        }
+    };
+    let snapshot_h = match parse_hash32_hex(&snapshot_hex) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("{}", e);
+            return 2;
+        }
+    };
+
+    let store = match FsArtifactStore::new(&root) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("open store failed: {}", e);
+            return 1;
+        }
+    };
+
+    let mut cfg = SyncClientCfgV1::default();
+    if let Some(kb) = max_chunk_kb {
+        match bytes_from_kb(kb) {
+            Ok(b) => cfg.max_chunk_bytes = b,
+            Err(e) => {
+                eprintln!("{}", e);
+                return 2;
+            }
+        }
+    }
+    if let Some(mb) = max_artifact_mb {
+        match bytes_from_mb(mb) {
+            Ok(b) => cfg.max_artifact_bytes = b,
+            Err(e) => {
+                eprintln!("{}", e);
+                return 2;
+            }
+        }
+    }
+    if let Some(ms) = rw_timeout_ms {
+        cfg.rw_timeout_ms = ms;
+    }
+
+    let stats = match sync_lexicon_v1(&store, &addr, &snapshot_h, &cfg) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("sync-lexicon failed: {}", e);
+            return 1;
+        }
+    };
+
+    let line = format!(
+        "sync_lexicon_stats needed_total={} already_present={} fetched={} bytes_fetched={}
+",
+        stats.needed_total, stats.already_present, stats.fetched, stats.bytes_fetched
+    );
+    print!("{}", line);
+    if let Some(p) = out_file {
+        if let Err(e) = fs::write(&p, line.as_bytes()) {
+            eprintln!("write out-file failed: {}", e);
+            return 1;
+        }
+    }
+    0
 }
 
 fn cmd_sync_reduce(args: &[String]) -> i32 {
@@ -9167,6 +12156,10 @@ fn main() {
         "hash" => cmd_hash(rest),
         "put" => cmd_put(rest),
         "get" => cmd_get(rest),
+        "show-workspace" => cmd_show_workspace(rest),
+        "show-conversation" => cmd_show_conversation(rest),
+        "ask" => cmd_ask(rest),
+        "chat" => cmd_chat(rest),
         "prompt" => cmd_prompt(rest),
         "replay-decode" => cmd_replay_decode(rest),
         "serve" => cmd_serve(rest),
@@ -9174,19 +12167,23 @@ fn main() {
         "send-put" => cmd_send_put(rest),
         "send-get" => cmd_send_get(rest),
         "sync-reduce" => cmd_sync_reduce(rest),
+        "sync-lexicon" => cmd_sync_lexicon(rest),
         "sync-reduce-batch" => cmd_sync_reduce_batch(rest),
-        "replay-new" => cmd_replay_new(rest),
+                "replay-new" => cmd_replay_new(rest),
         "frame-seg-demo" => cmd_frame_seg_demo(rest),
         "frame-seg-show" => cmd_frame_seg_show(rest),
         "ingest-wiki" => cmd_ingest_wiki(rest),
         "ingest-wiki-xml" => cmd_ingest_wiki_xml(rest),
         "ingest-wiki-sharded" => cmd_ingest_wiki_sharded(rest),
         "ingest-wiki-xml-sharded" => cmd_ingest_wiki_xml_sharded(rest),
+        "load-wikipedia" => cmd_load_wikipedia(rest),
+        "load-wiktionary" => cmd_load_wiktionary(rest),
         "build-index" => cmd_build_index(rest),
         "build-index-sharded" => cmd_build_index_sharded(rest),
         "reduce-index" => cmd_reduce_index(rest),
-        "run-phase6" => cmd_run_phase6(rest),
+        "run-workflow" => cmd_run_workflow(rest),
         "export-debug-bundle" => cmd_export_debug_bundle(rest),
+        "ingest-wiktionary-xml" => cmd_ingest_wiktionary_xml(rest),
         "build-lexicon-snapshot" => cmd_build_lexicon_snapshot(rest),
         "validate-lexicon-snapshot" => cmd_validate_lexicon_snapshot(rest),
         "compact-index" => cmd_compact_index(rest),
@@ -9201,7 +12198,7 @@ fn main() {
         "golden-pack-turn-pairs" => cmd_golden_pack_turn_pairs(rest),
         "golden-pack-conversation" => cmd_golden_pack_conversation(rest),
         "replay-add-prompt" => cmd_replay_add_prompt(rest),
-        _ => {
+_ => {
             eprintln!("unknown cmd: {}\n\n{}", cmd, usage());
             2
         }

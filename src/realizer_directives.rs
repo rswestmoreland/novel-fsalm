@@ -13,13 +13,20 @@
 //! is contract-only:
 //! - defines enums, flags, and limits
 //! - defines canonical byte codec + validation
-//! - no integration into planner/realizer yet
+//! - integration is performed in quality_gate_v1
 
 use crate::codec::{ByteReader, ByteWriter, DecodeError, EncodeError};
 
 use crate::pragmatics_frame::{
-    PragmaticsFrameV1, RhetoricModeV1, INTENT_FLAG_HAS_CODE, INTENT_FLAG_HAS_CONSTRAINTS,
-    INTENT_FLAG_HAS_MATH, INTENT_FLAG_HAS_QUESTION, INTENT_FLAG_HAS_REQUEST,
+    PragmaticsFrameV1,
+    RhetoricModeV1,
+    INTENT_FLAG_HAS_CODE,
+    INTENT_FLAG_HAS_CONSTRAINTS,
+    INTENT_FLAG_HAS_MATH,
+    INTENT_FLAG_HAS_QUESTION,
+    INTENT_FLAG_HAS_REQUEST,
+    INTENT_FLAG_IS_LOGIC_PUZZLE,
+    INTENT_FLAG_IS_PROBLEM_SOLVE,
     INTENT_FLAG_SAFETY_SENSITIVE,
 };
 
@@ -179,15 +186,11 @@ impl core::fmt::Display for RealizerDirectivesError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             RealizerDirectivesError::BadVersion => f.write_str("bad realizer directives version"),
-            RealizerDirectivesError::UnknownFormatFlags => {
-                f.write_str("unknown realizer directives format flags")
-            }
+            RealizerDirectivesError::UnknownFormatFlags => f.write_str("unknown realizer directives format flags"),
             RealizerDirectivesError::TooManyRationaleCodes => {
                 f.write_str("too many realizer directives rationale codes")
             }
-            RealizerDirectivesError::RationaleNotCanonical => {
-                f.write_str("rationale codes not canonical")
-            }
+            RealizerDirectivesError::RationaleNotCanonical => f.write_str("rationale codes not canonical"),
         }
     }
 }
@@ -323,6 +326,8 @@ pub fn derive_realizer_directives_v1(p: &PragmaticsFrameV1) -> RealizerDirective
     let has_constraints = (p.flags & INTENT_FLAG_HAS_CONSTRAINTS) != 0;
     let has_request = (p.flags & INTENT_FLAG_HAS_REQUEST) != 0;
     let has_question = (p.flags & INTENT_FLAG_HAS_QUESTION) != 0 || p.questions != 0;
+    let is_problem_solve = (p.flags & INTENT_FLAG_IS_PROBLEM_SOLVE) != 0;
+    let is_logic_puzzle = (p.flags & INTENT_FLAG_IS_LOGIC_PUZZLE) != 0;
     let safety_sensitive = (p.flags & INTENT_FLAG_SAFETY_SENSITIVE) != 0;
 
     let mut rationale: Vec<u16> = Vec::new();
@@ -391,7 +396,7 @@ pub fn derive_realizer_directives_v1(p: &PragmaticsFrameV1) -> RealizerDirective
     if p.byte_len >= 300 {
         format_flags |= FORMAT_FLAG_INCLUDE_SUMMARY;
     }
-    if has_request || p.mode == RhetoricModeV1::Command {
+    if has_request || p.mode == RhetoricModeV1::Command || is_problem_solve || is_logic_puzzle {
         format_flags |= FORMAT_FLAG_INCLUDE_NEXT_STEPS;
     }
     if safety_sensitive {
@@ -419,7 +424,7 @@ pub fn derive_realizer_directives_v1(p: &PragmaticsFrameV1) -> RealizerDirective
     }
 
     // Limits.
-    let allow_questions = has_question && !has_constraints;
+    let allow_questions = (has_question && !has_constraints) || is_problem_solve || is_logic_puzzle;
 
     let (max_softeners, max_preface_sentences, max_hedges, max_questions) = match tone {
         ToneV1::Neutral => (1u8, 0u8, 2u8, if allow_questions { 1u8 } else { 0u8 }),

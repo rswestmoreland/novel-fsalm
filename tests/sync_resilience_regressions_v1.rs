@@ -32,7 +32,11 @@ fn pick_free_local_port() -> u16 {
 
 fn run_cmd(bin: &str, args: &[&str]) -> (i32, Vec<u8>, Vec<u8>) {
     let out = Command::new(bin).args(args).output().unwrap();
-    (out.status.code().unwrap_or(-1), out.stdout, out.stderr)
+    (
+        out.status.code().unwrap_or(-1),
+        out.stdout,
+        out.stderr,
+    )
 }
 
 fn spawn_serve_sync(bin: &str, root: &str, addr: &str) -> (Child, String) {
@@ -252,7 +256,8 @@ fn sync_reduce_cli_reports_disconnected_on_mid_stream_drop() {
             net::write_frame(&mut stream, &ack_payload).unwrap();
 
             // Expect GET for reduce manifest.
-            let get_payload = net::read_frame(&mut stream, p::DEFAULT_MAX_REQ_FRAME_BYTES).unwrap();
+            let get_payload =
+                net::read_frame(&mut stream, p::DEFAULT_MAX_REQ_FRAME_BYTES).unwrap();
             let get = p::decode_get_req_v1(&get_payload).unwrap();
             assert_eq!(get.hash, expected);
 

@@ -7,7 +7,7 @@ See also:
 - docs/OPERATOR_WORKFLOW.md (operator workflow: shard -> reduce -> replicate -> query/answer)
 - docs/SHARDED_REDUCE_V1.md (reduce-index produces ReduceManifestV1)
 - docs/SHARDED_INGEST_V1.md (sharded ingest prerequisites)
-- docs/CLI.md (serve-sync, sync-reduce, sync-reduce-batch, run-phase6)
+- docs/CLI.md (serve-sync, sync-reduce, sync-reduce-batch, run-workflow)
 
 Scope
 

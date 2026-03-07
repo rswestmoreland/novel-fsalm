@@ -56,32 +56,20 @@ fn run_scale_demo_pack(root_name: &str) -> String {
         .output()
         .unwrap();
 
-    assert!(
-        out.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
 
     let stdout = String::from_utf8_lossy(&out.stdout);
     let lines: Vec<&str> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
     assert_eq!(lines.len(), 7, "stdout: {}", stdout);
 
     let last = lines[6];
-    assert!(
-        last.starts_with("scale_demo_scale_report_v3 "),
-        "line6: {}",
-        last
-    );
+    assert!(last.starts_with("scale_demo_scale_report_v3 "), "line6: {}", last);
 
     // Ensure the list summary fields are present when prompts/evidence/answer are enabled.
     assert!(last.contains(" prompts_list_hash="), "line6: {}", last);
     assert!(last.contains(" evidence_list_hash="), "line6: {}", last);
     assert!(last.contains(" answers_list_hash="), "line6: {}", last);
-    assert!(
-        last.contains(" planner_hints_list_hash="),
-        "line6: {}",
-        last
-    );
+    assert!(last.contains(" planner_hints_list_hash="), "line6: {}", last);
     assert!(last.contains(" forecasts_list_hash="), "line6: {}", last);
 
     last.to_string()

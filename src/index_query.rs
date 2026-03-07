@@ -22,15 +22,15 @@ use crate::artifact::{ArtifactResult, ArtifactStore};
 use crate::codec::DecodeError;
 use crate::frame::TermId;
 use crate::hash::Hash32;
-use crate::index_pack::IndexPackV1;
 use crate::index_segment::{IndexSegmentV1, PostingV1};
-use crate::index_sig_map::IndexSigMapV1;
+use crate::index_pack::IndexPackV1;
 use crate::index_snapshot::IndexSnapshotV1;
-use crate::metaphone::{meta_freqs_from_text, MetaphoneCfg};
-use crate::retrieval_control::RetrievalControlV1;
-use crate::retrieval_gating::{should_decode_index_artifact_any, GateStatsV1};
+use crate::index_sig_map::IndexSigMapV1;
 use crate::segment_sig::SegmentSigV1;
+use crate::retrieval_gating::{GateStatsV1, should_decode_index_artifact_any};
+use crate::metaphone::{meta_freqs_from_text, MetaphoneCfg};
 use crate::tokenizer::{term_freqs_from_text, TokenizerCfg};
+use crate::retrieval_control::RetrievalControlV1;
 
 /// Default scaling shift for IDF-like ratios.
 ///
@@ -83,14 +83,9 @@ impl QueryTermsCfg {
     /// Construct a conservative default config.
     pub fn new() -> QueryTermsCfg {
         QueryTermsCfg {
-            tok_cfg: TokenizerCfg {
-                max_token_bytes: 32,
-            },
+            tok_cfg: TokenizerCfg { max_token_bytes: 32 },
             include_metaphone: false,
-            meta_cfg: MetaphoneCfg {
-                max_token_bytes: 32,
-                max_code_len: 8,
-            },
+            meta_cfg: MetaphoneCfg { max_token_bytes: 32, max_code_len: 8 },
             max_terms: 128,
         }
     }
@@ -115,31 +110,18 @@ pub struct QueryTerm {
 /// This function uses only deterministic operations.
 pub fn query_terms_from_text(text: &str, cfg: &QueryTermsCfg) -> Vec<QueryTerm> {
     // Token terms.
-    let tok_cfg = TokenizerCfg {
-        max_token_bytes: cfg.tok_cfg.max_token_bytes,
-    };
+    let tok_cfg = TokenizerCfg { max_token_bytes: cfg.tok_cfg.max_token_bytes };
     let mut out: Vec<QueryTerm> = Vec::new();
     for tf in term_freqs_from_text(text, tok_cfg) {
-        out.push(QueryTerm {
-            term: tf.term,
-            qtf: tf.tf,
-        });
+        out.push(QueryTerm { term: tf.term, qtf: tf.tf });
     }
 
     // Optional metaphone terms (domain-separated ids).
     if cfg.include_metaphone {
-        let tok_cfg2 = TokenizerCfg {
-            max_token_bytes: cfg.tok_cfg.max_token_bytes,
-        };
-        let meta_cfg = MetaphoneCfg {
-            max_token_bytes: cfg.meta_cfg.max_token_bytes,
-            max_code_len: cfg.meta_cfg.max_code_len,
-        };
+        let tok_cfg2 = TokenizerCfg { max_token_bytes: cfg.tok_cfg.max_token_bytes };
+        let meta_cfg = MetaphoneCfg { max_token_bytes: cfg.meta_cfg.max_token_bytes, max_code_len: cfg.meta_cfg.max_code_len };
         for mf in meta_freqs_from_text(text, tok_cfg2, meta_cfg) {
-            out.push(QueryTerm {
-                term: TermId(mf.meta.0),
-                qtf: mf.tf,
-            });
+            out.push(QueryTerm { term: TermId(mf.meta.0), qtf: mf.tf });
         }
     }
 
@@ -191,13 +173,11 @@ pub struct SearchCfg {
 impl SearchCfg {
     /// Default search config for interactive usage.
     pub fn new() -> SearchCfg {
-        SearchCfg {
-            k: 10,
-            entry_cap: 0,
-            dense_row_threshold: 200_000,
-        }
+        SearchCfg { k: 10, entry_cap: 0, dense_row_threshold: 200_000 }
     }
 }
+
+
 
 fn seed64_from_control(control: &RetrievalControlV1) -> u64 {
     let id = control.control_id();
@@ -213,48 +193,41 @@ fn mix64(mut z: u64) -> u64 {
 
 fn tiebreak_key(seed: u64, frame_seg: &Hash32, row_ix: u32) -> u64 {
     let seg0 = u64::from_le_bytes([
-        frame_seg[0],
-        frame_seg[1],
-        frame_seg[2],
-        frame_seg[3],
-        frame_seg[4],
-        frame_seg[5],
-        frame_seg[6],
-        frame_seg[7],
+        frame_seg[0], frame_seg[1], frame_seg[2], frame_seg[3],
+        frame_seg[4], frame_seg[5], frame_seg[6], frame_seg[7],
     ]);
     let x = seed ^ seg0 ^ (row_ix as u64).wrapping_mul(0x9E3779B97F4A7C15);
     mix64(x.wrapping_add(0x9E3779B97F4A7C15))
 }
 
-fn rank_and_truncate_hits(
-    hits: &mut Vec<SearchHit>,
-    k: usize,
-    tie_seed: Option<u64>,
-    include_ties: bool,
-) {
+fn rank_and_truncate_hits(hits: &mut Vec<SearchHit>, k: usize, tie_seed: Option<u64>, include_ties: bool) {
     if let Some(seed) = tie_seed {
-        hits.sort_by(|a, b| match b.score.cmp(&a.score) {
-            core::cmp::Ordering::Equal => {
-                let ka = tiebreak_key(seed, &a.frame_seg, a.row_ix);
-                let kb = tiebreak_key(seed, &b.frame_seg, b.row_ix);
-                match ka.cmp(&kb) {
-                    core::cmp::Ordering::Equal => match a.frame_seg.cmp(&b.frame_seg) {
-                        core::cmp::Ordering::Equal => a.row_ix.cmp(&b.row_ix),
+        hits.sort_by(|a, b| {
+            match b.score.cmp(&a.score) {
+                core::cmp::Ordering::Equal => {
+                    let ka = tiebreak_key(seed, &a.frame_seg, a.row_ix);
+                    let kb = tiebreak_key(seed, &b.frame_seg, b.row_ix);
+                    match ka.cmp(&kb) {
+                        core::cmp::Ordering::Equal => match a.frame_seg.cmp(&b.frame_seg) {
+                            core::cmp::Ordering::Equal => a.row_ix.cmp(&b.row_ix),
+                            x => x,
+                        },
                         x => x,
-                    },
-                    x => x,
+                    }
                 }
+                x => x,
             }
-            x => x,
         });
     } else {
         // Default canonical tie-break: (score desc, frame_seg asc, row_ix asc)
-        hits.sort_by(|a, b| match b.score.cmp(&a.score) {
-            core::cmp::Ordering::Equal => match a.frame_seg.cmp(&b.frame_seg) {
-                core::cmp::Ordering::Equal => a.row_ix.cmp(&b.row_ix),
+        hits.sort_by(|a, b| {
+            match b.score.cmp(&a.score) {
+                core::cmp::Ordering::Equal => match a.frame_seg.cmp(&b.frame_seg) {
+                    core::cmp::Ordering::Equal => a.row_ix.cmp(&b.row_ix),
+                    x => x,
+                },
                 x => x,
-            },
-            x => x,
+            }
         });
     }
 
@@ -285,10 +258,7 @@ fn is_index_pack(bytes: &[u8]) -> bool {
     bytes.len() >= 8 && &bytes[..8] == INDEX_PACK_MAGIC
 }
 
-fn find_pack<'a>(
-    cache: &'a Vec<(Hash32, IndexPackV1)>,
-    pack_hash: &Hash32,
-) -> Option<&'a IndexPackV1> {
+fn find_pack<'a>(cache: &'a Vec<(Hash32, IndexPackV1)>, pack_hash: &Hash32) -> Option<&'a IndexPackV1> {
     for (h, p) in cache.iter() {
         if h == pack_hash {
             return Some(p);
@@ -399,6 +369,7 @@ pub(crate) fn search_snapshot_inner<S: ArtifactStore>(
     Ok(hits)
 }
 
+
 /// Search an index snapshot with an optional control record.
 ///
 /// integrates pragmatics as a control-signal track. v1 of this
@@ -426,28 +397,15 @@ pub fn search_snapshot_cached_with_control<S: ArtifactStore>(
     snapshot_hash: &Hash32,
     query_terms: &[QueryTerm],
     cfg: &SearchCfg,
-    snap_cache: Option<
-        &mut crate::cache::Cache2Q<Hash32, std::sync::Arc<crate::index_snapshot::IndexSnapshotV1>>,
-    >,
-    idx_cache: Option<
-        &mut crate::cache::Cache2Q<Hash32, std::sync::Arc<crate::index_segment::IndexSegmentV1>>,
-    >,
+    snap_cache: Option<&mut crate::cache::Cache2Q<Hash32, std::sync::Arc<crate::index_snapshot::IndexSnapshotV1>>>,
+    idx_cache: Option<&mut crate::cache::Cache2Q<Hash32, std::sync::Arc<crate::index_segment::IndexSegmentV1>>>,
     control: Option<&RetrievalControlV1>,
 ) -> Result<Vec<SearchHit>, IndexQueryError> {
     let (seed, include_ties) = match control {
         Some(c) => (Some(seed64_from_control(c)), true),
         None => (None, false),
     };
-    search_snapshot_cached_inner(
-        store,
-        snapshot_hash,
-        query_terms,
-        cfg,
-        snap_cache,
-        idx_cache,
-        seed,
-        include_ties,
-    )
+    search_snapshot_cached_inner(store, snapshot_hash, query_terms, cfg, snap_cache, idx_cache, seed, include_ties)
 }
 
 /// Search an IndexSnapshotV1 using optional warm caches.
@@ -464,23 +422,10 @@ pub fn search_snapshot_cached<S: ArtifactStore>(
     snapshot_hash: &Hash32,
     query_terms: &[QueryTerm],
     cfg: &SearchCfg,
-    snap_cache: Option<
-        &mut crate::cache::Cache2Q<Hash32, std::sync::Arc<crate::index_snapshot::IndexSnapshotV1>>,
-    >,
-    idx_cache: Option<
-        &mut crate::cache::Cache2Q<Hash32, std::sync::Arc<crate::index_segment::IndexSegmentV1>>,
-    >,
+    snap_cache: Option<&mut crate::cache::Cache2Q<Hash32, std::sync::Arc<crate::index_snapshot::IndexSnapshotV1>>>,
+    idx_cache: Option<&mut crate::cache::Cache2Q<Hash32, std::sync::Arc<crate::index_segment::IndexSegmentV1>>>,
 ) -> Result<Vec<SearchHit>, IndexQueryError> {
-    search_snapshot_cached_inner(
-        store,
-        snapshot_hash,
-        query_terms,
-        cfg,
-        snap_cache,
-        idx_cache,
-        None,
-        false,
-    )
+    search_snapshot_cached_inner(store, snapshot_hash, query_terms, cfg, snap_cache, idx_cache, None, false)
 }
 
 fn search_snapshot_cached_inner<S: ArtifactStore>(
@@ -488,12 +433,8 @@ fn search_snapshot_cached_inner<S: ArtifactStore>(
     snapshot_hash: &Hash32,
     query_terms: &[QueryTerm],
     cfg: &SearchCfg,
-    snap_cache: Option<
-        &mut crate::cache::Cache2Q<Hash32, std::sync::Arc<crate::index_snapshot::IndexSnapshotV1>>,
-    >,
-    mut idx_cache: Option<
-        &mut crate::cache::Cache2Q<Hash32, std::sync::Arc<crate::index_segment::IndexSegmentV1>>,
-    >,
+    snap_cache: Option<&mut crate::cache::Cache2Q<Hash32, std::sync::Arc<crate::index_snapshot::IndexSnapshotV1>>>,
+    mut idx_cache: Option<&mut crate::cache::Cache2Q<Hash32, std::sync::Arc<crate::index_segment::IndexSegmentV1>>>,
     tie_seed: Option<u64>,
     include_ties: bool,
 ) -> Result<Vec<SearchHit>, IndexQueryError> {
@@ -506,19 +447,18 @@ fn search_snapshot_cached_inner<S: ArtifactStore>(
 
     let snap_arc: Arc<crate::index_snapshot::IndexSnapshotV1> = match snap_cache {
         Some(cache) => {
-            let sopt =
-                get_index_snapshot_v1_cached(store, cache, snapshot_hash).map_err(|e| match e {
-                    IndexSnapshotStoreError::Decode(d) => IndexQueryError::Decode(d.to_string()),
-                    IndexSnapshotStoreError::Store(s) => IndexQueryError::Store(s.to_string()),
-                    IndexSnapshotStoreError::Encode(en) => IndexQueryError::Decode(en.to_string()),
-                })?;
+            let sopt = get_index_snapshot_v1_cached(store, cache, snapshot_hash).map_err(|e| match e {
+                IndexSnapshotStoreError::Decode(d) => IndexQueryError::Decode(d.to_string()),
+                IndexSnapshotStoreError::Store(s) => IndexQueryError::Store(s.to_string()),
+                IndexSnapshotStoreError::Encode(en) => IndexQueryError::Decode(en.to_string()),
+            })?;
             sopt.ok_or_else(|| IndexQueryError::store("snapshot not found"))?
         }
         None => {
             let bytes = map_store_err(store.get(snapshot_hash))?
                 .ok_or_else(|| IndexQueryError::store("snapshot not found"))?;
-            let snap =
-                crate::index_snapshot::IndexSnapshotV1::decode(&bytes).map_err(map_decode_err)?;
+            let snap = crate::index_snapshot::IndexSnapshotV1::decode(&bytes)
+                .map_err(map_decode_err)?;
             Arc::new(snap)
         }
     };
@@ -540,15 +480,13 @@ fn search_snapshot_cached_inner<S: ArtifactStore>(
             break;
         }
 
-        let idx_arc: Arc<crate::index_segment::IndexSegmentV1> = if let Some(pack) =
-            find_pack(&pack_cache, &e.index_seg)
-        {
+        let idx_arc: Arc<crate::index_segment::IndexSegmentV1> = if let Some(pack) = find_pack(&pack_cache, &e.index_seg) {
             // Pack already cached; no store read.
             let inner = pack
                 .get_index_bytes(&e.frame_seg)
                 .ok_or_else(|| IndexQueryError::decode("index pack missing frame segment"))?;
-            let idx =
-                crate::index_segment::IndexSegmentV1::decode(inner).map_err(map_decode_err)?;
+            let idx = crate::index_segment::IndexSegmentV1::decode(inner)
+                .map_err(map_decode_err)?;
             Arc::new(idx)
         } else if let Some(cache) = idx_cache.as_deref_mut() {
             // First consult the cache. Only IndexSegmentV1 blobs are cached by hash.
@@ -559,11 +497,12 @@ fn search_snapshot_cached_inner<S: ArtifactStore>(
                     .ok_or_else(|| IndexQueryError::store("index artifact not found"))?;
 
                 if is_index_pack(&idx_bytes) {
-                    let dec = IndexPackV1::decode(&idx_bytes).map_err(map_decode_err)?;
+                    let dec = IndexPackV1::decode(&idx_bytes)
+                        .map_err(map_decode_err)?;
                     let pack = insert_pack(&mut pack_cache, e.index_seg.clone(), dec);
-                    let inner = pack.get_index_bytes(&e.frame_seg).ok_or_else(|| {
-                        IndexQueryError::decode("index pack missing frame segment")
-                    })?;
+                    let inner = pack
+                        .get_index_bytes(&e.frame_seg)
+                        .ok_or_else(|| IndexQueryError::decode("index pack missing frame segment"))?;
                     let idx = crate::index_segment::IndexSegmentV1::decode(inner)
                         .map_err(map_decode_err)?;
                     Arc::new(idx)
@@ -571,8 +510,7 @@ fn search_snapshot_cached_inner<S: ArtifactStore>(
                     let idx = crate::index_segment::IndexSegmentV1::decode(&idx_bytes)
                         .map_err(map_decode_err)?;
                     let arc = Arc::new(idx);
-                    let _ =
-                        cache.insert_cost(e.index_seg.clone(), arc.clone(), idx_bytes.len() as u64);
+                    let _ = cache.insert_cost(e.index_seg.clone(), arc.clone(), idx_bytes.len() as u64);
                     arc
                 }
             }
@@ -580,13 +518,14 @@ fn search_snapshot_cached_inner<S: ArtifactStore>(
             let idx_bytes = map_store_err(store.get(&e.index_seg))?
                 .ok_or_else(|| IndexQueryError::store("index artifact not found"))?;
             if is_index_pack(&idx_bytes) {
-                let dec = IndexPackV1::decode(&idx_bytes).map_err(map_decode_err)?;
+                let dec = IndexPackV1::decode(&idx_bytes)
+                    .map_err(map_decode_err)?;
                 let pack = insert_pack(&mut pack_cache, e.index_seg.clone(), dec);
                 let inner = pack
                     .get_index_bytes(&e.frame_seg)
                     .ok_or_else(|| IndexQueryError::decode("index pack missing frame segment"))?;
-                let idx =
-                    crate::index_segment::IndexSegmentV1::decode(inner).map_err(map_decode_err)?;
+                let idx = crate::index_segment::IndexSegmentV1::decode(inner)
+                    .map_err(map_decode_err)?;
                 Arc::new(idx)
             } else {
                 let idx = crate::index_segment::IndexSegmentV1::decode(&idx_bytes)
@@ -615,6 +554,7 @@ fn search_snapshot_cached_inner<S: ArtifactStore>(
     Ok(hits)
 }
 
+
 fn idf_ratio_scaled(n: u32, df: u32) -> u32 {
     // idf = ((n + 1) << IDF_SHIFT) / (df + 1)
     // df==0 should not happen for real terms, but we keep it safe.
@@ -625,11 +565,7 @@ fn idf_ratio_scaled(n: u32, df: u32) -> u32 {
         None => u64::MAX,
     };
     let out = num / dd;
-    if out > (u32::MAX as u64) {
-        u32::MAX
-    } else {
-        out as u32
-    }
+    if out > (u32::MAX as u64) { u32::MAX } else { out as u32 }
 }
 
 fn score_posting(tf: u32, qtf: u32, idf: u32) -> u64 {
@@ -695,11 +631,7 @@ fn score_segment_dense(
     for &row_ix in &touched {
         let s = scores[row_ix as usize];
         if s != 0 {
-            hits.push(SearchHit {
-                frame_seg: *frame_seg,
-                row_ix,
-                score: s,
-            });
+            hits.push(SearchHit { frame_seg: *frame_seg, row_ix, score: s });
         }
     }
     Ok(())
@@ -738,11 +670,7 @@ fn score_segment_sparse(
 
     for (row_ix, score) in acc {
         if score != 0 {
-            hits.push(SearchHit {
-                frame_seg: *frame_seg,
-                row_ix,
-                score,
-            });
+            hits.push(SearchHit { frame_seg: *frame_seg, row_ix, score });
         }
     }
     Ok(())
@@ -757,8 +685,8 @@ mod tests {
     use crate::hash::blake3_hash;
     use crate::index_segment::IndexSegmentV1;
     use crate::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
-    use std::collections::BTreeMap;
     use std::path::PathBuf;
+    use std::collections::BTreeMap;
 
     /// In-memory deterministic artifact store used for tests.
     ///
@@ -769,9 +697,7 @@ mod tests {
 
     impl MemStore {
         fn new() -> MemStore {
-            MemStore {
-                m: std::cell::RefCell::new(BTreeMap::new()),
-            }
+            MemStore { m: std::cell::RefCell::new(BTreeMap::new()) }
         }
     }
 
@@ -795,9 +721,7 @@ mod tests {
         let doc = DocId(crate::frame::Id64(doc_u64));
         let src = SourceId(crate::frame::Id64(source_u64));
         let mut r = FrameRowV1::new(doc, src);
-        let tcfg = TokenizerCfg {
-            max_token_bytes: 32,
-        };
+        let tcfg = TokenizerCfg { max_token_bytes: 32 };
         r.terms = term_freqs_from_text(text, tcfg);
         r.recompute_doc_len();
         r
@@ -853,11 +777,7 @@ mod tests {
 
         let qcfg = QueryTermsCfg::new();
         let q = query_terms_from_text("apple", &qcfg);
-        let scfg = SearchCfg {
-            k: 10,
-            entry_cap: 0,
-            dense_row_threshold: 200_000,
-        };
+        let scfg = SearchCfg { k: 10, entry_cap: 0, dense_row_threshold: 200_000 };
 
         let h1 = search_snapshot(&store, &snap_hash, &q, &scfg).unwrap();
         let h2 = search_snapshot(&store, &snap_hash, &q, &scfg).unwrap();
@@ -901,17 +821,13 @@ mod tests {
 
         let qcfg = QueryTermsCfg::new();
         let q = query_terms_from_text("apple", &qcfg);
-        let scfg = SearchCfg {
-            k: 10,
-            entry_cap: 0,
-            dense_row_threshold: 200_000,
-        };
+        let scfg = SearchCfg { k: 10, entry_cap: 0, dense_row_threshold: 200_000 };
 
         let h0 = search_snapshot(&store, &snap_hash, &q, &scfg).unwrap();
-        let (h1, _g1) =
-            search_snapshot_gated(&store, &snap_hash, &sig_map_hash, &q, &scfg).unwrap();
+        let (h1, _g1) = search_snapshot_gated(&store, &snap_hash, &sig_map_hash, &q, &scfg).unwrap();
         assert_eq!(h1, h0);
     }
+
 
     #[test]
     fn search_snapshot_with_control_includes_ties_at_cutoff_and_uses_control_tiebreak() {
@@ -946,11 +862,7 @@ mod tests {
 
         let qcfg = QueryTermsCfg::new();
         let q = query_terms_from_text("apple", &qcfg);
-        let scfg = SearchCfg {
-            k: 1,
-            entry_cap: 0,
-            dense_row_threshold: 200_000,
-        };
+        let scfg = SearchCfg { k: 1, entry_cap: 0, dense_row_threshold: 200_000 };
 
         // Without control, truncation to k is strict.
         let base = search_snapshot(&store, &snap_hash, &q, &scfg).unwrap();
@@ -1047,15 +959,7 @@ pub fn search_snapshot_gated<S: ArtifactStore>(
     query_terms: &[QueryTerm],
     cfg: &SearchCfg,
 ) -> Result<(Vec<SearchHit>, GateStatsV1), IndexQueryError> {
-    search_snapshot_gated_inner(
-        store,
-        snapshot_hash,
-        sig_map_hash,
-        query_terms,
-        cfg,
-        None,
-        false,
-    )
+    search_snapshot_gated_inner(store, snapshot_hash, sig_map_hash, query_terms, cfg, None, false)
 }
 
 pub(crate) fn search_snapshot_gated_inner<S: ArtifactStore>(
@@ -1125,8 +1029,7 @@ pub(crate) fn search_snapshot_gated_inner<S: ArtifactStore>(
                             Some(arc)
                         }
                         Err(de) => {
-                            sig_load_err =
-                                Some(IndexQueryError::Decode(format!("segment_sig: {}", de)));
+                            sig_load_err = Some(IndexQueryError::Decode(format!("segment_sig: {}", de)));
                             None
                         }
                     },
@@ -1197,15 +1100,7 @@ pub fn search_snapshot_gated_with_control<S: ArtifactStore>(
         Some(c) => (Some(seed64_from_control(c)), true),
         None => (None, false),
     };
-    search_snapshot_gated_inner(
-        store,
-        snapshot_hash,
-        sig_map_hash,
-        query_terms,
-        cfg,
-        seed,
-        include_ties,
-    )
+    search_snapshot_gated_inner(store, snapshot_hash, sig_map_hash, query_terms, cfg, seed, include_ties)
 }
 
 /// Cached variant of `search_snapshot_gated`.
@@ -1256,12 +1151,11 @@ fn search_snapshot_cached_gated_inner<S: ArtifactStore>(
 
     let snap_arc: Arc<IndexSnapshotV1> = match snap_cache {
         Some(cache) => {
-            let sopt =
-                get_index_snapshot_v1_cached(store, cache, snapshot_hash).map_err(|e| match e {
-                    IndexSnapshotStoreError::Decode(d) => IndexQueryError::Decode(d.to_string()),
-                    IndexSnapshotStoreError::Store(s) => IndexQueryError::Store(s.to_string()),
-                    IndexSnapshotStoreError::Encode(en) => IndexQueryError::Decode(en.to_string()),
-                })?;
+            let sopt = get_index_snapshot_v1_cached(store, cache, snapshot_hash).map_err(|e| match e {
+                IndexSnapshotStoreError::Decode(d) => IndexQueryError::Decode(d.to_string()),
+                IndexSnapshotStoreError::Store(s) => IndexQueryError::Store(s.to_string()),
+                IndexSnapshotStoreError::Encode(en) => IndexQueryError::Decode(en.to_string()),
+            })?;
             sopt.ok_or_else(|| IndexQueryError::store("snapshot not found"))?
         }
         None => {
@@ -1318,8 +1212,7 @@ fn search_snapshot_cached_gated_inner<S: ArtifactStore>(
                             Some(arc)
                         }
                         Err(de) => {
-                            sig_load_err =
-                                Some(IndexQueryError::Decode(format!("segment_sig: {}", de)));
+                            sig_load_err = Some(IndexQueryError::Decode(format!("segment_sig: {}", de)));
                             None
                         }
                     },
@@ -1339,8 +1232,7 @@ fn search_snapshot_cached_gated_inner<S: ArtifactStore>(
             continue;
         }
 
-        let idx_arc: Arc<IndexSegmentV1> = if let Some(pack) = find_pack(&pack_cache, &e.index_seg)
-        {
+        let idx_arc: Arc<IndexSegmentV1> = if let Some(pack) = find_pack(&pack_cache, &e.index_seg) {
             let inner = pack
                 .get_index_bytes(&e.frame_seg)
                 .ok_or_else(|| IndexQueryError::decode("index pack missing frame segment"))?;
@@ -1356,16 +1248,15 @@ fn search_snapshot_cached_gated_inner<S: ArtifactStore>(
                 if is_index_pack(&idx_bytes) {
                     let dec = IndexPackV1::decode(&idx_bytes).map_err(map_decode_err)?;
                     let pack = insert_pack(&mut pack_cache, e.index_seg.clone(), dec);
-                    let inner = pack.get_index_bytes(&e.frame_seg).ok_or_else(|| {
-                        IndexQueryError::decode("index pack missing frame segment")
-                    })?;
+                    let inner = pack
+                        .get_index_bytes(&e.frame_seg)
+                        .ok_or_else(|| IndexQueryError::decode("index pack missing frame segment"))?;
                     let idx = IndexSegmentV1::decode(inner).map_err(map_decode_err)?;
                     Arc::new(idx)
                 } else {
                     let idx = IndexSegmentV1::decode(&idx_bytes).map_err(map_decode_err)?;
                     let arc = Arc::new(idx);
-                    let _ =
-                        cache.insert_cost(e.index_seg.clone(), arc.clone(), idx_bytes.len() as u64);
+                    let _ = cache.insert_cost(e.index_seg.clone(), arc.clone(), idx_bytes.len() as u64);
                     arc
                 }
             }

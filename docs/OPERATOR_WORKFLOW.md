@@ -26,6 +26,15 @@ Linux/WSL:
 - examples/demo_cmd_reduce_index.sh
 - examples/demo_cmd_sync_reduce.sh
 
+Lexicon ingest (Wiktionary) demos:
+Windows (cmd.exe):
+- examples/demo_cmd_ingest_wiktionary_xml.bat
+- examples/demo_cmd_workflow_with_lexicon.bat
+
+Linux/WSL:
+- examples/demo_cmd_ingest_wiktionary_xml.sh
+- examples/demo_cmd_workflow_with_lexicon.sh
+
 Most scripts accept environment variable overrides (ROOT, SRC_ROOT, DST_ROOT,
 SHARDS, PORT, RW_TIMEOUT_MS, KEEP_TMP, EXE).
 
@@ -63,9 +72,39 @@ The following is a minimal manual outline. Replace paths and counts as needed.
 6) Query on the replicated root
  query-index --root <dst_root> --snapshot <merged_snapshot_hash> --sig-map <merged_sig_map_hash> --text "<query>" --k <n> [--cache-stats]
 
+Optional: lexicon ingest for query expansion
+--------------------------------------------
+Query expansion uses lexicon artifacts (LexiconSegmentV1 + LexiconSnapshotV1).
+These artifacts are not part of ReduceManifestV1, so sync-reduce does not copy
+them. To use query expansion on a given root, ingest Wiktionary into that same
+root (or otherwise ensure the lexicon artifacts exist in that root).
+
+Lexicon artifacts are not included in ReduceManifestV1 closures. If you replicate
+a reduced index to a fresh root, you must also replicate the lexicon closure.
+
+Use sync-lexicon to replicate a LexiconSnapshotV1 plus its referenced
+LexiconSegmentV1 artifacts over artifact sync. See docs/LEXICON_SYNC_V1.md.
+
+Example:
+- Source: fsa_lm serve-sync --root <src_root> --addr <ip:port>
+- Destination: fsa_lm sync-lexicon --root <dst_root> --addr <ip:port> --lexicon-snapshot <hash32hex>
+
+ Ingest Wiktionary and store lexicon artifacts:
+ ingest-wiktionary-xml --root <root> (--xml <path> | --xml-bz2 <path>) --segments <n> [--max_pages <n>] [--out-file <path>]
+
+ Output:
+ - zero or more lines: segment=<hash32hex>
+ - one line: lexicon_snapshot=<hash32hex>
+
+ Validate the snapshot:
+ validate-lexicon-snapshot --root <root> --snapshot <lexicon_snapshot_hash>
+
 7) Prompt and answer on the replicated root
- prompt --root <dst_root> --text "<prompt text>"...
+ prompt --root <dst_root> "<prompt text>"
  answer --root <dst_root> --prompt <prompt_hash> --snapshot <merged_snapshot_hash> --sig-map <merged_sig_map_hash>... [--cache-stats]
+
+ With query expansion enabled:
+ answer --root <dst_root> --prompt <prompt_hash> --snapshot <merged_snapshot_hash> --sig-map <merged_sig_map_hash> --expand --lexicon-snapshot <lexicon_snapshot_hash>...
 
 Common failure modes
 --------------------
@@ -82,7 +121,7 @@ Timeouts
 "proto: reduce missing index_snapshot_v1"
 - This indicates the ReduceManifestV1 was produced by an older build that used
  different output tags.
-- Fix: re-run reduce-index (or run-phase6) using the current build to produce
+- Fix: re-run reduce-index (or run-workflow) using the current build to produce
  a new ReduceManifestV1.
 
 Stale roots / leftover artifacts
@@ -104,7 +143,7 @@ Regression locks
  adds two operator-focused regression tests:
 
 - tests/operator_workflow_golden_pack_v1.rs
- End-to-end: run-phase6 -> serve-sync/sync-reduce -> query-index -> answer
+ End-to-end: run-workflow -> serve-sync/sync-reduce -> query-index -> answer
 
 - tests/sync_resilience_regressions_v1.rs
  Sync resilience matrix: timeout, disconnect, already-present fast path, and

@@ -367,13 +367,7 @@ where
         let mut out: Vec<K> = self
             .map
             .iter()
-            .filter_map(|(k, e)| {
-                if e.kind == kind {
-                    Some(k.clone())
-                } else {
-                    None
-                }
-            })
+            .filter_map(|(k, e)| if e.kind == kind { Some(k.clone()) } else { None })
             .collect();
         out.sort();
         out

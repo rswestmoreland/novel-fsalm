@@ -14,20 +14,24 @@ use crate::artifact::ArtifactStore;
 use crate::golden_pack::{GoldenPackReportV1, GOLDEN_PACK_REPORT_V1_VERSION};
 use crate::golden_pack_artifact::{put_golden_pack_report_v1, GoldenPackArtifactError};
 use crate::hash::{hex32, Hash32};
-use crate::realizer_directives::{
-    RealizerDirectivesV1, StyleV1, ToneV1, FORMAT_FLAG_BULLETS, FORMAT_FLAG_INCLUDE_ASSUMPTIONS,
-    FORMAT_FLAG_INCLUDE_NEXT_STEPS, FORMAT_FLAG_INCLUDE_RISKS, FORMAT_FLAG_INCLUDE_SUMMARY,
-    FORMAT_FLAG_NUMBERED, REALIZER_DIRECTIVES_V1_VERSION,
-};
 use crate::scale_demo::{
-    build_scale_demo_scale_report_v1, run_scale_demo_build_answers_v1_with_directives,
+    build_scale_demo_scale_report_v1,
+    run_scale_demo_build_answers_v1_with_directives,
     run_scale_demo_build_evidence_bundles_v1, run_scale_demo_build_index_from_manifest_v1,
     run_scale_demo_generate_and_ingest_frames_v1, run_scale_demo_generate_and_store_prompts_v1,
-    ScaleDemoAnswerError, ScaleDemoCfgV1, ScaleDemoEvidenceError, ScaleDemoIndexError,
-    ScaleDemoIngestError, ScaleDemoPromptsError, ScaleDemoScaleReportError,
+    ScaleDemoAnswerError, ScaleDemoCfgV1, ScaleDemoEvidenceError, ScaleDemoIngestError,
+    ScaleDemoIndexError, ScaleDemoPromptsError, ScaleDemoScaleReportError,
+};
+use crate::realizer_directives::{
+    RealizerDirectivesV1, REALIZER_DIRECTIVES_V1_VERSION, StyleV1, ToneV1,
+    FORMAT_FLAG_BULLETS, FORMAT_FLAG_INCLUDE_ASSUMPTIONS, FORMAT_FLAG_INCLUDE_NEXT_STEPS,
+    FORMAT_FLAG_INCLUDE_RISKS,
+    FORMAT_FLAG_INCLUDE_SUMMARY, FORMAT_FLAG_NUMBERED,
 };
 use crate::scale_report::ScaleDemoScaleReportV1;
-use crate::scale_report_artifact::{put_scale_demo_scale_report_v1, ScaleReportArtifactError};
+use crate::scale_report_artifact::{
+    put_scale_demo_scale_report_v1, ScaleReportArtifactError,
+};
 use crate::workload_gen::WorkloadCfgV1;
 use crate::workload_gen::WORKLOAD_GEN_V1_VERSION;
 
@@ -189,8 +193,7 @@ fn golden_pack_realizer_directives_v1() -> RealizerDirectivesV1 {
         style: StyleV1::Debug,
         format_flags: FORMAT_FLAG_INCLUDE_SUMMARY
             | FORMAT_FLAG_INCLUDE_NEXT_STEPS
-            | FORMAT_FLAG_INCLUDE_RISKS
-            | FORMAT_FLAG_INCLUDE_ASSUMPTIONS
+            | FORMAT_FLAG_INCLUDE_RISKS | FORMAT_FLAG_INCLUDE_ASSUMPTIONS
             | FORMAT_FLAG_BULLETS
             | FORMAT_FLAG_NUMBERED,
         max_softeners: 0,
@@ -207,9 +210,7 @@ pub fn run_golden_pack_v1<S: ArtifactStore>(
     cfg: GoldenPackRunCfgV1,
 ) -> Result<GoldenPackRunOutputV1, GoldenPackRunError> {
     if cfg.version != GOLDEN_PACK_RUN_CFG_V1_VERSION {
-        return Err(GoldenPackRunError::Cfg(
-            "unsupported golden pack run cfg version",
-        ));
+        return Err(GoldenPackRunError::Cfg("unsupported golden pack run cfg version"));
     }
 
     // Force evidence-stage overrides to defaults.
@@ -227,8 +228,7 @@ pub fn run_golden_pack_v1<S: ArtifactStore>(
             run_scale_demo_generate_and_ingest_frames_v1(store, scale_cfg.clone())?;
         let index_report =
             run_scale_demo_build_index_from_manifest_v1(store, &frames_report.frame_manifest_hash)?;
-        let prompts_report =
-            run_scale_demo_generate_and_store_prompts_v1(store, scale_cfg.clone())?;
+        let prompts_report = run_scale_demo_generate_and_store_prompts_v1(store, scale_cfg.clone())?;
         let evidence_report = run_scale_demo_build_evidence_bundles_v1(
             store,
             scale_cfg.clone(),

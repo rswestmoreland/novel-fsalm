@@ -25,6 +25,12 @@ pub mod replay;
 
 pub mod prompt_pack;
 
+/// ConversationPackV1: resumable chat history artifact.
+pub mod conversation_pack;
+
+/// ConversationPackV1 artifact helpers (store/load ConversationPackV1 by hash).
+pub mod conversation_pack_artifact;
+
 pub mod net;
 
 /// Artifact sync protocol and helpers.
@@ -60,10 +66,10 @@ pub mod index_store;
 /// IndexSnapshot manifest linking FrameSegment hashes to IndexSegment hashes.
 pub mod index_snapshot;
 
-/// Query-time index lookup and scoring.
-pub mod index_query;
 /// IndexSnapshot persistence helpers.
 pub mod index_snapshot_store;
+/// Query-time index lookup and scoring.
+pub mod index_query;
 
 /// Canonical retrieval hit list artifact.
 pub mod hit_list;
@@ -145,8 +151,35 @@ pub mod planner_hints;
 
 /// Forecast schema.
 pub mod forecast;
-pub mod forecast_artifact;
 pub mod planner_hints_artifact;
+pub mod forecast_artifact;
+
+/// Context anchor terms derived from conversation history.
+pub mod context_anchors;
+
+/// ContextAnchorsV1 artifact helpers.
+pub mod context_anchors_artifact;
+
+/// ProofArtifactV1 schema and codec.
+pub mod proof_artifact;
+
+/// ProofArtifactV1 artifact helpers.
+pub mod proof_artifact_store;
+
+/// Deterministic finite-domain logic solver (v1).
+pub mod logic_solver_v1;
+
+/// Logic puzzle sketch extraction helpers.
+pub mod puzzle_sketch_v1;
+
+/// Compile a puzzle sketch into a solver spec (v1).
+pub mod puzzle_compile_v1;
+
+/// PuzzleSketchArtifactV1 schema and codec.
+pub mod puzzle_sketch_artifact;
+
+/// PuzzleSketchArtifactV1 store/load helpers.
+pub mod puzzle_sketch_artifact_store;
 
 /// Markov/PPM hints schema.
 pub mod markov_hints;
@@ -198,6 +231,9 @@ pub mod index_compaction;
 
 /// Segment signatures used for query-time gating.
 pub mod segment_sig;
+
+/// Root-local workspace defaults (v1).
+pub mod workspace;
 /// SegmentSig persistence helpers.
 pub mod segment_sig_store;
 
@@ -226,6 +262,7 @@ pub mod evidence_set_artifact;
 /// EvidenceSet verifiers.
 pub mod evidence_set_verify;
 
+
 /// Evidence builder.
 pub mod evidence_builder;
 
@@ -235,9 +272,9 @@ pub mod tokenizer;
 /// Metaphonetic preprocessor.
 pub mod metaphone;
 
-pub mod pragmatics_extract;
 /// Pragmatics control-signal schema.
 pub mod pragmatics_frame;
+pub mod pragmatics_extract;
 /// PragmaticsFrame persistence helpers.
 pub mod pragmatics_frame_store;
 
@@ -263,6 +300,9 @@ pub mod lexicon_snapshot_store;
 /// Lexicon snapshot read helpers for query expansion.
 pub mod lexicon_expand_lookup;
 
+/// Lexicon-powered cue neighborhoods for lexicon-first intent features.
+pub mod lexicon_neighborhoods;
+
 /// Deterministic workload generator for scale demos.
 pub mod workload_gen;
 
@@ -283,4 +323,10 @@ pub mod lexicon_snapshot_builder;
 
 /// Wikipedia TSV ingestion.
 pub mod wiki_ingest;
+
+/// Wiktionary wikitext scanning helpers.
+pub mod wiktionary_ingest;
+
+/// Wiktionary XML ingest to lexicon segments and snapshots.
+pub mod wiktionary_build;
 mod wiki_xml;

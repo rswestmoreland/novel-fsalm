@@ -127,14 +127,7 @@ pub(crate) fn parse_wiki_xml<R: BufRead, S: WikiXmlSink>(
                 let mut dec = XmlTextDecoder::new();
                 let mut emit = String::with_capacity(cfg.emit_max_bytes + 64);
 
-                sc.stream_text_content(
-                    &mut reader,
-                    b"</text>",
-                    &mut dec,
-                    &mut emit,
-                    cfg.emit_max_bytes,
-                    sink,
-                )?;
+                sc.stream_text_content(&mut reader, b"</text>", &mut dec, &mut emit, cfg.emit_max_bytes, sink)?;
                 dec.finish(&mut emit)?;
 
                 if !emit.is_empty() {
@@ -246,11 +239,7 @@ impl Scanner {
         None
     }
 
-    fn scan_to_tag<R: BufRead>(
-        &mut self,
-        reader: &mut R,
-        tag: &[u8],
-    ) -> Result<bool, WikiXmlError> {
+    fn scan_to_tag<R: BufRead>(&mut self, reader: &mut R, tag: &[u8]) -> Result<bool, WikiXmlError> {
         loop {
             if let Some(i) = Scanner::find(self.slice(), tag) {
                 self.start += i + tag.len();
@@ -570,8 +559,7 @@ impl XmlTextDecoder {
             Err(e) => {
                 let v = e.valid_up_to();
                 if v > 0 {
-                    let ok = core::str::from_utf8(&bytes[..v])
-                        .map_err(|_| WikiXmlError::Parse("utf8"))?;
+                    let ok = core::str::from_utf8(&bytes[..v]).map_err(|_| WikiXmlError::Parse("utf8"))?;
                     out.push_str(ok);
                 }
                 match e.error_len() {
@@ -661,13 +649,7 @@ mod tests {
             t: &mut got_title,
             x: &mut got_text,
         };
-        parse_wiki_xml(
-            io::BufReader::new(rr),
-            WikiXmlCfg::default_v1(),
-            &mut sink,
-            None,
-        )
-        .unwrap();
+        parse_wiki_xml(io::BufReader::new(rr), WikiXmlCfg::default_v1(), &mut sink, None).unwrap();
         assert_eq!(got_title, "Hello");
         assert_eq!(got_text, "hi");
     }

@@ -1,82 +1,97 @@
-Examples policy
-===============
-As Novel grows, keep small, copy/paste-friendly examples under /examples.
+Examples
+========
 
-- Prefer Windows cmd (.bat) examples when possible.
-- Each example should be deterministic and should not require network access.
-- Examples must avoid huge datasets; use tiny demo inputs.
+These scripts are small, copy/paste-friendly demos under `examples/`.
 
-Retrieval design examples will be added during (segment signatures and postings index).
+Goals
+-----
 
+- Deterministic (no network access; tiny local fixtures).
+- "Just works" workflow for end users:
+  - `load-wikipedia`
+  - `load-wiktionary`
+  - `show-workspace`
+  - `ask`
+  - `chat` (with `--session-file` + `--autosave`)
+- Operator/advanced demos are allowed, but should be clearly labeled and kept stable.
 
-----------
-- demo_cmd_build_evidence.bat: ingest tiny wiki XML, build index, build evidence bundle
-- demo_cmd_build_evidence.sh: same demo for bash
+Quickstart scripts (recommended)
+-------------------------------
 
+- `demo_cmd_workflow_with_lexicon.(bat|sh)`
+  - Loads a tiny TSV + the tiny Wiktionary fixture into one root.
+  - Shows workspace defaults.
+  - Runs `ask` with and without `--expand`.
 
-----------
-- demo_cmd_scale_demo_full_loop.bat: scale-demo full loop, run twice, compare scale report line
-- demo_cmd_scale_demo_full_loop.sh: same demo for bash
+- `demo_cmd_build_markov_model.(bat|sh)`
+  - Creates a small chat session (`--session-file` + `--autosave`).
+  - Extracts assistant replay ids from the ConversationPack.
+  - Builds `MarkovModelV1` from replay logs.
 
+- `demo_cmd_inspect_markov_model.(bat|sh)`
+  - Inspects the Markov model produced by the script above.
 
-----------
-- demo_cmd_compact_index.bat: ingest tiny wiki XML, build index, compact index, query before/after
-- demo_cmd_compact_index.sh: same demo for bash
+Wikipedia loading
+----------------
 
+- `demo_cmd_ingest_wiki.(bat|sh)`
+  - Loads a tiny TSV via `load-wikipedia`.
 
+- `demo_cmd_ingest_wiki_xml.(bat|sh)`
+  - Loads `examples/wiki_tiny.xml` via `load-wikipedia`.
 
-----------
-- demo_cmd_sharded_ingest.bat: sharded TSV ingest + build-index-sharded + per-shard query snippet
-- demo_cmd_sharded_ingest.sh: same demo for bash
+- `demo_cmd_ingest_wiki_xml_bz2.(bat|sh)`
+  - Loads `examples/wiki_tiny.xml.bz2` via `load-wikipedia`.
 
+Wiktionary loading
+-----------------
 
-----------
-- demo_cmd_reduce_index.bat: sharded TSV ingest + build-index-sharded + reduce-index + global query snippet
-- demo_cmd_reduce_index.sh: same demo for bash
+- `demo_cmd_ingest_wiktionary_xml.(bat|sh)`
+  - Loads the tiny Wiktionary fixture (plain and bz2) via `load-wiktionary`.
 
+- `demo_cmd_build_lexicon_snapshot.(bat|sh)`
+  - Loads a tiny Wiktionary fixture and validates the resulting `LexiconSnapshotV1`.
 
-----------
-- demo_cmd_sync_reduce.bat: start serve-sync, sync-reduce into fresh root, global query on destination
-- demo_cmd_sync_reduce.sh: same demo for bash
+Operator/advanced demos
+-----------------------
 
+These scripts may use lower-level subcommands and artifact hashes.
 
------------
-- run-phase6: one-command sequential driver for (sharded ingest + build-index-sharded + reduce-index).
- See docs/CLI.md for arguments and output format.
+- `demo_cmd_build_evidence.(bat|sh)`
+  - Loads a tiny Wikipedia fixture, then builds an `EvidenceBundleV1`.
 
+- `demo_cmd_compact_index.(bat|sh)`
+  - Loads a tiny Wikipedia fixture, compacts the index snapshot, and queries before/after.
 
- knobs
-------------
-All scripts accept environment variable overrides so you can adjust paths and ports without editing the files.
+- `demo_cmd_scale_demo_full_loop.(bat|sh)`
+  - Runs `scale-demo` twice and compares a stable report line.
+
+- `demo_cmd_sharded_ingest.(bat|sh)`
+  - Runs `load-wikipedia` with `--shards`, then queries using workspace defaults.
+
+- `demo_cmd_reduce_index.(bat|sh)`
+  - Similar to the sharded ingest demo, with a global query snippet.
+
+- `demo_cmd_sync_reduce.(bat|sh)`
+  - Starts `serve-sync` and uses `sync-reduce` to replicate reduce outputs.
+
+- `demo_cmd_sync_lexicon.(bat|sh)`
+  - Starts `serve-sync` and uses `sync-lexicon` to replicate a lexicon snapshot.
+
+- `demo_cmd_golden_pack_v1.(bat|sh)`, `demo_cmd_golden_pack_turn_pairs_v1.(bat|sh)`, `demo_cmd_golden_pack_conversation_v1.(bat|sh)`
+  - Determinism checks for golden-pack reports.
+
+Knobs
+-----
+
+Many scripts accept environment variable overrides so you can adjust paths and ports without editing the files.
 
 Common knobs:
-- SHARDS: shard count for sharded ingest/build-index-sharded (default 4).
-- KEEP_TMP: 0 deletes temp roots at start, 1 keeps existing roots (default 0).
-- EXE: path to the built fsa_lm executable (defaults to./target/debug/fsa_lm or target\debug\fsa_lm.exe).
-
-stage-specific knobs:
--: ROOT (default./_tmp_sharded_ingest or./_tmp_reduce_index).
--: SRC_ROOT, DST_ROOT, PORT, RW_TIMEOUT_MS (default 30000; 0 disables).
+- `ROOT`: root directory for artifacts (varies by script).
+- `SHARDS`: shard count for `load-wikipedia` (default 4 in most scripts).
+- `KEEP_TMP`: 0 deletes temp roots at start, 1 keeps existing roots (default 0).
+- `EXE`: path to the built `fsa_lm` executable.
 
 Notes:
-- The scripts build the debug executable if it does not exist. To avoid rebuilds, run: cargo build --bin fsa_lm
-
-
-
-----------
-- demo_cmd_build_lexicon_snapshot.bat: build a LexiconSnapshot from LexiconSegment hashes
-- demo_cmd_build_lexicon_snapshot.sh: same demo for bash
-
-
---------
-- demo_cmd_build_markov_model.bat: build a MarkovModelV1 offline from replay logs
-- demo_cmd_build_markov_model.sh: same demo for bash
-- demo_cmd_inspect_markov_model.bat: inspect a stored MarkovModelV1 and print a stable summary
-- demo_cmd_inspect_markov_model.sh: same demo for bash
-
-
-----------
-- demo_cmd_golden_pack_turn_pairs_v1.bat: run golden-pack-turn-pairs twice, compare report lines
-- demo_cmd_golden_pack_turn_pairs_v1.sh: same demo for bash
-- demo_cmd_golden_pack_conversation_v1.bat: run golden-pack-conversation twice, compare report lines
-- demo_cmd_golden_pack_conversation_v1.sh: same demo for bash
+- Most scripts build the debug executable if it does not exist. To avoid rebuilds, run:
+  - `cargo build --bin fsa_lm`

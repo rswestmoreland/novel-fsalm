@@ -84,7 +84,9 @@ pub enum WorkloadCfgError {
 impl core::fmt::Display for WorkloadCfgError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            WorkloadCfgError::VersionMismatch => f.write_str("workload cfg version mismatch"),
+            WorkloadCfgError::VersionMismatch => {
+                f.write_str("workload cfg version mismatch")
+            }
             WorkloadCfgError::DocCountZero => f.write_str("doc_count must be > 0"),
             WorkloadCfgError::QueryCountZero => f.write_str("query_count must be > 0"),
             WorkloadCfgError::MinTokensZero => f.write_str("min_tokens_per_doc must be > 0"),
@@ -92,7 +94,9 @@ impl core::fmt::Display for WorkloadCfgError {
                 f.write_str("max_tokens_per_doc must be >= min_tokens_per_doc")
             }
             WorkloadCfgError::VocabSizeZero => f.write_str("vocab_size must be > 0"),
-            WorkloadCfgError::VocabSizeTooLarge => f.write_str("vocab_size must be <= 1_000_000"),
+            WorkloadCfgError::VocabSizeTooLarge => {
+                f.write_str("vocab_size must be <= 1_000_000")
+            }
             WorkloadCfgError::QueryTokensZero => f.write_str("query_tokens must be > 0"),
             WorkloadCfgError::BadTiePairFlag => f.write_str("include_tie_pair must be 0 or 1"),
         }

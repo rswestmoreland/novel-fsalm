@@ -61,11 +61,12 @@ impl IndexSnapshotV1 {
     /// Rules:
     /// - entries sorted by frame_seg asc; tie-break by index_seg asc.
     pub fn canonicalize_in_place(&mut self) {
-        self.entries
-            .sort_by(|a, b| match a.frame_seg.cmp(&b.frame_seg) {
+        self.entries.sort_by(|a, b| {
+            match a.frame_seg.cmp(&b.frame_seg) {
                 core::cmp::Ordering::Equal => a.index_seg.cmp(&b.index_seg),
                 other => other,
-            });
+            }
+        });
     }
 
     /// Encode snapshot into canonical bytes.
@@ -121,9 +122,7 @@ impl IndexSnapshotV1 {
             // Enforce canonical sort order at decode time.
             if let Some(prev) = last_pair {
                 if (seg, idx) < prev {
-                    return Err(DecodeError::new(
-                        "entries not sorted by (frame_seg, index_seg)",
-                    ));
+                    return Err(DecodeError::new("entries not sorted by (frame_seg, index_seg)"));
                 }
             }
             last_pair = Some((seg, idx));

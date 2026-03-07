@@ -28,8 +28,11 @@ Implemented in code now:
 - realizer-directives-v1
 - planner-hints-v1
 - forecast-v1
+- context-anchors-v1
 - answer-v1
 - markov-trace-v1
+- puzzle-sketch-v1
+- proof-artifact-v1
 
 Defined here for later stages (not yet emitted by all CLIs):
 - ingest-wiki-v1
@@ -98,6 +101,15 @@ forecast-v1
  Outputs:
  - Forecast hash
 
+context-anchors-v1
+ Purpose:
+ Record low-weight query terms derived from recent conversation messages.
+ Inputs:
+ - PromptPack hash
+ - LexiconSnapshot hash (optional; when available for filtering)
+ Outputs:
+ - ContextAnchors hash (ContextAnchorsV1)
+
 answer-v1
  Purpose:
  Full answering loop (retrieve + evidence + plan + realize).
@@ -108,6 +120,7 @@ answer-v1
  - LexiconSnapshot hash (optional; when query expansion enabled)
  - PragmaticsFrame hash(es) (optional; when provided)
  - EvidenceBundle hash
+ - ContextAnchors hash (optional; when conversation history is present)
  - RealizerDirectives hash (optional)
  - PlannerHints hash
  - Forecast hash
@@ -177,3 +190,20 @@ build-lexicon-snapshot-v1 (planned)
  - LexiconSegment hash(es)
  Outputs:
  - LexiconSnapshot hash
+
+puzzle-sketch-v1
+ Purpose:
+ Record a pending PuzzleSketchArtifactV1 when the system asks a logic-puzzle clarifying question.
+ Inputs:
+ - PromptPack hash
+ - LexiconSnapshot hash (optional; when lexicon was used to filter cues)
+ Outputs:
+ - PuzzleSketchArtifactV1 hash
+
+proof-artifact-v1
+ Purpose:
+ Record a ProofArtifactV1 produced by the deterministic logic solver.
+ Inputs:
+ - PromptPack hash
+ Outputs:
+ - ProofArtifactV1 hash

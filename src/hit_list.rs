@@ -65,8 +65,7 @@ impl HitListV1 {
 
     /// Encode as canonical bytes, assuming the list is already canonical.
     pub fn encode_assuming_canonical(&self) -> Result<Vec<u8>, EncodeError> {
-        self.validate_canonical()
-            .map_err(|_| EncodeError::new("hit list not canonical"))?;
+        self.validate_canonical().map_err(|_| EncodeError::new("hit list not canonical"))?;
 
         let mut cap: usize = 2 + 32 + 32 + 1 + 4;
         if self.tie_control_id.is_some() {
@@ -132,25 +131,15 @@ impl HitListV1 {
             seg.copy_from_slice(r.read_fixed(32)?);
             let row_ix = r.read_u32()?;
             let score = r.read_u64()?;
-            hits.push(HitV1 {
-                frame_seg: seg,
-                row_ix,
-                score,
-            });
+            hits.push(HitV1 { frame_seg: seg, row_ix, score });
         }
 
         if r.remaining() != 0 {
             return Err(DecodeError::new("trailing bytes"));
         }
 
-        let out = HitListV1 {
-            query_id,
-            snapshot_id,
-            tie_control_id,
-            hits,
-        };
-        out.validate_canonical()
-            .map_err(|_| DecodeError::new("hit list not canonical"))?;
+        let out = HitListV1 { query_id, snapshot_id, tie_control_id, hits };
+        out.validate_canonical().map_err(|_| DecodeError::new("hit list not canonical"))?;
         Ok(out)
     }
 
@@ -236,23 +225,25 @@ fn tiebreak_key(seed: u64, frame_seg: &Hash32, row_ix: u32) -> u64 {
 
 fn cmp_hit(a: &HitV1, b: &HitV1, tie_seed: Option<u64>) -> Ordering {
     match b.score.cmp(&a.score) {
-        Ordering::Equal => match tie_seed {
-            None => match a.frame_seg.cmp(&b.frame_seg) {
-                Ordering::Equal => a.row_ix.cmp(&b.row_ix),
-                x => x,
-            },
-            Some(seed) => {
-                let ka = tiebreak_key(seed, &a.frame_seg, a.row_ix);
-                let kb = tiebreak_key(seed, &b.frame_seg, b.row_ix);
-                match ka.cmp(&kb) {
-                    Ordering::Equal => match a.frame_seg.cmp(&b.frame_seg) {
-                        Ordering::Equal => a.row_ix.cmp(&b.row_ix),
-                        x => x,
-                    },
+        Ordering::Equal => {
+            match tie_seed {
+                None => match a.frame_seg.cmp(&b.frame_seg) {
+                    Ordering::Equal => a.row_ix.cmp(&b.row_ix),
                     x => x,
+                },
+                Some(seed) => {
+                    let ka = tiebreak_key(seed, &a.frame_seg, a.row_ix);
+                    let kb = tiebreak_key(seed, &b.frame_seg, b.row_ix);
+                    match ka.cmp(&kb) {
+                        Ordering::Equal => match a.frame_seg.cmp(&b.frame_seg) {
+                            Ordering::Equal => a.row_ix.cmp(&b.row_ix),
+                            x => x,
+                        },
+                        x => x,
+                    }
                 }
             }
-        },
+        }
         x => x,
     }
 }
@@ -274,16 +265,8 @@ mod tests {
             snapshot_id: s,
             tie_control_id: None,
             hits: vec![
-                HitV1 {
-                    frame_seg: b,
-                    row_ix: 2,
-                    score: 7,
-                },
-                HitV1 {
-                    frame_seg: a,
-                    row_ix: 1,
-                    score: 7,
-                },
+                HitV1 { frame_seg: b, row_ix: 2, score: 7 },
+                HitV1 { frame_seg: a, row_ix: 1, score: 7 },
             ],
         };
 
@@ -311,16 +294,8 @@ mod tests {
             snapshot_id: s,
             tie_control_id: Some(ctrl),
             hits: vec![
-                HitV1 {
-                    frame_seg: a,
-                    row_ix: 1,
-                    score: 10,
-                },
-                HitV1 {
-                    frame_seg: b,
-                    row_ix: 1,
-                    score: 10,
-                },
+                HitV1 { frame_seg: a, row_ix: 1, score: 10 },
+                HitV1 { frame_seg: b, row_ix: 1, score: 10 },
             ],
         };
 
@@ -340,16 +315,8 @@ mod tests {
             snapshot_id: s,
             tie_control_id: None,
             hits: vec![
-                HitV1 {
-                    frame_seg: a,
-                    row_ix: 1,
-                    score: 1,
-                },
-                HitV1 {
-                    frame_seg: a,
-                    row_ix: 1,
-                    score: 1,
-                },
+                HitV1 { frame_seg: a, row_ix: 1, score: 1 },
+                HitV1 { frame_seg: a, row_ix: 1, score: 1 },
             ],
         };
 

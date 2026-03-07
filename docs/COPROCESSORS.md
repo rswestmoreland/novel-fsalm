@@ -75,7 +75,7 @@ Directives constrain style, tone, and formatting without changing evidence.
 stage status:
 - contract and codec are complete.
 - derivation rules from PragmaticsFrameV1 are implemented.
-- Realizer integration is pending .
+- Realizer integration is implemented (realizer applies directives for tone/style/format).
 
 
 Safety reflex (Asimov-inspired)

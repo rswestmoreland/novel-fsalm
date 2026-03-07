@@ -110,7 +110,7 @@ mod tests {
     use crate::artifact::FsArtifactStore;
     use crate::cache::CacheCfgV1;
     use crate::frame::Id64;
-    use crate::lexicon::{LemmaId, LemmaKeyId, LemmaRowV1, TextId, LEXICON_SCHEMA_V1};
+    use crate::lexicon::{LemmaRowV1, LemmaId, LemmaKeyId, TextId, LEXICON_SCHEMA_V1};
 
     fn tmp_dir(name: &str) -> std::path::PathBuf {
         use std::fs;
@@ -153,15 +153,10 @@ mod tests {
         let seg = sample_segment();
         let h = put_lexicon_segment_v1(&store, &seg).unwrap();
 
-        let mut cache: Cache2Q<Hash32, Arc<LexiconSegmentV1>> =
-            Cache2Q::new(CacheCfgV1::new(1_000_000));
+        let mut cache: Cache2Q<Hash32, Arc<LexiconSegmentV1>> = Cache2Q::new(CacheCfgV1::new(1_000_000));
 
-        let a1 = get_lexicon_segment_v1_cached(&store, &mut cache, &h)
-            .unwrap()
-            .unwrap();
-        let a2 = get_lexicon_segment_v1_cached(&store, &mut cache, &h)
-            .unwrap()
-            .unwrap();
+        let a1 = get_lexicon_segment_v1_cached(&store, &mut cache, &h).unwrap().unwrap();
+        let a2 = get_lexicon_segment_v1_cached(&store, &mut cache, &h).unwrap().unwrap();
 
         assert!(Arc::ptr_eq(&a1, &a2));
     }

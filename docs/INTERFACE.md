@@ -1,6 +1,9 @@
 Interface Plan (How users talk to FSA-LM)
 ========================================
 
+NOTE: This doc is an early interface plan. For the current supported CLI surface, see docs/CLI.md.
+
+
 Goal
 ----
 Expose the runtime in a way that is:

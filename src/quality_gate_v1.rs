@@ -22,7 +22,7 @@ use crate::forecast::ForecastV1;
 use crate::frame::{derive_id64, Id64};
 use crate::hash::Hash32;
 use crate::markov_hints::{
-    MarkovChoiceKindV1, MarkovHintsFlagsV1, MarkovHintsV1, MH_FLAG_HAS_PRAGMATICS,
+    MarkovChoiceKindV1, MarkovHintsFlagsV1, MarkovHintsV1, MH_FLAG_HAS_HISTORY, MH_FLAG_HAS_PRAGMATICS,
 };
 use crate::markov_model::{MarkovModelV1, MarkovTokenV1};
 use crate::markov_runtime::derive_markov_hints_opener_preface_v1;
@@ -66,6 +66,7 @@ pub fn derive_markov_hints_opener_preface_opt(
     model_hash: Hash32,
     model: &MarkovModelV1,
     directives: Option<&RealizerDirectivesV1>,
+    context_tokens: &[MarkovTokenV1],
     markov_max_choices: usize,
 ) -> Option<MarkovHintsV1> {
     if markov_max_choices == 0 {
@@ -76,17 +77,19 @@ pub fn derive_markov_hints_opener_preface_opt(
         return None;
     }
     let mut flags: MarkovHintsFlagsV1 = 0;
+    if !context_tokens.is_empty() {
+        flags |= MH_FLAG_HAS_HISTORY;
+    }
     if has_pragmatics {
         flags |= MH_FLAG_HAS_PRAGMATICS;
     }
-    let ctx: [MarkovTokenV1; 0] = [];
     Some(derive_markov_hints_opener_preface_v1(
         query_id,
         flags,
         model_hash,
         model,
         d.tone,
-        &ctx,
+        context_tokens,
         markov_max_choices,
     ))
 }
@@ -135,11 +138,7 @@ pub fn build_markov_trace_tokens_v1(
     let mut out: Vec<MarkovTokenV1> = Vec::with_capacity(
         plan.items.len()
             + if did_append_q { 1 } else { 0 }
-            + if opener_preface_choice.is_some() {
-                1
-            } else {
-                0
-            },
+            + if opener_preface_choice.is_some() { 1 } else { 0 },
     );
 
     if let Some(cid) = opener_preface_choice {
@@ -177,6 +176,9 @@ pub fn build_markov_trace_tokens_v1(
 mod tests {
     use super::*;
     use crate::answer_plan::{AnswerPlanItemKindV1, AnswerPlanItemV1};
+    use crate::markov_model::{MarkovNextV1, MarkovStateV1, MARKOV_MODEL_V1_VERSION};
+    use crate::realizer_directives::{REALIZER_DIRECTIVES_V1_VERSION, StyleV1, ToneV1};
+
 
     #[test]
     fn build_markov_trace_tokens_includes_preface_first() {
@@ -191,4 +193,87 @@ mod tests {
         assert_eq!(toks.len(), 2);
         assert_eq!(toks[0], MarkovTokenV1::new(MarkovChoiceKindV1::Opener, pre));
     }
+
+    #[test]
+    fn derive_markov_hints_sets_history_flag_when_context_nonempty() {
+        let query_id: Hash32 = [0u8; 32];
+        let model_hash: Hash32 = [1u8; 32];
+
+        let directives = RealizerDirectivesV1 {
+            version: REALIZER_DIRECTIVES_V1_VERSION,
+            tone: ToneV1::Supportive,
+            style: StyleV1::Default,
+            format_flags: 0,
+            max_softeners: 0,
+            max_preface_sentences: 1,
+            max_hedges: 0,
+            max_questions: 0,
+            rationale_codes: Vec::new(),
+        };
+
+        let ctx_tok = MarkovTokenV1::new(MarkovChoiceKindV1::Transition, Id64(777));
+        let pre0 = derive_id64(b"markov_choice_v1", b"preface:supportive:0");
+        let pre1 = derive_id64(b"markov_choice_v1", b"preface:supportive:1");
+
+        // states are canonical: higher-order context first.
+        let s1 = MarkovStateV1 {
+            context: vec![ctx_tok],
+            escape_count: 0,
+            next: vec![MarkovNextV1 {
+                token: MarkovTokenV1::new(MarkovChoiceKindV1::Opener, pre1),
+                count: 9,
+            }],
+        };
+        let s0 = MarkovStateV1 {
+            context: Vec::new(),
+            escape_count: 0,
+            next: vec![
+                MarkovNextV1 {
+                    token: MarkovTokenV1::new(MarkovChoiceKindV1::Opener, pre0),
+                    count: 10,
+                },
+                MarkovNextV1 {
+                    token: MarkovTokenV1::new(MarkovChoiceKindV1::Opener, pre1),
+                    count: 8,
+                },
+            ],
+        };
+
+        let model = MarkovModelV1 {
+            version: MARKOV_MODEL_V1_VERSION,
+            order_n_max: 3,
+            max_next_per_state: 8,
+            total_transitions: 27,
+            corpus_hash: [2u8; 32],
+            states: vec![s1, s0],
+        };
+        assert!(model.validate().is_ok());
+
+        let h0 = derive_markov_hints_opener_preface_opt(
+            query_id,
+            false,
+            model_hash,
+            &model,
+            Some(&directives),
+            &[],
+            8,
+        )
+        .unwrap();
+        assert_eq!(h0.flags & crate::markov_hints::MH_FLAG_HAS_HISTORY, 0);
+
+        let h1 = derive_markov_hints_opener_preface_opt(
+            query_id,
+            false,
+            model_hash,
+            &model,
+            Some(&directives),
+            &[ctx_tok],
+            8,
+        )
+        .unwrap();
+        assert_ne!(h1.flags & crate::markov_hints::MH_FLAG_HAS_HISTORY, 0);
+        assert_ne!(h0.context_hash, h1.context_hash);
+        assert_ne!(h0.state_id, h1.state_id);
+    }
+
 }

@@ -15,9 +15,7 @@
 //!
 //! ASCII-only comments.
 
-use crate::answer_plan::{
-    AnswerPlanItemKindV1, AnswerPlanItemV1, AnswerPlanV1, AnswerPlanValidateError,
-};
+use crate::answer_plan::{AnswerPlanItemKindV1, AnswerPlanItemV1, AnswerPlanV1, AnswerPlanValidateError};
 use crate::evidence_bundle::EvidenceBundleV1;
 use crate::hash::Hash32;
 
@@ -139,18 +137,19 @@ pub fn plan_from_evidence_bundle_v1(
     Ok(plan)
 }
 
+
 use crate::forecast::{
     ForecastIntentKindV1, ForecastIntentV1, ForecastQuestionV1, ForecastV1, FC_FLAG_HAS_PRAGMATICS,
 };
 use crate::frame::Id64;
 use crate::planner_hints::{
-    PlannerFollowupV1, PlannerHintItemV1, PlannerHintKindV1, PlannerHintsFlagsV1, PlannerHintsV1,
+    PlannerHintKindV1, PlannerHintItemV1, PlannerFollowupV1, PlannerHintsV1, PlannerHintsFlagsV1,
     PH_FLAG_PREFER_CAVEATS, PH_FLAG_PREFER_CLARIFY, PH_FLAG_PREFER_DIRECT, PH_FLAG_PREFER_STEPS,
 };
 use crate::pragmatics_frame::{
     PragmaticsFrameV1, INTENT_FLAG_HAS_CODE, INTENT_FLAG_HAS_CONSTRAINTS, INTENT_FLAG_HAS_MATH,
     INTENT_FLAG_HAS_QUESTION, INTENT_FLAG_HAS_REQUEST, INTENT_FLAG_IS_FOLLOW_UP,
-    INTENT_FLAG_SAFETY_SENSITIVE,
+    INTENT_FLAG_IS_LOGIC_PUZZLE, INTENT_FLAG_IS_PROBLEM_SOLVE, INTENT_FLAG_SAFETY_SENSITIVE,
 };
 
 // Internal stable ids for planner hints.
@@ -165,6 +164,16 @@ const FOLLOWUP_ID_SCOPE: u64 = 100;
 const FOLLOWUP_ID_CONSTRAINTS: u64 = 101;
 const FOLLOWUP_ID_EXAMPLE: u64 = 102;
 const FOLLOWUP_ID_NEXT_STEPS: u64 = 103;
+
+// Problem-solving followups (general troubleshooting / retrospection).
+const FOLLOWUP_ID_EXPECTED_ACTUAL: u64 = 104;
+const FOLLOWUP_ID_REPRO: u64 = 105;
+const FOLLOWUP_ID_WHAT_CHANGED: u64 = 106;
+const FOLLOWUP_ID_ENV: u64 = 107;
+
+// Logic puzzle followups.
+const FOLLOWUP_ID_PUZZLE_VARS: u64 = 108;
+const FOLLOWUP_ID_PUZZLE_UNIQUE: u64 = 109;
 
 // Internal stable ids for forecast intents.
 const FC_INTENT_ID_CLARIFY: u64 = 1;
@@ -181,6 +190,15 @@ const FC_QUESTION_ID_STYLE: u64 = 200;
 const FC_QUESTION_ID_CONSTRAINTS: u64 = 201;
 const FC_QUESTION_ID_EXAMPLE: u64 = 202;
 const FC_QUESTION_ID_COMPARE: u64 = 203;
+
+
+// Additional forecast questions for problem-solving and logic puzzles.
+const FC_QUESTION_ID_EXPECTED_ACTUAL: u64 = 204;
+const FC_QUESTION_ID_REPRO: u64 = 205;
+const FC_QUESTION_ID_WHAT_CHANGED: u64 = 206;
+const FC_QUESTION_ID_ENV: u64 = 207;
+const FC_QUESTION_ID_PUZZLE_VARS: u64 = 208;
+const FC_QUESTION_ID_PUZZLE_UNIQUE: u64 = 209;
 
 /// Planner output bundle including guidance artifacts.
 ///
@@ -266,6 +284,8 @@ fn build_planner_hints_v1(
     let mut has_code = false;
     let mut has_math = false;
     let mut is_follow_up = false;
+    let mut is_problem_solve = false;
+    let mut is_logic_puzzle = false;
     let mut safety_sensitive = false;
 
     if let Some(p) = prag_opt {
@@ -276,20 +296,22 @@ fn build_planner_hints_v1(
         has_code = (f & INTENT_FLAG_HAS_CODE) != 0;
         has_math = (f & INTENT_FLAG_HAS_MATH) != 0;
         is_follow_up = (f & INTENT_FLAG_IS_FOLLOW_UP) != 0;
+        is_problem_solve = (f & INTENT_FLAG_IS_PROBLEM_SOLVE) != 0;
+        is_logic_puzzle = (f & INTENT_FLAG_IS_LOGIC_PUZZLE) != 0;
         safety_sensitive = (f & INTENT_FLAG_SAFETY_SENSITIVE) != 0;
     }
 
     let evidence_n = evidence.items.len();
 
     // Prefer clarify when we have very little evidence or a follow-up question.
-    let prefer_clarify =
-        evidence_n == 0 || (has_question && is_follow_up) || (has_question && evidence_n < 2);
+    let prefer_clarify = evidence_n == 0 || (has_question && is_follow_up) || (has_question && evidence_n < 2);
     if prefer_clarify {
         flags |= PH_FLAG_PREFER_CLARIFY;
     }
 
     // Prefer steps when the message contains constraints, code, or math.
-    let prefer_steps = has_constraints || has_code || has_math;
+    // Also prefer steps for problem-solving and logic puzzles when detected by pragmatics.
+    let prefer_steps = has_constraints || has_code || has_math || is_problem_solve || is_logic_puzzle;
     if prefer_steps {
         flags |= PH_FLAG_PREFER_STEPS;
     }
@@ -394,6 +416,48 @@ fn build_planner_hints_v1(
         ));
     }
 
+    if is_problem_solve {
+        followups.push(PlannerFollowupV1::new(
+            Id64(FOLLOWUP_ID_EXPECTED_ACTUAL),
+            75,
+            "What did you expect to happen, and what actually happened?".to_string(),
+            50,
+        ));
+        followups.push(PlannerFollowupV1::new(
+            Id64(FOLLOWUP_ID_REPRO),
+            70,
+            "Can you share a minimal reproduction (exact command, input, and output)?".to_string(),
+            51,
+        ));
+        followups.push(PlannerFollowupV1::new(
+            Id64(FOLLOWUP_ID_WHAT_CHANGED),
+            65,
+            "What changed most recently before this started happening?".to_string(),
+            52,
+        ));
+        followups.push(PlannerFollowupV1::new(
+            Id64(FOLLOWUP_ID_ENV),
+            60,
+            "What environment details matter (OS, versions, config, and constraints)?".to_string(),
+            53,
+        ));
+    }
+
+    if is_logic_puzzle {
+        followups.push(PlannerFollowupV1::new(
+            Id64(FOLLOWUP_ID_PUZZLE_VARS),
+            80,
+            "Can you list the variables and allowed values (domains) in a structured form?".to_string(),
+            60,
+        ));
+        followups.push(PlannerFollowupV1::new(
+            Id64(FOLLOWUP_ID_PUZZLE_UNIQUE),
+            75,
+            "Is there exactly one solution, or are multiple solutions allowed?".to_string(),
+            61,
+        ));
+    }
+
     followups.push(PlannerFollowupV1::new(
         Id64(FOLLOWUP_ID_EXAMPLE),
         40,
@@ -413,8 +477,7 @@ fn build_planner_hints_v1(
 
     // Enforce canonical caps deterministically.
     if out.hints.len() > crate::planner_hints::PLANNER_HINTS_V1_MAX_HINTS {
-        out.hints
-            .truncate(crate::planner_hints::PLANNER_HINTS_V1_MAX_HINTS);
+        out.hints.truncate(crate::planner_hints::PLANNER_HINTS_V1_MAX_HINTS);
     }
     if out.followups.len() > crate::planner_hints::PLANNER_HINTS_V1_MAX_FOLLOWUPS {
         out.followups
@@ -457,9 +520,7 @@ fn sort_and_dedupe_forecast_intents(mut items: Vec<ForecastIntentV1>) -> Vec<For
     out
 }
 
-fn sort_and_dedupe_forecast_questions(
-    mut items: Vec<ForecastQuestionV1>,
-) -> Vec<ForecastQuestionV1> {
+fn sort_and_dedupe_forecast_questions(mut items: Vec<ForecastQuestionV1>) -> Vec<ForecastQuestionV1> {
     items.sort_by(|a, b| {
         let o = b.score.cmp(&a.score);
         if o != core::cmp::Ordering::Equal {
@@ -495,6 +556,14 @@ fn build_forecast_v1(
     let prefer_clarify = (hints.flags & PH_FLAG_PREFER_CLARIFY) != 0;
     let prefer_steps = (hints.flags & PH_FLAG_PREFER_STEPS) != 0;
     let prefer_caveats = (hints.flags & PH_FLAG_PREFER_CAVEATS) != 0;
+
+    let mut is_problem_solve = false;
+    let mut is_logic_puzzle = false;
+    if let Some(p) = prag_opt {
+        let f = p.flags;
+        is_problem_solve = (f & INTENT_FLAG_IS_PROBLEM_SOLVE) != 0;
+        is_logic_puzzle = (f & INTENT_FLAG_IS_LOGIC_PUZZLE) != 0;
+    }
 
     if prefer_clarify {
         intents.push(ForecastIntentV1::new(
@@ -535,6 +604,28 @@ fn build_forecast_v1(
                 Id64(FC_INTENT_ID_NEXT_STEPS),
                 50,
                 5,
+            ));
+        }
+        if (p.flags & INTENT_FLAG_IS_PROBLEM_SOLVE) != 0 {
+            intents.push(ForecastIntentV1::new(
+                ForecastIntentKindV1::VerifyOrTroubleshoot,
+                Id64(FC_INTENT_ID_VERIFY),
+                55,
+                6,
+            ));
+            intents.push(ForecastIntentV1::new(
+                ForecastIntentKindV1::MoreDetail,
+                Id64(FC_INTENT_ID_MORE_DETAIL),
+                50,
+                7,
+            ));
+        }
+        if (p.flags & INTENT_FLAG_IS_LOGIC_PUZZLE) != 0 {
+            intents.push(ForecastIntentV1::new(
+                ForecastIntentKindV1::Clarify,
+                Id64(FC_INTENT_ID_CLARIFY),
+                60,
+                6,
             ));
         }
         if (p.flags & INTENT_FLAG_HAS_CODE) != 0 {
@@ -591,12 +682,58 @@ fn build_forecast_v1(
     ));
 
     if prefer_clarify {
-        questions.push(ForecastQuestionV1::new(
-            Id64(FC_QUESTION_ID_CONSTRAINTS),
-            90,
-            "What constraints should I assume?".to_string(),
-            2,
-        ));
+        if is_logic_puzzle {
+            questions.push(ForecastQuestionV1::new(
+                Id64(FC_QUESTION_ID_PUZZLE_VARS),
+                95,
+                "Can you list the variables and allowed values (domains)?".to_string(),
+                2,
+            ));
+            questions.push(ForecastQuestionV1::new(
+                Id64(FC_QUESTION_ID_PUZZLE_UNIQUE),
+                90,
+                "Should I assume there is exactly one solution?".to_string(),
+                3,
+            ));
+        } else if is_problem_solve {
+            questions.push(ForecastQuestionV1::new(
+                Id64(FC_QUESTION_ID_EXPECTED_ACTUAL),
+                95,
+                "What did you expect to happen, and what actually happened?".to_string(),
+                2,
+            ));
+            questions.push(ForecastQuestionV1::new(
+                Id64(FC_QUESTION_ID_REPRO),
+                90,
+                "Can you share a minimal reproduction (command, input, and output)?".to_string(),
+                3,
+            ));
+            questions.push(ForecastQuestionV1::new(
+                Id64(FC_QUESTION_ID_WHAT_CHANGED),
+                85,
+                "What changed most recently before this started happening?".to_string(),
+                4,
+            ));
+            questions.push(ForecastQuestionV1::new(
+                Id64(FC_QUESTION_ID_ENV),
+                80,
+                "What environment details matter (OS, versions, config, constraints)?".to_string(),
+                5,
+            ));
+            questions.push(ForecastQuestionV1::new(
+                Id64(FC_QUESTION_ID_CONSTRAINTS),
+                70,
+                "What constraints should I assume?".to_string(),
+                6,
+            ));
+        } else {
+            questions.push(ForecastQuestionV1::new(
+                Id64(FC_QUESTION_ID_CONSTRAINTS),
+                90,
+                "What constraints should I assume?".to_string(),
+                2,
+            ));
+        }
     }
 
     questions.push(ForecastQuestionV1::new(
@@ -627,12 +764,10 @@ fn build_forecast_v1(
     };
 
     if out.intents.len() > crate::forecast::FORECAST_V1_MAX_INTENTS {
-        out.intents
-            .truncate(crate::forecast::FORECAST_V1_MAX_INTENTS);
+        out.intents.truncate(crate::forecast::FORECAST_V1_MAX_INTENTS);
     }
     if out.questions.len() > crate::forecast::FORECAST_V1_MAX_QUESTIONS {
-        out.questions
-            .truncate(crate::forecast::FORECAST_V1_MAX_QUESTIONS);
+        out.questions.truncate(crate::forecast::FORECAST_V1_MAX_QUESTIONS);
     }
 
     if out.validate().is_err() {
@@ -671,11 +806,24 @@ fn plan_from_bundle_guided(
     }
 
     if prefer_clarify {
+        // When we prefer clarify, emit a minimal plan that still supports structured output
+        // when steps are requested by hints (constraints/code/math/problem-solve/puzzle).
         let mut it = AnswerPlanItemV1::new(AnswerPlanItemKindV1::Summary);
         if !evidence_bundle.items.is_empty() {
             it.evidence_item_ix.push(0);
         }
         plan.items.push(it);
+
+        let remaining_after_summary = remaining.saturating_sub(1);
+        if prefer_steps && remaining_after_summary > 0 {
+            let n = core::cmp::min(remaining_after_summary, evidence_bundle.items.len());
+            for i in 0..n {
+                let mut st = AnswerPlanItemV1::new(AnswerPlanItemKindV1::Step);
+                st.strength = cfg.bullet_strength;
+                st.evidence_item_ix.push(i as u32);
+                plan.items.push(st);
+            }
+        }
 
         plan.validate().map_err(PlannerV1Error::Plan)?;
         return Ok(plan);
@@ -808,13 +956,10 @@ mod tests {
         assert_eq!(cfg.validate(), Err(PlannerCfgError::BadMaxPlanItems));
     }
 
-    fn sample_prag(
-        flags: crate::pragmatics_frame::IntentFlagsV1,
-    ) -> crate::pragmatics_frame::PragmaticsFrameV1 {
+
+    fn sample_prag(flags: crate::pragmatics_frame::IntentFlagsV1) -> crate::pragmatics_frame::PragmaticsFrameV1 {
         use crate::frame::Id64;
-        use crate::pragmatics_frame::{
-            PragmaticsFrameV1, RhetoricModeV1, PRAGMATICS_FRAME_V1_VERSION,
-        };
+        use crate::pragmatics_frame::{PragmaticsFrameV1, PRAGMATICS_FRAME_V1_VERSION, RhetoricModeV1};
 
         PragmaticsFrameV1 {
             version: PRAGMATICS_FRAME_V1_VERSION,
@@ -880,10 +1025,8 @@ mod tests {
         let cfg = PlannerCfgV1::default_v1();
         let prag = sample_prag(crate::pragmatics_frame::INTENT_FLAG_HAS_REQUEST);
 
-        let o1 =
-            plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
-        let o2 =
-            plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
+        let o1 = plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
+        let o2 = plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
         assert_eq!(o1, o2);
         assert!(o1.hints.validate().is_ok());
         assert!(o1.forecast.validate().is_ok());
@@ -897,12 +1040,8 @@ mod tests {
         let cfg = PlannerCfgV1::default_v1();
         let prag = sample_prag(crate::pragmatics_frame::INTENT_FLAG_HAS_CONSTRAINTS);
 
-        let o =
-            plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
-        assert_ne!(
-            o.hints.flags & crate::planner_hints::PH_FLAG_PREFER_STEPS,
-            0
-        );
+        let o = plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
+        assert_ne!(o.hints.flags & crate::planner_hints::PH_FLAG_PREFER_STEPS, 0);
 
         // If summary-first is present, steps will begin after the summary.
         let mut saw_step = false;
@@ -916,16 +1055,54 @@ mod tests {
     }
 
     #[test]
+    fn plan_with_guidance_prefers_steps_when_problem_solve_present() {
+        let b = sample_bundle_n(3);
+        let bundle_id = blake3_hash(b"bundle_id");
+        let cfg = PlannerCfgV1::default_v1();
+        let prag = sample_prag(crate::pragmatics_frame::INTENT_FLAG_IS_PROBLEM_SOLVE | crate::pragmatics_frame::INTENT_FLAG_HAS_REQUEST);
+
+        let o = plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
+        assert_ne!(o.hints.flags & crate::planner_hints::PH_FLAG_PREFER_STEPS, 0);
+        let mut saw_step = false;
+        for it in o.plan.items.iter() {
+            if it.kind == AnswerPlanItemKindV1::Step {
+                saw_step = true;
+                break;
+            }
+        }
+        assert!(saw_step);
+    }
+
+    #[test]
+    fn forecast_questions_prioritize_problem_solve_when_clarify() {
+        let b = sample_bundle_n(0);
+        let prag = sample_prag(crate::pragmatics_frame::INTENT_FLAG_IS_PROBLEM_SOLVE);
+        let hints = build_planner_hints_v1(b.query_id, &b, Some(&prag));
+        let fc = build_forecast_v1(b.query_id, Some(&prag), &hints);
+        assert!(!fc.questions.is_empty());
+        let top = fc.questions[0].text.to_lowercase();
+        assert!(top.contains("expect") && top.contains("actual"), "top={}", fc.questions[0].text);
+    }
+
+    #[test]
+    fn forecast_questions_prioritize_logic_puzzle_when_clarify() {
+        let b = sample_bundle_n(0);
+        let prag = sample_prag(crate::pragmatics_frame::INTENT_FLAG_IS_LOGIC_PUZZLE);
+        let hints = build_planner_hints_v1(b.query_id, &b, Some(&prag));
+        let fc = build_forecast_v1(b.query_id, Some(&prag), &hints);
+        assert!(!fc.questions.is_empty());
+        let top = fc.questions[0].text.to_lowercase();
+        assert!(top.contains("variables") || top.contains("domains"), "top={}", fc.questions[0].text);
+    }
+
+    #[test]
     fn plan_with_guidance_prefers_clarify_when_no_evidence() {
         let b = sample_bundle_n(0);
         let bundle_id = blake3_hash(b"bundle_id");
         let cfg = PlannerCfgV1::default_v1();
 
         let o = plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, None).unwrap();
-        assert_ne!(
-            o.hints.flags & crate::planner_hints::PH_FLAG_PREFER_CLARIFY,
-            0
-        );
+        assert_ne!(o.hints.flags & crate::planner_hints::PH_FLAG_PREFER_CLARIFY, 0);
         assert_eq!(o.plan.items.len(), 1);
         assert_eq!(o.plan.items[0].kind, AnswerPlanItemKindV1::Summary);
     }

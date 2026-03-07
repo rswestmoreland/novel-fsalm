@@ -66,7 +66,7 @@ Driven by a coverage vector:
 - contradiction risk: polarity or time disagreement among evidence
 
 Actions:
-- Plan targeted retrieval tasks based on the coverage vector:
+- Plan targeted retrieval steps based on the coverage vector:
  - If missing term definitions: pull lexicon sense/relations evidence
  - If single-source: retrieve additional evidence from different doc_id buckets
  - If contradiction risk: search for opposing polarity frames and time variants
@@ -124,7 +124,7 @@ Example defaults (tunable):
 
 Tie-breaking:
 - stable sort by (score desc, evidence_type, stable_id asc)
-- stable planner ordering for targeted tasks
+- stable planner ordering for targeted steps
 
 Coprocessor integration
 -----------------------

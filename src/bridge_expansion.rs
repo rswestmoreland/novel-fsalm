@@ -19,9 +19,9 @@
 //! are mapped into a small integer `qtf` range so weights influence ranking
 //! without exploding scores.
 
-use crate::expanded_qfv::ExpandedQfvItemV1;
 use crate::expansion_budget::{ExpansionBudgetV1, ExpansionKindV1};
 use crate::expansion_builder::{build_expanded_qfv_v1, BaseFeatureV1, ExpansionBuildError};
+use crate::expanded_qfv::ExpandedQfvItemV1;
 use crate::frame::{Id64, TermId};
 use crate::hash::blake3_hash;
 use crate::index_query::{QueryTerm, QueryTermsCfg};
@@ -45,9 +45,7 @@ impl core::fmt::Display for BridgeExpansionError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             BridgeExpansionError::BadCfg(e) => write!(f, "bad bridge expansion config: {}", e),
-            BridgeExpansionError::BuildFailed(e) => {
-                write!(f, "bridge expansion build failed: {}", e)
-            }
+            BridgeExpansionError::BuildFailed(e) => write!(f, "bridge expansion build failed: {}", e),
         }
     }
 }
@@ -317,35 +315,22 @@ fn lex_morphology_candidates(
 }
 
 fn base_terms_and_bases(text: &str, qcfg: &QueryTermsCfg) -> (Vec<QueryTerm>, Vec<BaseFeatureV1>) {
-    let tok_cfg = TokenizerCfg {
-        max_token_bytes: qcfg.tok_cfg.max_token_bytes,
-    };
+    let tok_cfg = TokenizerCfg { max_token_bytes: qcfg.tok_cfg.max_token_bytes };
     let mut tmp: Vec<(QueryTerm, ExpansionKindV1, Id64)> = Vec::new();
     for tf in term_freqs_from_text(text, tok_cfg) {
         tmp.push((
-            QueryTerm {
-                term: tf.term,
-                qtf: tf.tf,
-            },
+            QueryTerm { term: tf.term, qtf: tf.tf },
             ExpansionKindV1::Lex,
             Id64((tf.term.0).0),
         ));
     }
 
     if qcfg.include_metaphone {
-        let tok_cfg2 = TokenizerCfg {
-            max_token_bytes: qcfg.tok_cfg.max_token_bytes,
-        };
-        let meta_cfg = MetaphoneCfg {
-            max_token_bytes: qcfg.meta_cfg.max_token_bytes,
-            max_code_len: qcfg.meta_cfg.max_code_len,
-        };
+        let tok_cfg2 = TokenizerCfg { max_token_bytes: qcfg.tok_cfg.max_token_bytes };
+        let meta_cfg = MetaphoneCfg { max_token_bytes: qcfg.meta_cfg.max_token_bytes, max_code_len: qcfg.meta_cfg.max_code_len };
         for mf in meta_freqs_from_text(text, tok_cfg2, meta_cfg) {
             tmp.push((
-                QueryTerm {
-                    term: TermId(mf.meta.0),
-                    qtf: mf.tf,
-                },
+                QueryTerm { term: TermId(mf.meta.0), qtf: mf.tf },
                 ExpansionKindV1::Meta,
                 mf.meta.0,
             ));
@@ -390,9 +375,7 @@ pub fn bridge_expand_query_terms_v1(
     let (mut base_terms, bases) = base_terms_and_bases(text, qcfg);
     let base_count = base_terms.len();
 
-    let cfg = expand_cfg_opt
-        .copied()
-        .unwrap_or_else(QueryExpansionCfgV1::default);
+    let cfg = expand_cfg_opt.copied().unwrap_or_else(QueryExpansionCfgV1::default);
     if let Err(e) = cfg.validate() {
         return Err(BridgeExpansionError::BadCfg(e));
     }
@@ -413,9 +396,7 @@ pub fn bridge_expand_query_terms_v1(
     }
 
     // Generate candidates and build expanded qfv.
-    let tok_cfg = TokenizerCfg {
-        max_token_bytes: qcfg.tok_cfg.max_token_bytes,
-    };
+    let tok_cfg = TokenizerCfg { max_token_bytes: qcfg.tok_cfg.max_token_bytes };
     let candidates = lex_morphology_candidates(text, tok_cfg, lex);
     if candidates.is_empty() {
         return Ok((base_terms, 0));
@@ -438,10 +419,7 @@ pub fn bridge_expand_query_terms_v1(
         // In v1, we only emit Lex candidates. Future kinds may need domain adapters.
         let term_u64 = it.id.0;
         let qtf = qtf_from_weight_u16(it.weight);
-        base_terms.push(QueryTerm {
-            term: TermId(Id64(term_u64)),
-            qtf,
-        });
+        base_terms.push(QueryTerm { term: TermId(Id64(term_u64)), qtf });
         if seen.binary_search(&term_u64).is_err() {
             let pos = match seen.binary_search(&term_u64) {
                 Ok(_) => 0,
@@ -460,8 +438,8 @@ pub fn bridge_expand_query_terms_v1(
 mod tests {
     use super::*;
     use crate::artifact::ArtifactStore;
-    use crate::hash::blake3_hash;
     use crate::hash::Hash32;
+    use crate::hash::blake3_hash;
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
@@ -472,9 +450,7 @@ mod tests {
 
     impl MemStore {
         fn new() -> MemStore {
-            MemStore {
-                m: std::cell::RefCell::new(BTreeMap::new()),
-            }
+            MemStore { m: std::cell::RefCell::new(BTreeMap::new()) }
         }
     }
 
@@ -543,10 +519,10 @@ mod tests {
         let qcfg = QueryTermsCfg::new();
         let cfg = QueryExpansionCfgV1::default();
 
-        let (t0, n0) = bridge_expand_query_terms_v1("bananas", &qcfg, Some(&lex), None, Some(&cfg))
-            .expect("ok");
-        let (t1, n1) = bridge_expand_query_terms_v1("bananas", &qcfg, Some(&lex), None, Some(&cfg))
-            .expect("ok");
+        let (t0, n0) =
+            bridge_expand_query_terms_v1("bananas", &qcfg, Some(&lex), None, Some(&cfg)).expect("ok");
+        let (t1, n1) =
+            bridge_expand_query_terms_v1("bananas", &qcfg, Some(&lex), None, Some(&cfg)).expect("ok");
 
         assert_eq!(t0, t1);
         assert_eq!(n0, n1);

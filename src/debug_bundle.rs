@@ -94,17 +94,12 @@ impl DebugBundleCfgV1 {
 pub fn export_debug_bundle_v1(cfg: &DebugBundleCfgV1) -> Result<(), DebugBundleError> {
     if let Some(p) = cfg.out_path.parent() {
         if !p.as_os_str().is_empty() {
-            fs::create_dir_all(p)
-                .map_err(|e| DebugBundleError::with_io("create_dir_all failed", e))?;
+            fs::create_dir_all(p).map_err(|e| DebugBundleError::with_io("create_dir_all failed", e))?;
         }
     }
 
-    let store = FsArtifactStore::new(&cfg.root).map_err(|e| {
-        DebugBundleError::with_io(
-            "open store failed",
-            io::Error::new(io::ErrorKind::Other, e.to_string()),
-        )
-    })?;
+    let store = FsArtifactStore::new(&cfg.root)
+        .map_err(|e| DebugBundleError::with_io("open store failed", io::Error::new(io::ErrorKind::Other, e.to_string())))?;
 
     let mut zip = ZipWriter::new(&cfg.out_path)?;
 
@@ -121,7 +116,10 @@ pub fn export_debug_bundle_v1(cfg: &DebugBundleCfgV1) -> Result<(), DebugBundleE
         root_listing.as_bytes(),
     )?;
     for (name, bytes) in root_texts.into_iter() {
-        zip.add_file(&format!("{}/root_files/{}", DEBUG_BUNDLE_DIR, name), &bytes)?;
+        zip.add_file(
+            &format!("{}/root_files/{}", DEBUG_BUNDLE_DIR, name),
+            &bytes,
+        )?;
     }
 
     let artifact_index = build_artifact_index_text(&cfg.root)?;
@@ -142,12 +140,9 @@ pub fn export_debug_bundle_v1(cfg: &DebugBundleCfgV1) -> Result<(), DebugBundleE
         )?;
 
         for h in cfg.include_hashes.iter() {
-            let b = store.get(h).map_err(|e| {
-                DebugBundleError::with_io(
-                    "artifact get failed",
-                    io::Error::new(io::ErrorKind::Other, e.to_string()),
-                )
-            })?;
+            let b = store
+                .get(h)
+                .map_err(|e| DebugBundleError::with_io("artifact get failed", io::Error::new(io::ErrorKind::Other, e.to_string())))?;
             let b = match b {
                 Some(v) => v,
                 None => return Err(DebugBundleError::new("include-hash not found")),
@@ -197,7 +192,10 @@ fn collect_root_files(root: &Path) -> Result<(String, Vec<(String, Vec<u8>)>), D
     for ent in rd {
         let ent = ent.map_err(|e| DebugBundleError::with_io("read_dir entry failed", e))?;
         let p = ent.path();
-        let name = ent.file_name().to_string_lossy().to_string();
+        let name = ent
+            .file_name()
+            .to_string_lossy()
+            .to_string();
         let md = match ent.metadata() {
             Ok(m) => m,
             Err(_) => continue,
@@ -434,8 +432,7 @@ struct ZipCentralEntry {
 
 impl ZipWriter {
     fn new(path: &Path) -> Result<Self, DebugBundleError> {
-        let f = fs::File::create(path)
-            .map_err(|e| DebugBundleError::with_io("create zip failed", e))?;
+        let f = fs::File::create(path).map_err(|e| DebugBundleError::with_io("create zip failed", e))?;
         Ok(Self {
             f,
             entries: Vec::new(),
@@ -524,16 +521,12 @@ impl ZipWriter {
         self.write_u32(cd_size as u32)?;
         self.write_u32(cd_start as u32)?;
         self.write_u16(0)?; // comment len
-        self.f
-            .flush()
-            .map_err(|e| DebugBundleError::with_io("flush failed", e))?;
+        self.f.flush().map_err(|e| DebugBundleError::with_io("flush failed", e))?;
         Ok(())
     }
 
     fn write_all(&mut self, b: &[u8]) -> Result<(), DebugBundleError> {
-        self.f
-            .write_all(b)
-            .map_err(|e| DebugBundleError::with_io("write failed", e))?;
+        self.f.write_all(b).map_err(|e| DebugBundleError::with_io("write failed", e))?;
         self.offset += b.len() as u64;
         Ok(())
     }
@@ -595,7 +588,9 @@ mod tests {
         let n2 = b"debug_bundle/root_files/reduce_out.txt";
         assert!(z.windows(n2.len()).any(|w| w == n2));
         let expect = format!("debug_bundle/artifacts/{}.bin", hex);
-        assert!(z.windows(expect.len()).any(|w| w == expect.as_bytes()));
+        assert!(z
+            .windows(expect.len())
+            .any(|w| w == expect.as_bytes()));
 
         // Sanity: included artifact bytes match expected hash.
         let want = blake3_hash(b"hello");

@@ -37,7 +37,7 @@ Kinds (u8)
 ----------
 - 0: FrameRowRef
 - 1: LexiconRowRef (reserved)
-- 2: ProofRef (reserved)
+- 2: ProofRef (active)
 
 Canonical ordering
 ------------------
@@ -63,9 +63,19 @@ LexiconRowRef payload (kind=1, reserved)
 - Hash32 segment_id
 - u32 row_ix
 
-ProofRef payload (kind=2, reserved)
-----------------------------------
+ProofRef payload (kind=2)
+-------------------------
 - Hash32 proof_id
+
+Notes (ProofRef)
+----------------
+ProofRef is used for deterministic verifier/solver outputs.
+
+- The proof bytes are stored as a ProofArtifactV1 artifact.
+- Answering may attach a ProofRef evidence item when the logic solver runs.
+- ReplayLog records a proof-artifact-v1 step so the proof hash is auditable.
+
+See docs/LOGIC_SOLVER_V1.md.
 
 FrameRowSketchV1 payload
 ------------------------

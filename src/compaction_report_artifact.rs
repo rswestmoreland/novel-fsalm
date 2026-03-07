@@ -16,12 +16,8 @@ pub fn put_compaction_report_v1<S: ArtifactStore>(
     store: &S,
     report: &CompactionReportV1,
 ) -> Result<Hash32, CompactionReportArtifactError> {
-    let bytes = report
-        .encode()
-        .map_err(CompactionReportArtifactError::Encode)?;
-    store
-        .put(&bytes)
-        .map_err(CompactionReportArtifactError::Store)
+    let bytes = report.encode().map_err(CompactionReportArtifactError::Encode)?;
+    store.put(&bytes).map_err(CompactionReportArtifactError::Store)
 }
 
 /// Load and decode a CompactionReportV1 artifact by hash.
@@ -31,9 +27,7 @@ pub fn get_compaction_report_v1<S: ArtifactStore>(
     store: &S,
     hash: &Hash32,
 ) -> Result<Option<CompactionReportV1>, CompactionReportArtifactError> {
-    let bytes_opt = store
-        .get(hash)
-        .map_err(CompactionReportArtifactError::Store)?;
+    let bytes_opt = store.get(hash).map_err(CompactionReportArtifactError::Store)?;
     let bytes = match bytes_opt {
         Some(b) => b,
         None => return Ok(None),

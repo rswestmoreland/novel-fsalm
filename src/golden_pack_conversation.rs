@@ -64,9 +64,7 @@ impl GoldenPackConversationReportV1 {
     /// Encode this report to canonical bytes.
     pub fn encode(&self) -> Result<Vec<u8>, EncodeError> {
         if self.version != GOLDEN_PACK_CONVERSATION_REPORT_V1_VERSION {
-            return Err(EncodeError::new(
-                "unsupported golden conversation report version",
-            ));
+            return Err(EncodeError::new("unsupported golden conversation report version"));
         }
 
         let gp_bytes = self.golden_pack_report.encode()?;
@@ -87,9 +85,7 @@ impl GoldenPackConversationReportV1 {
         let mut r = ByteReader::new(bytes);
         let version = r.read_u16()?;
         if version != GOLDEN_PACK_CONVERSATION_REPORT_V1_VERSION {
-            return Err(DecodeError::new(
-                "unsupported golden conversation report version",
-            ));
+            return Err(DecodeError::new("unsupported golden conversation report version"));
         }
         let pack_name = r.read_str_view()?.to_string();
         let golden_pack_report_hash = read_hash32(&mut r)?;

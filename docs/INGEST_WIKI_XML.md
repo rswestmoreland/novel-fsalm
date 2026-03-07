@@ -1,16 +1,15 @@
 Wikipedia XML ingestion
 ==================================
 
- introduced a TSV adapter for ingesting (title, text) records into cold storage.
+Novel includes a TSV adapter for ingesting (title, text) records into cold storage.
 
- adds a streaming Wikipedia XML extractor that feeds the same ingest pipeline.
+It also includes a streaming Wikipedia XML extractor that feeds the same ingest pipeline.
 
 Input format
 ------------
 The Wikimedia "pages-articles" dump is commonly distributed as `.xml.bz2`.
- does not implement bzip2 decompression (no extra crates).
+The CLI supports .xml.bz2 via the bzip2 crate in streaming mode (memory stays bounded).
 
-Decompress externally and provide an uncompressed UTF-8 XML stream.
 
 What is extracted
 -----------------
@@ -22,13 +21,16 @@ From each `<page>` block (after filtering), we extract:
 
 Namespace filtering
 -------------------
-By default, only `<ns>0</ns>` pages are ingested (main namespace).
+By default, only <ns>0</ns> pages are ingested (main namespace).
 
 Determinism
 -----------
 - Identical XML bytes produce identical extracted text bytes (after entity decode).
 - doc_id is derived from the unescaped title bytes:
- derive_id64("doc\0", title_bytes)
+
+```text
+derive_id64("doc\0", title_bytes)
+```
 
 CLI
 ---
@@ -50,4 +52,4 @@ See:
 Bzip2 streaming support
 ----------------------
 `ingest-wiki-xml` supports `.xml.bz2` via `--xml-bz2 <path>`.
-The decoder is streaming (`File -> BzDecoder -> BufReader`), so memory stays bounded.
+The decoder is streaming (File -> BzDecoder -> BufReader), so memory stays bounded.

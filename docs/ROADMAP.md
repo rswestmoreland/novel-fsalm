@@ -6,15 +6,19 @@ For the authoritative rolling checklist and internal progress tracking, see `doc
 
 Near term
 ---------
-- Keep the end-to-end operator workflow stable and reproducible (shard ingest -> reduce -> replicate -> query/answer).
+- Keep the end-to-end operator workflow stable and reproducible (shard ingest -> reduce -> replicate -> query and answer).
 - Maintain determinism and evidence grounding as the default behavior.
 - Keep automated CI green on Windows and Linux (tests for all targets; warnings treated as errors).
-- Improve release hygiene (CI, packaging, docs consistency).
+- Continue improving operator ergonomics and docs consistency.
+- Extend lexicon workflows:
+  - Add replication support for lexicon artifacts (segments and snapshot) alongside existing index replication.
+  - Broaden Wiktionary extraction coverage while preserving deterministic caps and stable ordering.
+  - Performance pass on Wiktionary ingest and segment building (streaming throughput and allocation trimming) without semantic changes.
 
 Decoding direction
 -----------------
-- **Config 2 (current):** Orchestrator -> draft -> rewrite -> verifier.
-- **Config 3 (later):** Guarded decoding driven by verifier directives (TokenGuard/SpanGuard style constraints).
+- **Configuration A (current):** Orchestrator -> draft -> rewrite -> verifier.
+- **Configuration B (later):** Guarded decoding driven by verifier directives (TokenGuard/SpanGuard style constraints).
 
 Future directions
 -----------------

@@ -123,12 +123,7 @@ pub struct ProofRefV1 {
 
 impl EvidenceBundleV1 {
     /// Create a new empty evidence bundle.
-    pub fn new(
-        query_id: Hash32,
-        snapshot_id: Hash32,
-        limits: EvidenceLimitsV1,
-        score_model_id: u32,
-    ) -> Self {
+    pub fn new(query_id: Hash32, snapshot_id: Hash32, limits: EvidenceLimitsV1, score_model_id: u32) -> Self {
         Self {
             query_id,
             snapshot_id,
@@ -151,8 +146,7 @@ impl EvidenceBundleV1 {
     ///
     /// Returns an error if the bundle violates canonical ordering rules.
     pub fn encode_assuming_canonical(&self) -> Result<Vec<u8>, EncodeError> {
-        self.validate_canonical()
-            .map_err(|_| EncodeError::new("bundle not canonical"))?;
+        self.validate_canonical().map_err(|_| EncodeError::new("bundle not canonical"))?;
 
         // Rough capacity estimate: fixed header + per-item payload.
         let mut cap = 2 + 32 + 32 + 12 + 4 + 4;
@@ -340,8 +334,7 @@ impl EvidenceBundleV1 {
         self.items.sort_unstable_by(item_order);
 
         // Validate final form.
-        self.validate_canonical()
-            .map_err(|_| EncodeError::new("bundle not canonical"))?;
+        self.validate_canonical().map_err(|_| EncodeError::new("bundle not canonical"))?;
         Ok(())
     }
 
@@ -415,9 +408,7 @@ fn stable_id_cmp(a: &EvidenceItemDataV1, b: &EvidenceItemDataV1) -> Ordering {
                 other => other,
             }
         }
-        (EvidenceItemDataV1::Proof(pa), EvidenceItemDataV1::Proof(pb)) => {
-            pa.proof_id.cmp(&pb.proof_id)
-        }
+        (EvidenceItemDataV1::Proof(pa), EvidenceItemDataV1::Proof(pb)) => pa.proof_id.cmp(&pb.proof_id),
         // Kinds differ: should be handled by kind compare.
         _ => a.kind().cmp(&b.kind()),
     }
@@ -467,8 +458,7 @@ fn validate_term_sketch(terms: &[TermTfV1]) -> Result<(), DecodeError> {
         return Ok(());
     }
 
-    let mut seen: FxHashSet<u32> =
-        FxHashSet::with_capacity_and_hasher(terms.len(), Default::default());
+    let mut seen: FxHashSet<u32> = FxHashSet::with_capacity_and_hasher(terms.len(), Default::default());
     for t in terms.iter() {
         if t.tf == 0 {
             return Err(DecodeError::new("tf must be nonzero"));

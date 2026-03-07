@@ -14,11 +14,26 @@
 //!
 //! introduces the policy types () and an apply wrapper ().
 
+use crate::retrieval_gating::GateStatsV1;
 use crate::artifact::ArtifactStore;
 use crate::hash::Hash32;
 use crate::index_query::{IndexQueryError, QueryTerm, SearchCfg, SearchHit};
 use crate::retrieval_control::RetrievalControlV1;
-use crate::retrieval_gating::GateStatsV1;
+
+fn canonicalize_query_terms_in_place(xs: &mut Vec<QueryTerm>) {
+    xs.sort_by(|a, b| (a.term.0).0.cmp(&(b.term.0).0));
+    let mut out: Vec<QueryTerm> = Vec::with_capacity(xs.len());
+    for qt in xs.drain(..) {
+        if let Some(last) = out.last_mut() {
+            if (last.term.0).0 == (qt.term.0).0 {
+                last.qtf = last.qtf.saturating_add(qt.qtf);
+                continue;
+            }
+        }
+        out.push(qt);
+    }
+    *xs = out;
+}
 
 /// Retrieval policy config schema version.
 pub const RETRIEVAL_POLICY_CFG_V1_VERSION: u16 = 1;
@@ -50,25 +65,13 @@ impl core::fmt::Display for RetrievalPolicyCfgError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             RetrievalPolicyCfgError::BadVersion => f.write_str("bad version"),
-            RetrievalPolicyCfgError::MaxQueryTermsZero => {
-                f.write_str("max_query_terms must be >= 1")
-            }
+            RetrievalPolicyCfgError::MaxQueryTermsZero => f.write_str("max_query_terms must be >= 1"),
             RetrievalPolicyCfgError::MaxHitsZero => f.write_str("max_hits must be >= 1"),
-            RetrievalPolicyCfgError::BadIncludeTiesFlag => {
-                f.write_str("include_ties_at_cutoff must be 0 or 1")
-            }
-            RetrievalPolicyCfgError::DenseRowThresholdZero => {
-                f.write_str("dense_row_threshold must be >= 1")
-            }
-            RetrievalPolicyCfgError::BadQueryExpansionFlag => {
-                f.write_str("enable_query_expansion must be 0 or 1")
-            }
-            RetrievalPolicyCfgError::BadMaxHitsPerFrameSeg => {
-                f.write_str("max_hits_per_frame_seg must be 0 or >= 1")
-            }
-            RetrievalPolicyCfgError::BadMaxHitsPerDoc => {
-                f.write_str("max_hits_per_doc must be 0 or >= 1")
-            }
+            RetrievalPolicyCfgError::BadIncludeTiesFlag => f.write_str("include_ties_at_cutoff must be 0 or 1"),
+            RetrievalPolicyCfgError::DenseRowThresholdZero => f.write_str("dense_row_threshold must be >= 1"),
+            RetrievalPolicyCfgError::BadQueryExpansionFlag => f.write_str("enable_query_expansion must be 0 or 1"),
+            RetrievalPolicyCfgError::BadMaxHitsPerFrameSeg => f.write_str("max_hits_per_frame_seg must be 0 or >= 1"),
+            RetrievalPolicyCfgError::BadMaxHitsPerDoc => f.write_str("max_hits_per_doc must be 0 or >= 1"),
             RetrievalPolicyCfgError::BadNoveltyMode => f.write_str("novelty_mode must be 0..=3"),
         }
     }
@@ -266,11 +269,7 @@ impl core::fmt::Display for RetrievalPolicyApplyError {
                 write!(f, "bridge expansion failed: {}", msg)
             }
             RetrievalPolicyApplyError::RefineFrameSegmentNotFound(h) => {
-                write!(
-                    f,
-                    "frame segment not found during refine: {}",
-                    crate::hash::hex32(&h)
-                )
+                write!(f, "frame segment not found during refine: {}", crate::hash::hex32(&h))
             }
             RetrievalPolicyApplyError::RefineFrameSegmentDecode(msg) => {
                 write!(f, "frame segment decode failed during refine: {}", msg)
@@ -312,23 +311,13 @@ fn mix64(mut z: u64) -> u64 {
 
 fn tiebreak_key(seed: u64, frame_seg: &Hash32, row_ix: u32) -> u64 {
     let seg0 = u64::from_le_bytes([
-        frame_seg[0],
-        frame_seg[1],
-        frame_seg[2],
-        frame_seg[3],
-        frame_seg[4],
-        frame_seg[5],
-        frame_seg[6],
-        frame_seg[7],
+        frame_seg[0], frame_seg[1], frame_seg[2], frame_seg[3], frame_seg[4], frame_seg[5], frame_seg[6], frame_seg[7],
     ]);
     let x = seed ^ seg0 ^ (row_ix as u64).wrapping_mul(0x9E3779B97F4A7C15);
     mix64(x.wrapping_add(0x9E3779B97F4A7C15))
 }
 
-fn frame_segment_doc_id(
-    seg: &crate::frame_segment::FrameSegmentV1,
-    row_ix: u32,
-) -> Option<crate::frame::DocId> {
+fn frame_segment_doc_id(seg: &crate::frame_segment::FrameSegmentV1, row_ix: u32) -> Option<crate::frame::DocId> {
     let cr = seg.chunk_rows;
     if cr == 0 {
         return None;
@@ -478,27 +467,29 @@ fn rerank_hits_novelty_v1<S: ArtifactStore>(
         keyed.push((hit.clone(), novelty, tk));
     }
 
-    keyed.sort_by(|a, b| match b.0.score.cmp(&a.0.score) {
-        core::cmp::Ordering::Equal => match b.1.cmp(&a.1) {
-            core::cmp::Ordering::Equal => {
-                if tie_seed.is_some() {
-                    match a.2.cmp(&b.2) {
-                        core::cmp::Ordering::Equal => match a.0.frame_seg.cmp(&b.0.frame_seg) {
+    keyed.sort_by(|a, b| {
+        match b.0.score.cmp(&a.0.score) {
+            core::cmp::Ordering::Equal => match b.1.cmp(&a.1) {
+                core::cmp::Ordering::Equal => {
+                    if tie_seed.is_some() {
+                        match a.2.cmp(&b.2) {
+                            core::cmp::Ordering::Equal => match a.0.frame_seg.cmp(&b.0.frame_seg) {
+                                core::cmp::Ordering::Equal => a.0.row_ix.cmp(&b.0.row_ix),
+                                other => other,
+                            },
+                            other => other,
+                        }
+                    } else {
+                        match a.0.frame_seg.cmp(&b.0.frame_seg) {
                             core::cmp::Ordering::Equal => a.0.row_ix.cmp(&b.0.row_ix),
                             other => other,
-                        },
-                        other => other,
-                    }
-                } else {
-                    match a.0.frame_seg.cmp(&b.0.frame_seg) {
-                        core::cmp::Ordering::Equal => a.0.row_ix.cmp(&b.0.row_ix),
-                        other => other,
+                        }
                     }
                 }
-            }
+                other => other,
+            },
             other => other,
-        },
-        other => other,
+        }
     });
 
     hits.clear();
@@ -679,11 +670,7 @@ pub fn apply_retrieval_policy_v1<S: ArtifactStore>(
     stats.query_terms_original = stats.query_terms_total;
 
     let cap = policy.max_query_terms as usize;
-    let used_terms: &[QueryTerm] = if query_terms.len() > cap {
-        &query_terms[..cap]
-    } else {
-        query_terms
-    };
+    let used_terms: &[QueryTerm] = if query_terms.len() > cap { &query_terms[..cap] } else { query_terms };
     stats.query_terms_used = used_terms.len() as u32;
 
     let include_ties = policy.include_ties_at_cutoff != 0;
@@ -747,13 +734,7 @@ pub fn apply_retrieval_policy_v1<S: ArtifactStore>(
 
     // Apply diversity caps (dedupe + per-segment/per-doc caps) if configured.
     let hits2 = if caps_enabled {
-        refine_hits_diversity_caps_v1(
-            store,
-            &hits1,
-            policy.max_hits as usize,
-            include_ties,
-            policy,
-        )?
+        refine_hits_diversity_caps_v1(store, &hits1, policy.max_hits as usize, include_ties, policy)?
     } else {
         // No caps: if novelty is enabled, we may have oversampled and must truncate.
         if novelty_enabled && !include_ties {
@@ -775,6 +756,7 @@ pub fn apply_retrieval_policy_v1<S: ArtifactStore>(
 
     Ok((hits2, stats))
 }
+
 
 /// Apply a retrieval policy directly from query text.
 ///
@@ -812,11 +794,7 @@ pub fn apply_retrieval_policy_from_text_v1<S: ArtifactStore>(
             .map_err(|e| RetrievalPolicyApplyError::ExpandLexiconLookup(e.to_string()))?;
         let lex = match lex_opt {
             Some(v) => v,
-            None => {
-                return Err(RetrievalPolicyApplyError::ExpandLexiconSnapshotNotFound(
-                    *lex_hash,
-                ))
-            }
+            None => return Err(RetrievalPolicyApplyError::ExpandLexiconSnapshotNotFound(*lex_hash)),
         };
 
         let (qterms2, nu) = match crate::bridge_expansion::bridge_expand_query_terms_v1(
@@ -853,11 +831,121 @@ pub fn apply_retrieval_policy_from_text_v1<S: ArtifactStore>(
     Ok((hits, stats))
 }
 
+
+/// Apply a retrieval policy from query text with optional low-weight context anchors.
+///
+/// This wrapper is intended for conversational follow-ups. When `anchor_terms` is
+/// provided, it merges a bounded set of low-weight terms into the query term list
+/// without exceeding `policy_cfg.max_query_terms`.
+///
+/// Anchor terms are dropped when the query term list is already at the policy cap.
+pub fn apply_retrieval_policy_from_text_v1_with_anchors<S: ArtifactStore>(
+    store: &S,
+    snapshot_hash: &Hash32,
+    sig_map_hash_opt: Option<&Hash32>,
+    query_text: &str,
+    qcfg: &crate::index_query::QueryTermsCfg,
+    policy_cfg: &RetrievalPolicyCfgV1,
+    control_opt: Option<&RetrievalControlV1>,
+    lexicon_snapshot_hash_opt: Option<&Hash32>,
+    expand_cfg_opt: Option<&crate::query_expansion::QueryExpansionCfgV1>,
+    anchor_terms: Option<&[QueryTerm]>,
+) -> Result<(Vec<SearchHit>, RetrievalPolicyStatsV1), RetrievalPolicyApplyError> {
+    // Base terms from the tokenizer.
+    let mut qterms = crate::index_query::query_terms_from_text(query_text, qcfg);
+    let base_count: u32 = qterms.len() as u32;
+
+    // Optional lexicon expansion.
+    let mut new_unique: u32 = 0;
+    if policy_cfg.enable_query_expansion == 1 {
+        let lex_hash = match lexicon_snapshot_hash_opt {
+            Some(h) => h,
+            None => return Err(RetrievalPolicyApplyError::ExpandMissingLexiconSnapshot),
+        };
+
+        let lex_opt = crate::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(store, lex_hash)
+            .map_err(|e| RetrievalPolicyApplyError::ExpandLexiconLookup(e.to_string()))?;
+        let lex = match lex_opt {
+            Some(v) => v,
+            None => return Err(RetrievalPolicyApplyError::ExpandLexiconSnapshotNotFound(*lex_hash)),
+        };
+
+        let (qterms2, nu) = match crate::bridge_expansion::bridge_expand_query_terms_v1(
+            query_text,
+            qcfg,
+            Some(&lex),
+            control_opt,
+            expand_cfg_opt,
+        ) {
+            Ok(x) => x,
+            Err(crate::bridge_expansion::BridgeExpansionError::BadCfg(e)) => {
+                return Err(RetrievalPolicyApplyError::ExpandCfg(e));
+            }
+            Err(e) => return Err(RetrievalPolicyApplyError::ExpandBridge(e.to_string())),
+        };
+
+        qterms = qterms2;
+        new_unique = nu;
+    }
+
+    // Merge anchors without exceeding the policy cap.
+    if let Some(at) = anchor_terms {
+        if !at.is_empty() {
+            let cap = policy_cfg.max_query_terms as usize;
+            if qterms.len() < cap {
+                let mut uniq: Vec<QueryTerm> = at.to_vec();
+                canonicalize_query_terms_in_place(&mut uniq);
+
+                // Track which term ids are already present.
+                let mut seen: Vec<u64> = qterms.iter().map(|qt| (qt.term.0).0).collect();
+                seen.sort_unstable();
+                seen.dedup();
+
+                let mut remaining = cap - qterms.len();
+                for qt in uniq {
+                    if remaining == 0 {
+                        break;
+                    }
+                    let u = (qt.term.0).0;
+                    if seen.binary_search(&u).is_ok() {
+                        continue;
+                    }
+                    qterms.push(QueryTerm { term: qt.term, qtf: qt.qtf });
+                    // Keep seen sorted.
+                    let pos = match seen.binary_search(&u) {
+                        Ok(_) => 0,
+                        Err(p) => p,
+                    };
+                    seen.insert(pos, u);
+                    remaining -= 1;
+                }
+                canonicalize_query_terms_in_place(&mut qterms);
+            }
+        }
+    }
+
+    let (hits, mut stats) = apply_retrieval_policy_v1(
+        store,
+        snapshot_hash,
+        sig_map_hash_opt,
+        &qterms,
+        policy_cfg,
+        control_opt,
+    )?;
+
+    // Override expansion counters.
+    stats.query_terms_original = base_count;
+    stats.query_terms_expanded_new = new_unique;
+
+    Ok((hits, stats))
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::frame::{DocId, FrameRowV1, Id64, SourceId, TermId};
+    use crate::frame::{DocId, FrameRowV1, SourceId, TermId, Id64};
     use crate::frame_segment::FrameSegmentV1;
     use crate::hash::blake3_hash;
     use crate::index_segment::IndexSegmentV1;
@@ -873,9 +961,7 @@ mod tests {
 
     impl MemStore {
         fn new() -> MemStore {
-            MemStore {
-                m: std::cell::RefCell::new(BTreeMap::new()),
-            }
+            MemStore { m: std::cell::RefCell::new(BTreeMap::new()) }
         }
     }
 
@@ -900,9 +986,7 @@ mod tests {
         let doc = DocId(Id64(doc_u64));
         let src = SourceId(Id64(source_u64));
         let mut r = FrameRowV1::new(doc, src);
-        let tcfg = TokenizerCfg {
-            max_token_bytes: 32,
-        };
+        let tcfg = TokenizerCfg { max_token_bytes: 32 };
         r.terms = term_freqs_from_text(text, tcfg);
         r.recompute_doc_len();
         r
@@ -1157,10 +1241,7 @@ mod tests {
 
         let mut q: Vec<QueryTerm> = Vec::new();
         for i in 0..5u64 {
-            q.push(QueryTerm {
-                term: TermId(Id64(100 + i)),
-                qtf: 1,
-            });
+            q.push(QueryTerm { term: TermId(Id64(100 + i)), qtf: 1 });
         }
 
         let mut p = RetrievalPolicyCfgV1::new();
@@ -1169,8 +1250,7 @@ mod tests {
         p.include_ties_at_cutoff = 0;
         p.validate().unwrap();
 
-        let (_hits, stats) =
-            apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
+        let (_hits, stats) = apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
         assert_eq!(stats.query_terms_total, 5);
         assert_eq!(stats.query_terms_used, 2);
     }
@@ -1190,8 +1270,7 @@ mod tests {
         p.max_hits_per_doc = 1;
         p.validate().unwrap();
 
-        let (hits, _stats) =
-            apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
+        let (hits, _stats) = apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
 
         // With max_hits_per_doc=1 and docs {1,2,3}, we can return at most 3 hits.
         assert!(hits.len() <= 3);
@@ -1229,15 +1308,11 @@ mod tests {
         p.max_hits_per_doc = 1;
         p.validate().unwrap();
 
-        let (hits, stats) =
-            apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
+        let (hits, stats) = apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
 
         // All hits have the same score; include_ties should allow returning more than max_hits.
         assert!(hits.len() >= 1);
-        assert_eq!(
-            stats.hits_included_ties,
-            (hits.len() as u32).saturating_sub(1)
-        );
+        assert_eq!(stats.hits_included_ties, (hits.len() as u32).saturating_sub(1));
     }
 
     #[test]
@@ -1254,8 +1329,7 @@ mod tests {
         p.novelty_mode = 1; // doc
         p.validate().unwrap();
 
-        let (hits, _stats) =
-            apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
+        let (hits, _stats) = apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
         assert_eq!(hits.len(), 2);
 
         let mut docs: Vec<u64> = Vec::new();
@@ -1284,8 +1358,7 @@ mod tests {
         p.novelty_mode = 2; // frame segment
         p.validate().unwrap();
 
-        let (hits, _stats) =
-            apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
+        let (hits, _stats) = apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
         assert_eq!(hits.len(), 1);
 
         // Segment frequencies are derived from candidate hits. Identify the rare
@@ -1331,9 +1404,15 @@ mod tests {
 
         let (h_ungated, s_ungated) =
             apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, Some(&ctrl)).unwrap();
-        let (h_gated, s_gated) =
-            apply_retrieval_policy_v1(&store, &snap_hash, Some(&sig_map_hash), &q, &p, Some(&ctrl))
-                .unwrap();
+        let (h_gated, s_gated) = apply_retrieval_policy_v1(
+            &store,
+            &snap_hash,
+            Some(&sig_map_hash),
+            &q,
+            &p,
+            Some(&ctrl),
+        )
+        .unwrap();
 
         assert_eq!(h_ungated, h_gated);
         assert_eq!(s_ungated.hits_returned, s_gated.hits_returned);
@@ -1450,4 +1529,5 @@ mod tests {
 
         assert_eq!(err, RetrievalPolicyApplyError::ExpandMissingLexiconSnapshot);
     }
+
 }

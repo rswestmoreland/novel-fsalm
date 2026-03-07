@@ -121,11 +121,7 @@ fn build_evidence_emits_replay_log_with_query_id_blob() {
         .output()
         .unwrap();
 
-    assert!(
-        out.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
 
     let stdout = String::from_utf8_lossy(&out.stdout);
     let ev_hex = stdout.lines().next().unwrap_or("").trim();
@@ -134,18 +130,11 @@ fn build_evidence_emits_replay_log_with_query_id_blob() {
     // Find the ReplayLog artifact.
     let (replay_hash, replay_bytes, replay) = find_build_evidence_replay_log(&root);
 
-    let stored_replay = store
-        .get(&replay_hash)
-        .unwrap()
-        .expect("replay log artifact");
+    let stored_replay = store.get(&replay_hash).unwrap().expect("replay log artifact");
     assert_eq!(stored_replay, replay_bytes);
 
     assert_eq!(replay.steps.len(), 1);
-    let step = replay
-        .steps
-        .iter()
-        .find(|s| s.name == "build-evidence-v1")
-        .unwrap();
+    let step = replay.steps.iter().find(|s| s.name == "build-evidence-v1").unwrap();
 
     // Inputs: snapshot + query-id blob (and no sig map in this test).
     assert_eq!(step.inputs.len(), 2, "inputs={:?}", step.inputs);
@@ -177,17 +166,11 @@ fn build_evidence_emits_replay_log_with_query_id_blob() {
     assert_eq!(step.outputs, vec![ev_hash]);
 
     // Query-id blob artifact exists and matches.
-    let stored_qid = store
-        .get(&qid_hash)
-        .unwrap()
-        .expect("query-id blob artifact");
+    let stored_qid = store.get(&qid_hash).unwrap().expect("query-id blob artifact");
     assert_eq!(stored_qid, qid_bytes);
 
     // Evidence bundle artifact exists and decodes.
-    let ev_bytes = store
-        .get(&ev_hash)
-        .unwrap()
-        .expect("evidence bundle artifact");
+    let ev_bytes = store.get(&ev_hash).unwrap().expect("evidence bundle artifact");
     let ev = EvidenceBundleV1::decode(&ev_bytes).unwrap();
     assert_eq!(ev.snapshot_id, snap_hash);
 }

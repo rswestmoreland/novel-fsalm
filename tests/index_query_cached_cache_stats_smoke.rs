@@ -8,15 +8,13 @@ use fsa_lm::artifact::{ArtifactResult, ArtifactStore, FsArtifactStore};
 use fsa_lm::cache::{Cache2Q, CacheCfgV1};
 use fsa_lm::frame::{derive_id64, DocId, FrameRowV1, SourceId};
 use fsa_lm::frame_segment::FrameSegmentV1;
-use fsa_lm::frame_store::put_frame_segment_v1;
 use fsa_lm::hash::Hash32;
-use fsa_lm::index_query::{
-    query_terms_from_text, search_snapshot_cached, QueryTermsCfg, SearchCfg,
-};
+use fsa_lm::index_query::{query_terms_from_text, search_snapshot_cached, QueryTermsCfg, SearchCfg};
 use fsa_lm::index_segment::IndexSegmentV1;
 use fsa_lm::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
 use fsa_lm::index_snapshot_store::put_index_snapshot_v1;
 use fsa_lm::index_store::put_index_segment_v1;
+use fsa_lm::frame_store::put_frame_segment_v1;
 use fsa_lm::tokenizer::{term_freqs_from_text, TokenizerCfg};
 
 #[derive(Clone)]
@@ -115,10 +113,8 @@ fn index_query_cached_hits_avoid_second_store_read_and_increment_hits() {
         dense_row_threshold: 200_000,
     };
 
-    let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> =
-        Cache2Q::new(CacheCfgV1::new(10_000_000));
-    let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> =
-        Cache2Q::new(CacheCfgV1::new(10_000_000));
+    let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> = Cache2Q::new(CacheCfgV1::new(10_000_000));
+    let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> = Cache2Q::new(CacheCfgV1::new(10_000_000));
 
     let hits1 = search_snapshot_cached(
         &store,

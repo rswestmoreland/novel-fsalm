@@ -3,9 +3,7 @@
 
 use fsa_lm::artifact::{ArtifactStore, FsArtifactStore};
 use fsa_lm::evidence_artifact::put_evidence_bundle_v1;
-use fsa_lm::evidence_builder::{
-    build_evidence_bundle_v1_from_hits_with_control, EvidenceBuildCfgV1,
-};
+use fsa_lm::evidence_builder::{build_evidence_bundle_v1_from_hits_with_control, EvidenceBuildCfgV1};
 use fsa_lm::evidence_bundle::EvidenceLimitsV1;
 use fsa_lm::frame::{Id64, SourceId};
 use fsa_lm::frame_store::get_frame_segment_v1;
@@ -108,21 +106,15 @@ fn e2e_retrieval_control_does_not_change_evidence_smoke() {
     let qterms = query_terms_from_text(qtext, &qcfg);
 
     // Use k=1 to force a cutoff inside an equal-score tie group.
-    let scfg = SearchCfg {
-        k: 1,
-        entry_cap: 0,
-        dense_row_threshold: 200_000,
-    };
+    let scfg = SearchCfg { k: 1, entry_cap: 0, dense_row_threshold: 200_000 };
 
     let c1 = RetrievalControlV1::new(blake3_hash(b"prompt-a"));
     let c2 = RetrievalControlV1::new(blake3_hash(b"prompt-b"));
     assert!(c1.validate().is_ok());
     assert!(c2.validate().is_ok());
 
-    let hits1 =
-        search_snapshot_with_control(&store, &snap_hash, &qterms, &scfg, Some(&c1)).unwrap();
-    let hits2 =
-        search_snapshot_with_control(&store, &snap_hash, &qterms, &scfg, Some(&c2)).unwrap();
+    let hits1 = search_snapshot_with_control(&store, &snap_hash, &qterms, &scfg, Some(&c1)).unwrap();
+    let hits2 = search_snapshot_with_control(&store, &snap_hash, &qterms, &scfg, Some(&c2)).unwrap();
 
     // With control present, include_ties must expand to include all tied hits at the cutoff.
     assert!(hits1.len() >= 2);
@@ -130,11 +122,7 @@ fn e2e_retrieval_control_does_not_change_evidence_smoke() {
 
     // Evidence build config.
     let score_model_id: u32 = 0;
-    let limits = EvidenceLimitsV1 {
-        segments_touched: 0,
-        max_items: 64,
-        max_bytes: 16 * 1024,
-    };
+    let limits = EvidenceLimitsV1 { segments_touched: 0, max_items: 64, max_bytes: 16 * 1024 };
     let bcfg = EvidenceBuildCfgV1::new();
 
     // Keep query_id independent of control so evidence artifacts are comparable.

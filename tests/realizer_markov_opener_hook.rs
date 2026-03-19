@@ -39,8 +39,14 @@ fn preface_variants_for_tone(t: ToneV1) -> (&'static str, &'static str) {
             "I can help with that. Based on the evidence, here is the clearest answer:",
             "Happy to help. Based on the evidence, here is the clearest answer:",
         ),
-        ToneV1::Neutral => ("Based on the evidence, here is the clearest answer:", "From the available evidence, here is the best-supported answer:"),
-        ToneV1::Direct => ("The evidence points to this answer:", "Most directly, the evidence supports this answer:"),
+        ToneV1::Neutral => (
+            "Based on the evidence, here is the clearest answer:",
+            "From the available evidence, here is the best-supported answer:",
+        ),
+        ToneV1::Direct => (
+            "The evidence points to this answer:",
+            "Most directly, the evidence supports this answer:",
+        ),
         ToneV1::Cautious => (
             "From the available evidence, this is the most supported answer:",
             "With the current evidence, this is the safest answer:",
@@ -148,7 +154,12 @@ fn build_valid_opener_hint(query_id: Hash32, choice_id: Id64) -> MarkovHintsV1 {
         state_id: Id64(0),
         model_hash: [0u8; 32],
         context_hash: [0u8; 32],
-        choices: vec![MarkovChoiceV1::new(MarkovChoiceKindV1::Opener, choice_id, 10, 0)],
+        choices: vec![MarkovChoiceV1::new(
+            MarkovChoiceKindV1::Opener,
+            choice_id,
+            10,
+            0,
+        )],
     }
 }
 
@@ -161,7 +172,12 @@ fn build_transition_hint(query_id: Hash32, choice_id: Id64) -> MarkovHintsV1 {
         state_id: Id64(0),
         model_hash: [0u8; 32],
         context_hash: [0u8; 32],
-        choices: vec![MarkovChoiceV1::new(MarkovChoiceKindV1::Transition, choice_id, 10, 0)],
+        choices: vec![MarkovChoiceV1::new(
+            MarkovChoiceKindV1::Transition,
+            choice_id,
+            10,
+            0,
+        )],
     }
 }
 
@@ -174,7 +190,12 @@ fn build_closer_hint(query_id: Hash32, choice_id: Id64) -> MarkovHintsV1 {
         state_id: Id64(0),
         model_hash: [0u8; 32],
         context_hash: [0u8; 32],
-        choices: vec![MarkovChoiceV1::new(MarkovChoiceKindV1::Closer, choice_id, 10, 0)],
+        choices: vec![MarkovChoiceV1::new(
+            MarkovChoiceKindV1::Closer,
+            choice_id,
+            10,
+            0,
+        )],
     }
 }
 
@@ -188,7 +209,12 @@ fn build_invalid_opener_hint(query_id: Hash32, choice_id: Id64) -> MarkovHintsV1
         state_id: Id64(0),
         model_hash: [0u8; 32],
         context_hash: [0u8; 32],
-        choices: vec![MarkovChoiceV1::new(MarkovChoiceKindV1::Opener, choice_id, 10, 0)],
+        choices: vec![MarkovChoiceV1::new(
+            MarkovChoiceKindV1::Opener,
+            choice_id,
+            10,
+            0,
+        )],
     }
 }
 
@@ -200,10 +226,17 @@ fn markov_none_matches_legacy_api() {
 
     let (evidence, plan) = build_evidence_and_plan();
 
-    for &tone in [ToneV1::Supportive, ToneV1::Neutral, ToneV1::Direct, ToneV1::Cautious].iter() {
+    for &tone in [
+        ToneV1::Supportive,
+        ToneV1::Neutral,
+        ToneV1::Direct,
+        ToneV1::Cautious,
+    ]
+    .iter()
+    {
         let d = build_directives(tone);
-        let a =
-            realize_answer_plan_v1_with_directives(&store, &evidence, &plan, &cfg, Some(&d)).unwrap();
+        let a = realize_answer_plan_v1_with_directives(&store, &evidence, &plan, &cfg, Some(&d))
+            .unwrap();
         let b = realize_answer_plan_v1_with_directives_and_markov(
             &store,
             &evidence,
@@ -225,7 +258,14 @@ fn markov_valid_opener_selects_variant_1() {
 
     let (evidence, plan) = build_evidence_and_plan();
 
-    for &tone in [ToneV1::Supportive, ToneV1::Neutral, ToneV1::Direct, ToneV1::Cautious].iter() {
+    for &tone in [
+        ToneV1::Supportive,
+        ToneV1::Neutral,
+        ToneV1::Direct,
+        ToneV1::Cautious,
+    ]
+    .iter()
+    {
         let d = build_directives(tone);
         let (_v0, v1) = preface_variants_for_tone(tone);
         let choice_id = match tone {
@@ -257,7 +297,14 @@ fn markov_invalid_hints_are_ignored() {
 
     let (evidence, plan) = build_evidence_and_plan();
 
-    for &tone in [ToneV1::Supportive, ToneV1::Neutral, ToneV1::Direct, ToneV1::Cautious].iter() {
+    for &tone in [
+        ToneV1::Supportive,
+        ToneV1::Neutral,
+        ToneV1::Direct,
+        ToneV1::Cautious,
+    ]
+    .iter()
+    {
         let d = build_directives(tone);
         let (v0, _v1) = preface_variants_for_tone(tone);
         let choice_id = match tone {
@@ -280,7 +327,6 @@ fn markov_invalid_hints_are_ignored() {
         assert!(out.contains(v0));
     }
 }
-
 
 fn build_evidence_and_plan_with_caveat() -> (EvidenceBundleV1, AnswerPlanV1) {
     let query_id = blake3_hash(b"q-caveat");
@@ -338,7 +384,6 @@ fn markov_valid_transition_selects_alternate_details_heading() {
     assert!(out.contains("More detail"));
     assert!(!out.contains("Supporting points"));
 }
-
 
 #[test]
 fn markov_valid_closer_selects_alternate_caveat_heading() {

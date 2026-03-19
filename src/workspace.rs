@@ -97,24 +97,39 @@ pub fn parse_workspace_v1_text(text: &str) -> Result<WorkspaceV1, String> {
         let (k, v) = match line.split_once('=') {
             Some((a, b)) => (a.trim(), b.trim()),
             None => {
-                return Err(format!("workspace_v1: invalid line {} (missing '=')", idx + 1));
+                return Err(format!(
+                    "workspace_v1: invalid line {} (missing '=')",
+                    idx + 1
+                ));
             }
         };
 
         match k {
             "merged_snapshot" => {
                 ws.merged_snapshot = Some(parse_hash32_hex(v).map_err(|e| {
-                    format!("workspace_v1: merged_snapshot invalid on line {}: {}", idx + 1, e)
+                    format!(
+                        "workspace_v1: merged_snapshot invalid on line {}: {}",
+                        idx + 1,
+                        e
+                    )
                 })?);
             }
             "merged_sig_map" => {
                 ws.merged_sig_map = Some(parse_hash32_hex(v).map_err(|e| {
-                    format!("workspace_v1: merged_sig_map invalid on line {}: {}", idx + 1, e)
+                    format!(
+                        "workspace_v1: merged_sig_map invalid on line {}: {}",
+                        idx + 1,
+                        e
+                    )
                 })?);
             }
             "lexicon_snapshot" => {
                 ws.lexicon_snapshot = Some(parse_hash32_hex(v).map_err(|e| {
-                    format!("workspace_v1: lexicon_snapshot invalid on line {}: {}", idx + 1, e)
+                    format!(
+                        "workspace_v1: lexicon_snapshot invalid on line {}: {}",
+                        idx + 1,
+                        e
+                    )
                 })?);
             }
             "default_k" => {
@@ -124,27 +139,47 @@ pub fn parse_workspace_v1_text(text: &str) -> Result<WorkspaceV1, String> {
             }
             "default_expand" => {
                 ws.default_expand = Some(parse_bool01(v).map_err(|e| {
-                    format!("workspace_v1: default_expand invalid on line {}: {}", idx + 1, e)
+                    format!(
+                        "workspace_v1: default_expand invalid on line {}: {}",
+                        idx + 1,
+                        e
+                    )
                 })?);
             }
             "default_meta" => {
                 ws.default_meta = Some(parse_bool01(v).map_err(|e| {
-                    format!("workspace_v1: default_meta invalid on line {}: {}", idx + 1, e)
+                    format!(
+                        "workspace_v1: default_meta invalid on line {}: {}",
+                        idx + 1,
+                        e
+                    )
                 })?);
             }
             "markov_model" => {
                 ws.markov_model = Some(parse_hash32_hex(v).map_err(|e| {
-                    format!("workspace_v1: markov_model invalid on line {}: {}", idx + 1, e)
+                    format!(
+                        "workspace_v1: markov_model invalid on line {}: {}",
+                        idx + 1,
+                        e
+                    )
                 })?);
             }
             "exemplar_memory" => {
                 ws.exemplar_memory = Some(parse_hash32_hex(v).map_err(|e| {
-                    format!("workspace_v1: exemplar_memory invalid on line {}: {}", idx + 1, e)
+                    format!(
+                        "workspace_v1: exemplar_memory invalid on line {}: {}",
+                        idx + 1,
+                        e
+                    )
                 })?);
             }
             "graph_relevance" => {
                 ws.graph_relevance = Some(parse_hash32_hex(v).map_err(|e| {
-                    format!("workspace_v1: graph_relevance invalid on line {}: {}", idx + 1, e)
+                    format!(
+                        "workspace_v1: graph_relevance invalid on line {}: {}",
+                        idx + 1,
+                        e
+                    )
                 })?);
             }
             _ => {
@@ -182,7 +217,8 @@ pub fn read_workspace_v1(root: &Path) -> io::Result<Option<WorkspaceV1>> {
             ));
         }
     };
-    let ws = parse_workspace_v1_text(s).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let ws =
+        parse_workspace_v1_text(s).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     Ok(Some(ws))
 }
 
@@ -251,7 +287,11 @@ fn atomic_write_text(final_path: &Path, text: &str) -> io::Result<()> {
 
     let mut last_err: Option<io::Error> = None;
     for tmp in candidates.iter() {
-        match fs::OpenOptions::new().write(true).create_new(true).open(tmp) {
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(tmp)
+        {
             Ok(mut f) => {
                 if let Err(e) = f.write_all(text.as_bytes()) {
                     let _ = fs::remove_file(tmp);
@@ -292,7 +332,10 @@ fn atomic_write_text(final_path: &Path, text: &str) -> io::Result<()> {
     if let Some(e) = last_err {
         Err(e)
     } else {
-        Err(io::Error::new(io::ErrorKind::Other, "failed to create temp file"))
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "failed to create temp file",
+        ))
     }
 }
 
@@ -317,8 +360,14 @@ mod tests {
             h('3')
         );
         let ws = parse_workspace_v1_text(&t).unwrap();
-        assert_eq!(ws.merged_snapshot.unwrap(), parse_hash32_hex(&h('2')).unwrap());
-        assert_eq!(ws.merged_sig_map.unwrap(), parse_hash32_hex(&h('3')).unwrap());
+        assert_eq!(
+            ws.merged_snapshot.unwrap(),
+            parse_hash32_hex(&h('2')).unwrap()
+        );
+        assert_eq!(
+            ws.merged_sig_map.unwrap(),
+            parse_hash32_hex(&h('3')).unwrap()
+        );
     }
 
     #[test]
@@ -332,12 +381,24 @@ mod tests {
             h('e')
         );
         let ws = parse_workspace_v1_text(&t).unwrap();
-        assert_eq!(ws.merged_snapshot.unwrap(), parse_hash32_hex(&h('a')).unwrap());
-        assert_eq!(ws.merged_sig_map.unwrap(), parse_hash32_hex(&h('b')).unwrap());
+        assert_eq!(
+            ws.merged_snapshot.unwrap(),
+            parse_hash32_hex(&h('a')).unwrap()
+        );
+        assert_eq!(
+            ws.merged_sig_map.unwrap(),
+            parse_hash32_hex(&h('b')).unwrap()
+        );
         assert_eq!(ws.default_expand, Some(true));
         assert_eq!(ws.markov_model.unwrap(), parse_hash32_hex(&h('c')).unwrap());
-        assert_eq!(ws.exemplar_memory.unwrap(), parse_hash32_hex(&h('d')).unwrap());
-        assert_eq!(ws.graph_relevance.unwrap(), parse_hash32_hex(&h('e')).unwrap());
+        assert_eq!(
+            ws.exemplar_memory.unwrap(),
+            parse_hash32_hex(&h('d')).unwrap()
+        );
+        assert_eq!(
+            ws.graph_relevance.unwrap(),
+            parse_hash32_hex(&h('e')).unwrap()
+        );
     }
 
     #[test]

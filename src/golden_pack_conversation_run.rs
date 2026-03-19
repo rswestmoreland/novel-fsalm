@@ -20,8 +20,8 @@ use crate::golden_pack_run::{
     run_golden_pack_v1, GoldenPackRunCfgV1, GoldenPackRunError, GoldenPackRunOutputV1,
 };
 use crate::golden_pack_turn_pairs_run::{
-    run_golden_pack_turn_pairs_v1, GoldenPackTurnPairsRunCfgV1,
-    GoldenPackTurnPairsRunError, GoldenPackTurnPairsRunOutputV1,
+    run_golden_pack_turn_pairs_v1, GoldenPackTurnPairsRunCfgV1, GoldenPackTurnPairsRunError,
+    GoldenPackTurnPairsRunOutputV1,
 };
 use crate::hash::{hex32, Hash32};
 
@@ -157,11 +157,18 @@ mod tests {
     use crate::artifact::FsArtifactStore;
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     fn tmp_dir(name: &str) -> PathBuf {
+        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
         let mut p = std::env::temp_dir();
         p.push("fsa_lm_tests");
-        p.push(name);
+        p.push(format!(
+            "{}_pid{}_{}",
+            name,
+            std::process::id(),
+            NEXT_ID.fetch_add(1, Ordering::Relaxed)
+        ));
         let _ = fs::remove_dir_all(&p);
         fs::create_dir_all(&p).unwrap();
         p

@@ -121,16 +121,27 @@ fn query_index_emits_replay_log_and_hit_list() {
         .output()
         .unwrap();
 
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     // Find the ReplayLog artifact.
     let (replay_hash, replay_bytes, replay) = find_retrieve_replay_log(&root);
 
-    let stored_replay = store.get(&replay_hash).unwrap().expect("replay log artifact");
+    let stored_replay = store
+        .get(&replay_hash)
+        .unwrap()
+        .expect("replay log artifact");
     assert_eq!(stored_replay, replay_bytes);
 
     assert_eq!(replay.steps.len(), 1);
-    let step = replay.steps.iter().find(|s| s.name == "retrieve-v1").unwrap();
+    let step = replay
+        .steps
+        .iter()
+        .find(|s| s.name == "retrieve-v1")
+        .unwrap();
 
     // Inputs: snapshot + query-id blob (and no sig map in this test).
     assert_eq!(step.inputs.len(), 2, "inputs={:?}", step.inputs);
@@ -159,11 +170,17 @@ fn query_index_emits_replay_log_and_hit_list() {
     let hit_list_hash = step.outputs[0];
 
     // Query-id blob artifact exists and matches.
-    let stored_qid = store.get(&qid_hash).unwrap().expect("query-id blob artifact");
+    let stored_qid = store
+        .get(&qid_hash)
+        .unwrap()
+        .expect("query-id blob artifact");
     assert_eq!(stored_qid, qid_bytes);
 
     // HitList artifact exists and decodes.
-    let hl_bytes = store.get(&hit_list_hash).unwrap().expect("hit list artifact");
+    let hl_bytes = store
+        .get(&hit_list_hash)
+        .unwrap()
+        .expect("hit list artifact");
     assert_eq!(blake3_hash(&hl_bytes), hit_list_hash);
     let hl = HitListV1::decode(&hl_bytes).unwrap();
 

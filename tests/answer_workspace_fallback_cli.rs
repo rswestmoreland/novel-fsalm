@@ -119,8 +119,21 @@ fn parse_query_id_from_answer_text(s: &str) -> Option<String> {
     None
 }
 
-fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str, lexicon_snapshot: Option<&str>) {
-    write_workspace_with_defaults(root, merged_snapshot, merged_sig_map, lexicon_snapshot, None, None, None);
+fn write_workspace(
+    root: &Path,
+    merged_snapshot: &str,
+    merged_sig_map: &str,
+    lexicon_snapshot: Option<&str>,
+) {
+    write_workspace_with_defaults(
+        root,
+        merged_snapshot,
+        merged_sig_map,
+        lexicon_snapshot,
+        None,
+        None,
+        None,
+    );
 }
 
 fn write_workspace_with_default_k(
@@ -130,7 +143,15 @@ fn write_workspace_with_default_k(
     lexicon_snapshot: Option<&str>,
     default_k: Option<u32>,
 ) {
-    write_workspace_with_defaults(root, merged_snapshot, merged_sig_map, lexicon_snapshot, default_k, None, None);
+    write_workspace_with_defaults(
+        root,
+        merged_snapshot,
+        merged_sig_map,
+        lexicon_snapshot,
+        default_k,
+        None,
+        None,
+    );
 }
 
 fn write_workspace_with_default_expand(
@@ -140,7 +161,15 @@ fn write_workspace_with_default_expand(
     lexicon_snapshot: Option<&str>,
     default_expand: Option<bool>,
 ) {
-    write_workspace_with_defaults(root, merged_snapshot, merged_sig_map, lexicon_snapshot, None, default_expand, None);
+    write_workspace_with_defaults(
+        root,
+        merged_snapshot,
+        merged_sig_map,
+        lexicon_snapshot,
+        None,
+        default_expand,
+        None,
+    );
 }
 
 fn write_workspace_with_default_meta(
@@ -150,7 +179,15 @@ fn write_workspace_with_default_meta(
     lexicon_snapshot: Option<&str>,
     default_meta: Option<bool>,
 ) {
-    write_workspace_with_defaults(root, merged_snapshot, merged_sig_map, lexicon_snapshot, None, None, default_meta);
+    write_workspace_with_defaults(
+        root,
+        merged_snapshot,
+        merged_sig_map,
+        lexicon_snapshot,
+        None,
+        None,
+        default_meta,
+    );
 }
 
 fn write_workspace_with_defaults(
@@ -216,7 +253,8 @@ fn answer_uses_workspace_defaults_for_snapshot_and_sig_map() {
 
     let (pcode, pout, perr) = run_cmd(bin, &["prompt", "--root", root.to_str().unwrap(), "banana"]);
     assert_eq!(pcode, 0, "stderr={}", String::from_utf8_lossy(&perr));
-    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n")).expect("prompt hash");
+    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n"))
+        .expect("prompt hash");
 
     let out_path = base.join("answer_ws.txt");
     let (acode, _aout, aerr) = run_cmd(
@@ -237,7 +275,10 @@ fn answer_uses_workspace_defaults_for_snapshot_and_sig_map() {
     let s = std::fs::read_to_string(&out_path).unwrap();
     assert!(!s.contains("Answer v1"));
     assert!(!s.contains("query_id="));
-    assert!(s.contains("[E0]"), "expected evidence using workspace defaults");
+    assert!(
+        s.contains("[E0]"),
+        "expected evidence using workspace defaults"
+    );
 }
 
 #[test]
@@ -270,7 +311,8 @@ fn answer_expand_uses_workspace_lexicon_snapshot_when_omitted() {
     );
     assert_eq!(lxcode, 0, "stderr={}", String::from_utf8_lossy(&lxerr));
     let lxout_s = String::from_utf8_lossy(&lxout).replace("\r\n", "\n");
-    let lex_snap_hex = parse_hash_line(&lxout_s, "lexicon_snapshot").expect("lexicon_snapshot line");
+    let lex_snap_hex =
+        parse_hash_line(&lxout_s, "lexicon_snapshot").expect("lexicon_snapshot line");
 
     let (wcode, _wout, werr) = run_cmd(
         bin,
@@ -295,9 +337,13 @@ fn answer_expand_uses_workspace_lexicon_snapshot_when_omitted() {
 
     write_workspace(&root, &idx_snap_hex, &sig_map_hex, Some(&lex_snap_hex));
 
-    let (pcode, pout, perr) = run_cmd(bin, &["prompt", "--root", root.to_str().unwrap(), "bananas"]);
+    let (pcode, pout, perr) = run_cmd(
+        bin,
+        &["prompt", "--root", root.to_str().unwrap(), "bananas"],
+    );
     assert_eq!(pcode, 0, "stderr={}", String::from_utf8_lossy(&perr));
-    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n")).expect("prompt hash");
+    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n"))
+        .expect("prompt hash");
 
     let out_path = base.join("answer_expand_ws.txt");
     let (acode, _aout, aerr) = run_cmd(
@@ -319,7 +365,10 @@ fn answer_expand_uses_workspace_lexicon_snapshot_when_omitted() {
     let s = std::fs::read_to_string(&out_path).unwrap();
     assert!(!s.contains("Answer v1"));
     assert!(!s.contains("query_id="));
-    assert!(s.contains("[E0]"), "expected evidence with expansion using workspace lexicon_snapshot");
+    assert!(
+        s.contains("[E0]"),
+        "expected evidence with expansion using workspace lexicon_snapshot"
+    );
 }
 
 #[test]
@@ -349,7 +398,8 @@ fn answer_without_snapshot_and_without_workspace_fails() {
 
     let (pcode, pout, perr) = run_cmd(bin, &["prompt", "--root", root.to_str().unwrap(), "banana"]);
     assert_eq!(pcode, 0, "stderr={}", String::from_utf8_lossy(&perr));
-    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n")).expect("prompt hash");
+    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n"))
+        .expect("prompt hash");
 
     let out_path = base.join("answer_fail.txt");
     let (acode, _aout, aerr) = run_cmd(
@@ -370,7 +420,6 @@ fn answer_without_snapshot_and_without_workspace_fails() {
     let err_s = String::from_utf8_lossy(&aerr);
     assert!(err_s.contains("workspace"), "stderr={}", err_s);
 }
-
 
 #[test]
 fn answer_uses_workspace_default_k_when_flag_is_omitted() {
@@ -408,7 +457,8 @@ fn answer_uses_workspace_default_k_when_flag_is_omitted() {
 
     let (pcode, pout, perr) = run_cmd(bin, &["prompt", "--root", root.to_str().unwrap(), "banana"]);
     assert_eq!(pcode, 0, "stderr={}", String::from_utf8_lossy(&perr));
-    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n")).expect("prompt hash");
+    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n"))
+        .expect("prompt hash");
 
     let out_path = base.join("answer_default_k.txt");
     let (acode, _aout, aerr) = run_cmd(
@@ -426,9 +476,11 @@ fn answer_uses_workspace_default_k_when_flag_is_omitted() {
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
     let s = std::fs::read_to_string(&out_path).unwrap();
     assert!(s.contains("[E0]"));
-    assert!(!s.contains("[E1]"), "expected workspace default_k=1 to cap evidence items");
+    assert!(
+        !s.contains("[E1]"),
+        "expected workspace default_k=1 to cap evidence items"
+    );
 }
-
 
 #[test]
 fn answer_uses_workspace_default_expand_when_flag_is_omitted() {
@@ -460,7 +512,8 @@ fn answer_uses_workspace_default_expand_when_flag_is_omitted() {
     );
     assert_eq!(lxcode, 0, "stderr={}", String::from_utf8_lossy(&lxerr));
     let lxout_s = String::from_utf8_lossy(&lxout).replace("\r\n", "\n");
-    let lex_snap_hex = parse_hash_line(&lxout_s, "lexicon_snapshot").expect("lexicon_snapshot line");
+    let lex_snap_hex =
+        parse_hash_line(&lxout_s, "lexicon_snapshot").expect("lexicon_snapshot line");
 
     let (wcode, _wout, werr) = run_cmd(
         bin,
@@ -483,11 +536,21 @@ fn answer_uses_workspace_default_expand_when_flag_is_omitted() {
     let idx_snap_hex = parse_first_hex(&bout_s).expect("snapshot hash on stdout");
     let sig_map_hex = parse_stderr_kv(&berr_s, "index_sig_map").expect("index_sig_map= on stderr");
 
-    write_workspace_with_default_expand(&root, &idx_snap_hex, &sig_map_hex, Some(&lex_snap_hex), Some(true));
+    write_workspace_with_default_expand(
+        &root,
+        &idx_snap_hex,
+        &sig_map_hex,
+        Some(&lex_snap_hex),
+        Some(true),
+    );
 
-    let (pcode, pout, perr) = run_cmd(bin, &["prompt", "--root", root.to_str().unwrap(), "bananas"]);
+    let (pcode, pout, perr) = run_cmd(
+        bin,
+        &["prompt", "--root", root.to_str().unwrap(), "bananas"],
+    );
     assert_eq!(pcode, 0, "stderr={}", String::from_utf8_lossy(&perr));
-    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n")).expect("prompt hash");
+    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n"))
+        .expect("prompt hash");
 
     let out_path = base.join("answer_default_expand.txt");
     let (acode, _aout, aerr) = run_cmd(
@@ -506,9 +569,11 @@ fn answer_uses_workspace_default_expand_when_flag_is_omitted() {
     );
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
     let s = std::fs::read_to_string(&out_path).unwrap();
-    assert!(s.contains("[E0]"), "expected workspace default_expand=1 to enable expansion");
+    assert!(
+        s.contains("[E0]"),
+        "expected workspace default_expand=1 to enable expansion"
+    );
 }
-
 
 #[test]
 fn answer_uses_workspace_default_meta_when_flag_is_omitted() {
@@ -546,7 +611,8 @@ fn answer_uses_workspace_default_meta_when_flag_is_omitted() {
 
     let (pcode, pout, perr) = run_cmd(bin, &["prompt", "--root", root.to_str().unwrap(), "banana"]);
     assert_eq!(pcode, 0, "stderr={}", String::from_utf8_lossy(&perr));
-    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n")).expect("prompt hash");
+    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n"))
+        .expect("prompt hash");
 
     let out_default = base.join("answer_default_meta_operator.txt");
     let (dcode, _dout, derr) = run_cmd(
@@ -565,7 +631,8 @@ fn answer_uses_workspace_default_meta_when_flag_is_omitted() {
     );
     assert_eq!(dcode, 0, "stderr={}", String::from_utf8_lossy(&derr));
     let s_default = std::fs::read_to_string(&out_default).unwrap();
-    let qid_default = parse_query_id_from_answer_text(&s_default).expect("query_id in default-meta answer");
+    let qid_default =
+        parse_query_id_from_answer_text(&s_default).expect("query_id in default-meta answer");
 
     let out_explicit = base.join("answer_explicit_meta_operator.txt");
     let (ecode, _eout, eerr) = run_cmd(
@@ -585,9 +652,13 @@ fn answer_uses_workspace_default_meta_when_flag_is_omitted() {
     );
     assert_eq!(ecode, 0, "stderr={}", String::from_utf8_lossy(&eerr));
     let s_explicit = std::fs::read_to_string(&out_explicit).unwrap();
-    let qid_explicit = parse_query_id_from_answer_text(&s_explicit).expect("query_id in explicit-meta answer");
+    let qid_explicit =
+        parse_query_id_from_answer_text(&s_explicit).expect("query_id in explicit-meta answer");
 
-    assert_eq!(qid_default, qid_explicit, "expected workspace default_meta=1 to match explicit --meta query_id");
+    assert_eq!(
+        qid_default, qid_explicit,
+        "expected workspace default_meta=1 to match explicit --meta query_id"
+    );
     assert!(s_default.contains("[E0]"));
     assert!(s_explicit.contains("[E0]"));
 }
@@ -700,7 +771,8 @@ fn answer_uses_workspace_graph_relevance_when_flag_is_omitted() {
 
     let (pcode, pout, perr) = run_cmd(bin, &["prompt", "--root", root.to_str().unwrap(), "banana"]);
     assert_eq!(pcode, 0, "stderr={}", String::from_utf8_lossy(&perr));
-    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n")).expect("prompt hash");
+    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n"))
+        .expect("prompt hash");
 
     let out_path = base.join("answer_graph_ws.txt");
     let (acode, _aout, aerr) = run_cmd(
@@ -719,10 +791,17 @@ fn answer_uses_workspace_graph_relevance_when_flag_is_omitted() {
     );
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
     let s = std::fs::read_to_string(&out_path).unwrap();
-    assert!(s.contains("graph_trace seeds=1 candidates=1 reasons=banana:"), "output={}", s);
-    assert!(s.contains("[E1]"), "expected graph expansion to add a second evidence item; output={}", s);
+    assert!(
+        s.contains("graph_trace seeds=1 candidates=1 reasons=banana:"),
+        "output={}",
+        s
+    );
+    assert!(
+        s.contains("[E1]"),
+        "expected graph expansion to add a second evidence item; output={}",
+        s
+    );
 }
-
 
 #[test]
 fn answer_missing_workspace_markov_model_falls_back_cleanly() {
@@ -772,7 +851,8 @@ fn answer_missing_workspace_markov_model_falls_back_cleanly() {
 
     let (pcode, pout, perr) = run_cmd(bin, &["prompt", "--root", root.to_str().unwrap(), "banana"]);
     assert_eq!(pcode, 0, "stderr={}", String::from_utf8_lossy(&perr));
-    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n")).expect("prompt hash");
+    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n"))
+        .expect("prompt hash");
 
     let out_path = base.join("answer_missing_markov_ws.txt");
     let (acode, _aout, aerr) = run_cmd(
@@ -791,9 +871,12 @@ fn answer_missing_workspace_markov_model_falls_back_cleanly() {
     );
     let aerr_s = String::from_utf8_lossy(&aerr).replace("\r\n", "\n");
     assert_eq!(acode, 0, "stderr={}", aerr_s);
-    assert!(!aerr_s.contains("missing markov model"), "stderr={}", aerr_s);
+    assert!(
+        !aerr_s.contains("missing markov model"),
+        "stderr={}",
+        aerr_s
+    );
     let s = std::fs::read_to_string(&out_path).unwrap();
     assert!(s.contains("Answer v1"), "output={}", s);
     assert!(s.contains("[E0]"), "output={}", s);
 }
-

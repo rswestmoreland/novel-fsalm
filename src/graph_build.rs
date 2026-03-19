@@ -186,19 +186,31 @@ impl<'a> GraphSourceArtifactV1<'a> {
     /// Return the canonical build input for this source artifact.
     pub fn build_input(&self) -> GraphBuildInputV1 {
         match self {
-            GraphSourceArtifactV1::FrameSegment { source_hash, artifact } => {
+            GraphSourceArtifactV1::FrameSegment {
+                source_hash,
+                artifact,
+            } => {
                 let _ = artifact.chunk_rows;
                 GraphBuildInputV1::new(GraphBuildSourceKindV1::FrameSegment, *source_hash)
             }
-            GraphSourceArtifactV1::ReplayLog { source_hash, artifact } => {
+            GraphSourceArtifactV1::ReplayLog {
+                source_hash,
+                artifact,
+            } => {
                 let _ = artifact.version;
                 GraphBuildInputV1::new(GraphBuildSourceKindV1::ReplayLog, *source_hash)
             }
-            GraphSourceArtifactV1::PromptPack { source_hash, artifact } => {
+            GraphSourceArtifactV1::PromptPack {
+                source_hash,
+                artifact,
+            } => {
                 let _ = artifact.version;
                 GraphBuildInputV1::new(GraphBuildSourceKindV1::PromptPack, *source_hash)
             }
-            GraphSourceArtifactV1::ConversationPack { source_hash, artifact } => {
+            GraphSourceArtifactV1::ConversationPack {
+                source_hash,
+                artifact,
+            } => {
                 let _ = artifact.version;
                 GraphBuildInputV1::new(GraphBuildSourceKindV1::ConversationPack, *source_hash)
             }
@@ -684,21 +696,27 @@ mod tests {
             frame_input("seg-a"),
             frame_input("seg-c"),
         ];
-        let (plan, report) = prepare_graph_build_plan_v1(build_id("graph-plan"), inputs, &cfg).expect("plan");
+        let (plan, report) =
+            prepare_graph_build_plan_v1(build_id("graph-plan"), inputs, &cfg).expect("plan");
         assert_eq!(report.inputs_seen, 5);
         assert_eq!(report.inputs_kept, 3);
         assert_eq!(report.inputs_deduped, 1);
         assert_eq!(report.inputs_dropped_by_cap, 1);
         assert_eq!(
             plan.inputs,
-            vec![frame_input("seg-a"), frame_input("seg-b"), prompt_input("prompt-a")]
+            vec![
+                frame_input("seg-a"),
+                frame_input("seg-b"),
+                prompt_input("prompt-a")
+            ]
         );
     }
 
     #[test]
     fn empty_build_is_canonical() {
         let cfg = GraphBuildConfigV1::default_v1();
-        let (plan, _) = prepare_graph_build_plan_v1(build_id("empty"), Vec::new(), &cfg).expect("plan");
+        let (plan, _) =
+            prepare_graph_build_plan_v1(build_id("empty"), Vec::new(), &cfg).expect("plan");
         let graph = empty_graph_relevance_v1(&plan);
         assert!(graph.rows.is_empty());
         assert_eq!(graph.flags, 0);
@@ -711,15 +729,27 @@ mod tests {
         r0.who = Some(EntityId(entity_id("alice")));
         r0.verb = Some(VerbId(verb_id("likes")));
         r0.entity_ids.push(EntityId(entity_id("banana-split")));
-        r0.terms.push(TermFreq { term: TermId(term_id("banana")), tf: 2 });
-        r0.terms.push(TermFreq { term: TermId(term_id("split")), tf: 1 });
+        r0.terms.push(TermFreq {
+            term: TermId(term_id("banana")),
+            tf: 2,
+        });
+        r0.terms.push(TermFreq {
+            term: TermId(term_id("split")),
+            tf: 1,
+        });
         r0.recompute_doc_len();
 
         let mut r1 = FrameRowV1::new(DocId(Id64(2)), SourceId(Id64(10)));
         r1.what = Some(EntityId(entity_id("dessert")));
         r1.verb = Some(VerbId(verb_id("likes")));
-        r1.terms.push(TermFreq { term: TermId(term_id("banana")), tf: 1 });
-        r1.terms.push(TermFreq { term: TermId(term_id("dessert")), tf: 1 });
+        r1.terms.push(TermFreq {
+            term: TermId(term_id("banana")),
+            tf: 1,
+        });
+        r1.terms.push(TermFreq {
+            term: TermId(term_id("dessert")),
+            tf: 1,
+        });
         r1.recompute_doc_len();
 
         let seg = FrameSegmentV1::from_rows(&[r0, r1], 2).expect("segment");
@@ -727,7 +757,10 @@ mod tests {
         let cfg = GraphBuildConfigV1::default_v1();
         let (plan, _) = prepare_graph_build_plan_v1(
             build_id("graph-build"),
-            vec![GraphBuildInputV1::new(GraphBuildSourceKindV1::FrameSegment, seg_hash)],
+            vec![GraphBuildInputV1::new(
+                GraphBuildSourceKindV1::FrameSegment,
+                seg_hash,
+            )],
             &cfg,
         )
         .expect("plan");
@@ -741,7 +774,10 @@ mod tests {
         .expect("mine");
         let graph = finalize_graph_relevance_v1(&plan, rows).expect("finalize");
         assert!(graph.validate().is_ok());
-        assert_eq!(graph.flags, GR_FLAG_HAS_TERM_ROWS | GR_FLAG_HAS_ENTITY_ROWS | GR_FLAG_HAS_VERB_ROWS);
+        assert_eq!(
+            graph.flags,
+            GR_FLAG_HAS_TERM_ROWS | GR_FLAG_HAS_ENTITY_ROWS | GR_FLAG_HAS_VERB_ROWS
+        );
 
         let banana_row = graph
             .rows
@@ -750,18 +786,33 @@ mod tests {
             .expect("banana row");
         assert_eq!(banana_row.edges[0].target_kind, GraphNodeKindV1::Verb);
         assert_eq!(banana_row.edges[0].target_id, verb_id("likes"));
-        assert_eq!(banana_row.edges[0].weight_q16, GRAPH_BUILD_V1_DEFAULT_TERM_VERB_WEIGHT_Q16 * 2);
+        assert_eq!(
+            banana_row.edges[0].weight_q16,
+            GRAPH_BUILD_V1_DEFAULT_TERM_VERB_WEIGHT_Q16 * 2
+        );
         assert_eq!(banana_row.edges[0].hop_count, 1);
         assert_eq!(banana_row.edges[0].flags, GREDGE_FLAG_SYMMETRIC);
-        assert!(banana_row.edges.iter().any(|e| e.target_kind == GraphNodeKindV1::Entity));
-        assert!(banana_row.edges.iter().any(|e| e.target_kind == GraphNodeKindV1::Term));
+        assert!(banana_row
+            .edges
+            .iter()
+            .any(|e| e.target_kind == GraphNodeKindV1::Entity));
+        assert!(banana_row
+            .edges
+            .iter()
+            .any(|e| e.target_kind == GraphNodeKindV1::Term));
     }
 
     #[test]
     fn mine_rows_ignores_unplanned_and_opaque_sources() {
         let mut r0 = FrameRowV1::new(DocId(Id64(1)), SourceId(Id64(10)));
-        r0.terms.push(TermFreq { term: TermId(term_id("alpha")), tf: 1 });
-        r0.terms.push(TermFreq { term: TermId(term_id("beta")), tf: 1 });
+        r0.terms.push(TermFreq {
+            term: TermId(term_id("alpha")),
+            tf: 1,
+        });
+        r0.terms.push(TermFreq {
+            term: TermId(term_id("beta")),
+            tf: 1,
+        });
         r0.recompute_doc_len();
         let seg = FrameSegmentV1::from_rows(&[r0], 1).expect("segment");
         let seg_hash = build_id("kept-seg");
@@ -778,7 +829,10 @@ mod tests {
         let cfg = GraphBuildConfigV1::default_v1();
         let (plan, _) = prepare_graph_build_plan_v1(
             build_id("graph-build-2"),
-            vec![GraphBuildInputV1::new(GraphBuildSourceKindV1::FrameSegment, seg_hash)],
+            vec![GraphBuildInputV1::new(
+                GraphBuildSourceKindV1::FrameSegment,
+                seg_hash,
+            )],
             &cfg,
         )
         .expect("plan");

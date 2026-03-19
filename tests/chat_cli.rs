@@ -6,15 +6,17 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use fsa_lm::artifact::FsArtifactStore;
+use fsa_lm::frame::{derive_id64, Id64};
 use fsa_lm::graph_relevance::{
     GraphNodeKindV1, GraphRelevanceEdgeV1, GraphRelevanceRowV1, GraphRelevanceV1,
     GRAPH_RELEVANCE_V1_VERSION, GREDGE_FLAG_SYMMETRIC, GR_FLAG_HAS_TERM_ROWS,
 };
 use fsa_lm::graph_relevance_artifact::put_graph_relevance_v1;
-use fsa_lm::frame::{derive_id64, Id64};
 use fsa_lm::hash::blake3_hash;
 use fsa_lm::markov_hints::MarkovChoiceKindV1;
-use fsa_lm::markov_model::{MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1, MARKOV_MODEL_V1_VERSION};
+use fsa_lm::markov_model::{
+    MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1, MARKOV_MODEL_V1_VERSION,
+};
 use fsa_lm::markov_model_artifact::put_markov_model_v1;
 use fsa_lm::pragmatics_frame::{PragmaticsFrameV1, RhetoricModeV1, PRAGMATICS_FRAME_V1_VERSION};
 use fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1;
@@ -246,10 +248,23 @@ fn chat_uses_workspace_markov_model_when_flag_is_omitted() {
         stdin.write_all(b"banana\n/exit\n").unwrap();
     }
     let out = child.wait_with_output().unwrap();
-    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout_s = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout_s.contains(supportive_preface_v1()), "stdout={}", stdout_s);
-    assert!(!stdout_s.contains(supportive_preface_v0()), "stdout={}", stdout_s);
+    assert!(
+        stdout_s.contains(supportive_preface_v1()),
+        "stdout={}",
+        stdout_s
+    );
+    assert!(
+        !stdout_s.contains(supportive_preface_v0()),
+        "stdout={}",
+        stdout_s
+    );
 }
 
 fn evidence_lines_from_answer_text(s: &str) -> Vec<String> {
@@ -260,7 +275,15 @@ fn evidence_lines_from_answer_text(s: &str) -> Vec<String> {
 }
 
 fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str) {
-    write_workspace_with_defaults(root, merged_snapshot, merged_sig_map, None, None, None, None);
+    write_workspace_with_defaults(
+        root,
+        merged_snapshot,
+        merged_sig_map,
+        None,
+        None,
+        None,
+        None,
+    );
 }
 
 fn write_workspace_with_defaults(
@@ -272,24 +295,39 @@ fn write_workspace_with_defaults(
     default_expand: Option<bool>,
     default_meta: Option<bool>,
 ) {
-    let mut s = format!("merged_snapshot={}
+    let mut s = format!(
+        "merged_snapshot={}
 merged_sig_map={}
-", merged_snapshot, merged_sig_map);
+",
+        merged_snapshot, merged_sig_map
+    );
     if let Some(h) = lexicon_snapshot {
-        s.push_str(&format!("lexicon_snapshot={}
-", h));
+        s.push_str(&format!(
+            "lexicon_snapshot={}
+",
+            h
+        ));
     }
     if let Some(v) = default_k {
-        s.push_str(&format!("default_k={}
-", v));
+        s.push_str(&format!(
+            "default_k={}
+",
+            v
+        ));
     }
     if let Some(v) = default_expand {
-        s.push_str(&format!("default_expand={}
-", if v { 1 } else { 0 }));
+        s.push_str(&format!(
+            "default_expand={}
+",
+            if v { 1 } else { 0 }
+        ));
     }
     if let Some(v) = default_meta {
-        s.push_str(&format!("default_meta={}
-", if v { 1 } else { 0 }));
+        s.push_str(&format!(
+            "default_meta={}
+",
+            if v { 1 } else { 0 }
+        ));
     }
     std::fs::write(root.join("workspace_v1.txt"), s.as_bytes()).unwrap();
 }
@@ -329,13 +367,7 @@ fn chat_runs_answer_pipeline_using_workspace_defaults() {
     write_workspace(&root, &idx_snap_hex, &sig_map_hex);
 
     let mut child = Command::new(bin)
-        .args([
-            "chat",
-            "--root",
-            root.to_str().unwrap(),
-            "--k",
-            "8",
-        ])
+        .args(["chat", "--root", root.to_str().unwrap(), "--k", "8"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -348,13 +380,22 @@ fn chat_runs_answer_pipeline_using_workspace_defaults() {
     }
 
     let out = child.wait_with_output().unwrap();
-    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let stdout_s = String::from_utf8_lossy(&out.stdout);
     assert!(!stdout_s.contains("Answer v1"), "stdout={}", stdout_s);
     assert!(!stdout_s.contains("query_id="), "stdout={}", stdout_s);
     assert!(!stdout_s.contains("routing_trace "), "stdout={}", stdout_s);
-    assert!(stdout_s.contains("[E0]"), "expected evidence output; stdout={}", stdout_s);
+    assert!(
+        stdout_s.contains("[E0]"),
+        "expected evidence output; stdout={}",
+        stdout_s
+    );
 }
 
 #[test]
@@ -395,14 +436,18 @@ plantain	plantain is related to banana
     let idx_snap_hex = parse_first_hex(&bout_s).expect("snapshot hash on stdout");
     let sig_map_hex = parse_stderr_kv(&berr_s, "index_sig_map").expect("index_sig_map= on stderr");
 
-    write_workspace_with_defaults(&root, &idx_snap_hex, &sig_map_hex, None, Some(1), None, None);
+    write_workspace_with_defaults(
+        &root,
+        &idx_snap_hex,
+        &sig_map_hex,
+        None,
+        Some(1),
+        None,
+        None,
+    );
 
     let mut child = Command::new(bin)
-        .args([
-            "chat",
-            "--root",
-            root.to_str().unwrap(),
-        ])
+        .args(["chat", "--root", root.to_str().unwrap()])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -415,11 +460,20 @@ plantain	plantain is related to banana
     }
 
     let out = child.wait_with_output().unwrap();
-    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let stdout_s = String::from_utf8_lossy(&out.stdout);
     assert!(stdout_s.contains("[E0]"), "stdout={}", stdout_s);
-    assert!(!stdout_s.contains("[E1]"), "expected workspace default_k=1 to cap evidence items; stdout={}", stdout_s);
+    assert!(
+        !stdout_s.contains("[E1]"),
+        "expected workspace default_k=1 to cap evidence items; stdout={}",
+        stdout_s
+    );
 }
 
 #[test]
@@ -478,15 +532,23 @@ fn chat_operator_presentation_preserves_diagnostics() {
     }
 
     let out = child.wait_with_output().unwrap();
-    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let stdout_s = String::from_utf8_lossy(&out.stdout);
     assert!(stdout_s.contains("Answer v1"), "stdout={}", stdout_s);
     assert!(stdout_s.contains("query_id="), "stdout={}", stdout_s);
     assert!(stdout_s.contains("routing_trace "), "stdout={}", stdout_s);
-    assert!(stdout_s.contains("[E0]"), "expected evidence output; stdout={}", stdout_s);
+    assert!(
+        stdout_s.contains("[E0]"),
+        "expected evidence output; stdout={}",
+        stdout_s
+    );
 }
-
 
 #[test]
 fn chat_uses_workspace_default_expand_when_flag_is_omitted() {
@@ -520,7 +582,11 @@ fn chat_uses_workspace_default_expand_when_flag_is_omitted() {
     let lxout_s = String::from_utf8_lossy(&lxout).replace("\r\n", "\n");
     let lex_snap_hex = lxout_s
         .lines()
-        .find_map(|line| line.trim().strip_prefix("lexicon_snapshot=").map(|v| v.trim().to_string()))
+        .find_map(|line| {
+            line.trim()
+                .strip_prefix("lexicon_snapshot=")
+                .map(|v| v.trim().to_string())
+        })
         .expect("lexicon_snapshot line");
 
     let (wcode, _wout, werr) = run_cmd(
@@ -544,16 +610,18 @@ fn chat_uses_workspace_default_expand_when_flag_is_omitted() {
     let idx_snap_hex = parse_first_hex(&bout_s).expect("snapshot hash on stdout");
     let sig_map_hex = parse_stderr_kv(&berr_s, "index_sig_map").expect("index_sig_map= on stderr");
 
-    write_workspace_with_defaults(&root, &idx_snap_hex, &sig_map_hex, Some(&lex_snap_hex), None, Some(true), None);
+    write_workspace_with_defaults(
+        &root,
+        &idx_snap_hex,
+        &sig_map_hex,
+        Some(&lex_snap_hex),
+        None,
+        Some(true),
+        None,
+    );
 
     let mut child = Command::new(bin)
-        .args([
-            "chat",
-            "--root",
-            root.to_str().unwrap(),
-            "--k",
-            "8",
-        ])
+        .args(["chat", "--root", root.to_str().unwrap(), "--k", "8"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -566,12 +634,20 @@ fn chat_uses_workspace_default_expand_when_flag_is_omitted() {
     }
 
     let out = child.wait_with_output().unwrap();
-    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let stdout_s = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout_s.contains("[E0]"), "expected workspace default_expand=1 to enable expansion; stdout={}", stdout_s);
+    assert!(
+        stdout_s.contains("[E0]"),
+        "expected workspace default_expand=1 to enable expansion; stdout={}",
+        stdout_s
+    );
 }
-
 
 #[test]
 fn chat_uses_workspace_default_meta_when_flag_is_omitted() {
@@ -605,7 +681,15 @@ fn chat_uses_workspace_default_meta_when_flag_is_omitted() {
     let idx_snap_hex = parse_first_hex(&bout_s).expect("snapshot hash on stdout");
     let sig_map_hex = parse_stderr_kv(&berr_s, "index_sig_map").expect("index_sig_map= on stderr");
 
-    write_workspace_with_defaults(&root, &idx_snap_hex, &sig_map_hex, None, None, None, Some(true));
+    write_workspace_with_defaults(
+        &root,
+        &idx_snap_hex,
+        &sig_map_hex,
+        None,
+        None,
+        None,
+        Some(true),
+    );
 
     let mut child_default = Command::new(bin)
         .args([
@@ -625,9 +709,15 @@ fn chat_uses_workspace_default_meta_when_flag_is_omitted() {
         stdin.write_all(b"banana\n/exit\n").unwrap();
     }
     let out_default = child_default.wait_with_output().unwrap();
-    assert_eq!(out_default.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out_default.stderr));
+    assert_eq!(
+        out_default.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out_default.stderr)
+    );
     let stdout_default = String::from_utf8_lossy(&out_default.stdout);
-    let qid_default = parse_query_id_from_answer_text(&stdout_default).expect("query_id in default-meta chat answer");
+    let qid_default = parse_query_id_from_answer_text(&stdout_default)
+        .expect("query_id in default-meta chat answer");
 
     let mut child_explicit = Command::new(bin)
         .args([
@@ -648,13 +738,26 @@ fn chat_uses_workspace_default_meta_when_flag_is_omitted() {
         stdin.write_all(b"banana\n/exit\n").unwrap();
     }
     let out_explicit = child_explicit.wait_with_output().unwrap();
-    assert_eq!(out_explicit.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out_explicit.stderr));
+    assert_eq!(
+        out_explicit.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out_explicit.stderr)
+    );
     let stdout_explicit = String::from_utf8_lossy(&out_explicit.stdout);
-    let qid_explicit = parse_query_id_from_answer_text(&stdout_explicit).expect("query_id in explicit-meta chat answer");
+    let qid_explicit = parse_query_id_from_answer_text(&stdout_explicit)
+        .expect("query_id in explicit-meta chat answer");
 
-    assert_eq!(qid_default, qid_explicit, "expected workspace default_meta=1 to match explicit --meta query_id");
+    assert_eq!(
+        qid_default, qid_explicit,
+        "expected workspace default_meta=1 to match explicit --meta query_id"
+    );
     assert!(stdout_default.contains("[E0]"), "stdout={}", stdout_default);
-    assert!(stdout_explicit.contains("[E0]"), "stdout={}", stdout_explicit);
+    assert!(
+        stdout_explicit.contains("[E0]"),
+        "stdout={}",
+        stdout_explicit
+    );
 }
 
 #[test]
@@ -720,7 +823,10 @@ fn chat_uses_workspace_graph_relevance_when_flag_is_omitted() {
         None,
     );
     let mut ws = std::fs::read_to_string(root.join("workspace_v1.txt")).unwrap();
-    ws.push_str(&format!("graph_relevance={}\n", fsa_lm::hash::hex32(&graph_hash)));
+    ws.push_str(&format!(
+        "graph_relevance={}\n",
+        fsa_lm::hash::hex32(&graph_hash)
+    ));
     std::fs::write(root.join("workspace_v1.txt"), ws.as_bytes()).unwrap();
 
     let mut child = Command::new(bin)
@@ -743,13 +849,25 @@ fn chat_uses_workspace_graph_relevance_when_flag_is_omitted() {
     }
 
     let out = child.wait_with_output().unwrap();
-    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let stdout_s = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout_s.contains("graph_trace seeds=1 candidates=1 reasons=banana:"), "stdout={}", stdout_s);
-    assert!(stdout_s.contains("[E1]"), "expected graph expansion to add a second evidence item; stdout={}", stdout_s);
+    assert!(
+        stdout_s.contains("graph_trace seeds=1 candidates=1 reasons=banana:"),
+        "stdout={}",
+        stdout_s
+    );
+    assert!(
+        stdout_s.contains("[E1]"),
+        "expected graph expansion to add a second evidence item; stdout={}",
+        stdout_s
+    );
 }
-
 
 #[test]
 fn chat_workspace_graph_relevance_keeps_lexical_evidence_first() {
@@ -804,15 +922,7 @@ fn chat_workspace_graph_relevance_keeps_lexical_evidence_first() {
     };
     let graph_hash = put_graph_relevance_v1(&store, &graph).unwrap();
 
-    write_workspace_with_defaults(
-        &root,
-        &idx_snap_hex,
-        &sig_map_hex,
-        None,
-        None,
-        None,
-        None,
-    );
+    write_workspace_with_defaults(&root, &idx_snap_hex, &sig_map_hex, None, None, None, None);
 
     let mut child_base = Command::new(bin)
         .args([
@@ -832,14 +942,22 @@ fn chat_workspace_graph_relevance_keeps_lexical_evidence_first() {
         stdin.write_all(b"banana\n/exit\n").unwrap();
     }
     let out_base = child_base.wait_with_output().unwrap();
-    assert_eq!(out_base.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out_base.stderr));
+    assert_eq!(
+        out_base.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out_base.stderr)
+    );
     let stdout_base = String::from_utf8_lossy(&out_base.stdout);
     let base_evidence = evidence_lines_from_answer_text(&stdout_base);
     assert!(!base_evidence.is_empty(), "stdout={}", stdout_base);
 
     let mut ws = std::fs::read_to_string(root.join("workspace_v1.txt")).unwrap();
     ws.push_str("default_expand=1\n");
-    ws.push_str(&format!("graph_relevance={}\n", fsa_lm::hash::hex32(&graph_hash)));
+    ws.push_str(&format!(
+        "graph_relevance={}\n",
+        fsa_lm::hash::hex32(&graph_hash)
+    ));
     std::fs::write(root.join("workspace_v1.txt"), ws.as_bytes()).unwrap();
 
     let mut child_graph = Command::new(bin)
@@ -860,12 +978,24 @@ fn chat_workspace_graph_relevance_keeps_lexical_evidence_first() {
         stdin.write_all(b"banana\n/exit\n").unwrap();
     }
     let out_graph = child_graph.wait_with_output().unwrap();
-    assert_eq!(out_graph.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out_graph.stderr));
+    assert_eq!(
+        out_graph.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out_graph.stderr)
+    );
     let stdout_graph = String::from_utf8_lossy(&out_graph.stdout);
     let graph_evidence = evidence_lines_from_answer_text(&stdout_graph);
     assert!(!graph_evidence.is_empty(), "stdout={}", stdout_graph);
-    assert!(stdout_graph.contains("graph_trace seeds=1 candidates=1 reasons=banana:"), "stdout={}", stdout_graph);
-    assert_eq!(base_evidence[0], graph_evidence[0], "expected lexical top evidence to stay first when workspace graph enrichment is active");
+    assert!(
+        stdout_graph.contains("graph_trace seeds=1 candidates=1 reasons=banana:"),
+        "stdout={}",
+        stdout_graph
+    );
+    assert_eq!(
+        base_evidence[0], graph_evidence[0],
+        "expected lexical top evidence to stay first when workspace graph enrichment is active"
+    );
 }
 
 #[test]
@@ -900,19 +1030,13 @@ fn chat_missing_workspace_graph_relevance_falls_back_cleanly() {
     let idx_snap_hex = parse_first_hex(&bout_s).expect("snapshot hash on stdout");
     let sig_map_hex = parse_stderr_kv(&berr_s, "index_sig_map").expect("index_sig_map= on stderr");
 
-    write_workspace_with_defaults(
-        &root,
-        &idx_snap_hex,
-        &sig_map_hex,
-        None,
-        None,
-        None,
-        None,
-    );
+    write_workspace_with_defaults(&root, &idx_snap_hex, &sig_map_hex, None, None, None, None);
     let mut ws = std::fs::read_to_string(root.join("workspace_v1.txt")).unwrap();
     ws.push_str(&format!(
         "graph_relevance={}\n",
-        fsa_lm::hash::hex32(&fsa_lm::hash::blake3_hash(b"missing-workspace-graph-relevance"))
+        fsa_lm::hash::hex32(&fsa_lm::hash::blake3_hash(
+            b"missing-workspace-graph-relevance"
+        ))
     ));
     std::fs::write(root.join("workspace_v1.txt"), ws.as_bytes()).unwrap();
 
@@ -938,12 +1062,19 @@ fn chat_missing_workspace_graph_relevance_falls_back_cleanly() {
     let out = child.wait_with_output().unwrap();
     let stderr_s = String::from_utf8_lossy(&out.stderr).replace("\r\n", "\n");
     assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", stderr_s);
-    assert!(!stderr_s.contains("graph-relevance load failed"), "stderr={}", stderr_s);
-    assert!(!stderr_s.contains("missing --lexicon-snapshot or --graph-relevance"), "stderr={}", stderr_s);
+    assert!(
+        !stderr_s.contains("graph-relevance load failed"),
+        "stderr={}",
+        stderr_s
+    );
+    assert!(
+        !stderr_s.contains("missing --lexicon-snapshot or --graph-relevance"),
+        "stderr={}",
+        stderr_s
+    );
 
     let stdout_s = String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n");
     assert!(stdout_s.contains("Answer v1"), "stdout={}", stdout_s);
     assert!(stdout_s.contains("[E0]"), "stdout={}", stdout_s);
     assert!(!stdout_s.contains("graph_trace"), "stdout={}", stdout_s);
 }
-

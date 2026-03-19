@@ -27,7 +27,9 @@ pub fn put_conversation_pack<S: ArtifactStore>(
     let bytes = pack
         .encode_assuming_canonical()
         .map_err(ConversationPackArtifactError::Encode)?;
-    store.put(&bytes).map_err(ConversationPackArtifactError::Store)
+    store
+        .put(&bytes)
+        .map_err(ConversationPackArtifactError::Store)
 }
 
 /// Load and decode a ConversationPackV1 artifact by hash.
@@ -35,7 +37,9 @@ pub fn get_conversation_pack<S: ArtifactStore>(
     store: &S,
     hash: &Hash32,
 ) -> Result<Option<ConversationPackV1>, ConversationPackArtifactError> {
-    let bytes_opt = store.get(hash).map_err(ConversationPackArtifactError::Store)?;
+    let bytes_opt = store
+        .get(hash)
+        .map_err(ConversationPackArtifactError::Store)?;
     let bytes = match bytes_opt {
         Some(b) => b,
         None => return Ok(None),

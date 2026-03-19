@@ -14,7 +14,9 @@ pub fn put_puzzle_sketch_artifact_v1<S: ArtifactStore>(
     a: &PuzzleSketchArtifactV1,
 ) -> Result<Hash32, PuzzleSketchArtifactStoreError> {
     let bytes = a.encode().map_err(PuzzleSketchArtifactStoreError::Encode)?;
-    store.put(&bytes).map_err(PuzzleSketchArtifactStoreError::Store)
+    store
+        .put(&bytes)
+        .map_err(PuzzleSketchArtifactStoreError::Store)
 }
 
 /// Load and decode a PuzzleSketchArtifactV1 by hash.
@@ -22,12 +24,15 @@ pub fn get_puzzle_sketch_artifact_v1<S: ArtifactStore>(
     store: &S,
     hash: &Hash32,
 ) -> Result<Option<PuzzleSketchArtifactV1>, PuzzleSketchArtifactStoreError> {
-    let bytes_opt = store.get(hash).map_err(PuzzleSketchArtifactStoreError::Store)?;
+    let bytes_opt = store
+        .get(hash)
+        .map_err(PuzzleSketchArtifactStoreError::Store)?;
     let bytes = match bytes_opt {
         Some(b) => b,
         None => return Ok(None),
     };
-    let a = PuzzleSketchArtifactV1::decode(&bytes).map_err(PuzzleSketchArtifactStoreError::Decode)?;
+    let a =
+        PuzzleSketchArtifactV1::decode(&bytes).map_err(PuzzleSketchArtifactStoreError::Decode)?;
     Ok(Some(a))
 }
 

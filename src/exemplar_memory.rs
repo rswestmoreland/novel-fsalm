@@ -329,7 +329,10 @@ fn source_kind_flag(kind: ExemplarSupportSourceKindV1) -> ExemplarMemoryFlagsV1 
     }
 }
 
-fn cmp_support_ref_canon(a: &ExemplarSupportRefV1, b: &ExemplarSupportRefV1) -> core::cmp::Ordering {
+fn cmp_support_ref_canon(
+    a: &ExemplarSupportRefV1,
+    b: &ExemplarSupportRefV1,
+) -> core::cmp::Ordering {
     match (a.source_kind as u8).cmp(&(b.source_kind as u8)) {
         core::cmp::Ordering::Equal => {}
         o => return o,
@@ -438,7 +441,11 @@ impl ExemplarMemoryV1 {
 
     /// Return true if the record is in canonical row/support-ref order.
     pub fn is_canonical(&self) -> bool {
-        rows_are_canon(&self.rows) && self.rows.iter().all(|r| support_refs_are_canon(&r.support_refs))
+        rows_are_canon(&self.rows)
+            && self
+                .rows
+                .iter()
+                .all(|r| support_refs_are_canon(&r.support_refs))
     }
 
     /// Encode to canonical bytes.
@@ -447,7 +454,9 @@ impl ExemplarMemoryV1 {
             ExemplarMemoryError::BadVersion => EncodeError::new("bad exemplar memory version"),
             ExemplarMemoryError::BadFlags => EncodeError::new("bad exemplar memory flags"),
             ExemplarMemoryError::TooManyRows => EncodeError::new("too many exemplar rows"),
-            ExemplarMemoryError::RowsNotCanonical => EncodeError::new("exemplar rows not canonical"),
+            ExemplarMemoryError::RowsNotCanonical => {
+                EncodeError::new("exemplar rows not canonical")
+            }
             ExemplarMemoryError::BadRowFlags => EncodeError::new("bad exemplar row flags"),
             ExemplarMemoryError::TooManySupportRefs => {
                 EncodeError::new("too many exemplar support refs")
@@ -620,7 +629,10 @@ mod tests {
             flags: EXMEM_FLAG_HAS_REPLAY_LOG | EXMEM_FLAG_HAS_MARKOV_TRACE,
             rows: vec![row],
         };
-        assert_eq!(m.validate(), Err(ExemplarMemoryError::SupportRefsNotCanonical));
+        assert_eq!(
+            m.validate(),
+            Err(ExemplarMemoryError::SupportRefsNotCanonical)
+        );
     }
 
     #[test]

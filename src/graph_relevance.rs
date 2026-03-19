@@ -13,7 +13,7 @@
 //! - no retrieval activation in this module
 
 use crate::codec::{ByteReader, ByteWriter, DecodeError, EncodeError};
-use crate::frame::{Id64};
+use crate::frame::Id64;
 use crate::hash::Hash32;
 
 /// GraphRelevanceV1 schema version.
@@ -172,8 +172,12 @@ impl core::fmt::Display for GraphRelevanceError {
                 f.write_str("graph relevance edges not canonical")
             }
             GraphRelevanceError::BadEdgeFlags => f.write_str("bad graph relevance edge flags"),
-            GraphRelevanceError::ZeroEdgeWeight => f.write_str("graph relevance edge has zero weight"),
-            GraphRelevanceError::ZeroHopCount => f.write_str("graph relevance edge has zero hop count"),
+            GraphRelevanceError::ZeroEdgeWeight => {
+                f.write_str("graph relevance edge has zero weight")
+            }
+            GraphRelevanceError::ZeroHopCount => {
+                f.write_str("graph relevance edge has zero hop count")
+            }
         }
     }
 }
@@ -282,11 +286,19 @@ impl GraphRelevanceV1 {
             GraphRelevanceError::BadFlags => EncodeError::new("bad graph relevance flags"),
             GraphRelevanceError::TooManyRows => EncodeError::new("too many graph relevance rows"),
             GraphRelevanceError::TooManyEdges => EncodeError::new("too many graph relevance edges"),
-            GraphRelevanceError::RowsNotCanonical => EncodeError::new("graph relevance rows not canonical"),
-            GraphRelevanceError::EdgesNotCanonical => EncodeError::new("graph relevance edges not canonical"),
+            GraphRelevanceError::RowsNotCanonical => {
+                EncodeError::new("graph relevance rows not canonical")
+            }
+            GraphRelevanceError::EdgesNotCanonical => {
+                EncodeError::new("graph relevance edges not canonical")
+            }
             GraphRelevanceError::BadEdgeFlags => EncodeError::new("bad graph relevance edge flags"),
-            GraphRelevanceError::ZeroEdgeWeight => EncodeError::new("graph relevance edge has zero weight"),
-            GraphRelevanceError::ZeroHopCount => EncodeError::new("graph relevance edge has zero hop count"),
+            GraphRelevanceError::ZeroEdgeWeight => {
+                EncodeError::new("graph relevance edge has zero weight")
+            }
+            GraphRelevanceError::ZeroHopCount => {
+                EncodeError::new("graph relevance edge has zero hop count")
+            }
         })?;
 
         let mut cap = 48usize;
@@ -371,11 +383,19 @@ impl GraphRelevanceV1 {
             GraphRelevanceError::BadFlags => DecodeError::new("bad graph relevance flags"),
             GraphRelevanceError::TooManyRows => DecodeError::new("too many graph relevance rows"),
             GraphRelevanceError::TooManyEdges => DecodeError::new("too many graph relevance edges"),
-            GraphRelevanceError::RowsNotCanonical => DecodeError::new("graph relevance rows not canonical"),
-            GraphRelevanceError::EdgesNotCanonical => DecodeError::new("graph relevance edges not canonical"),
+            GraphRelevanceError::RowsNotCanonical => {
+                DecodeError::new("graph relevance rows not canonical")
+            }
+            GraphRelevanceError::EdgesNotCanonical => {
+                DecodeError::new("graph relevance edges not canonical")
+            }
             GraphRelevanceError::BadEdgeFlags => DecodeError::new("bad graph relevance edge flags"),
-            GraphRelevanceError::ZeroEdgeWeight => DecodeError::new("graph relevance edge has zero weight"),
-            GraphRelevanceError::ZeroHopCount => DecodeError::new("graph relevance edge has zero hop count"),
+            GraphRelevanceError::ZeroEdgeWeight => {
+                DecodeError::new("graph relevance edge has zero weight")
+            }
+            GraphRelevanceError::ZeroHopCount => {
+                DecodeError::new("graph relevance edge has zero hop count")
+            }
         })?;
         Ok(out)
     }

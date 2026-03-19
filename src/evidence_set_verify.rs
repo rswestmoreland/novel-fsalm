@@ -81,24 +81,67 @@ impl EvidenceSetVerifyError {
 impl core::fmt::Display for EvidenceSetVerifyError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            EvidenceSetVerifyError::EmptyItems => write!(f, "{} evidence_set.items is empty", self.code()),
+            EvidenceSetVerifyError::EmptyItems => {
+                write!(f, "{} evidence_set.items is empty", self.code())
+            }
             EvidenceSetVerifyError::EmptyEvidenceRefs { claim_id } => {
-                write!(f, "{} claim {} has empty evidence_refs", self.code(), claim_id)
+                write!(
+                    f,
+                    "{} claim {} has empty evidence_refs",
+                    self.code(),
+                    claim_id
+                )
             }
             EvidenceSetVerifyError::EvidenceBundleNotFound { evidence_bundle_id } => {
-                write!(f, "{} evidence bundle not found: {}", self.code(), crate::hash::hex32(evidence_bundle_id))
+                write!(
+                    f,
+                    "{} evidence bundle not found: {}",
+                    self.code(),
+                    crate::hash::hex32(evidence_bundle_id)
+                )
             }
-            EvidenceSetVerifyError::EvidenceBundleLoad { evidence_bundle_id, err } => {
-                write!(f, "{} evidence bundle load failed {}: {}", self.code(), crate::hash::hex32(evidence_bundle_id), err)
+            EvidenceSetVerifyError::EvidenceBundleLoad {
+                evidence_bundle_id,
+                err,
+            } => {
+                write!(
+                    f,
+                    "{} evidence bundle load failed {}: {}",
+                    self.code(),
+                    crate::hash::hex32(evidence_bundle_id),
+                    err
+                )
             }
             EvidenceSetVerifyError::FrameSegmentNotFound { segment_id } => {
-                write!(f, "{} frame segment not found: {}", self.code(), crate::hash::hex32(segment_id))
+                write!(
+                    f,
+                    "{} frame segment not found: {}",
+                    self.code(),
+                    crate::hash::hex32(segment_id)
+                )
             }
             EvidenceSetVerifyError::FrameSegmentLoad { segment_id, err } => {
-                write!(f, "{} frame segment load failed {}: {}", self.code(), crate::hash::hex32(segment_id), err)
+                write!(
+                    f,
+                    "{} frame segment load failed {}: {}",
+                    self.code(),
+                    crate::hash::hex32(segment_id),
+                    err
+                )
             }
-            EvidenceSetVerifyError::FrameRowOutOfRange { segment_id, row_ix, row_count } => {
-                write!(f, "{} frame row out of range {} row_ix={} row_count={}", self.code(), crate::hash::hex32(segment_id), row_ix, row_count)
+            EvidenceSetVerifyError::FrameRowOutOfRange {
+                segment_id,
+                row_ix,
+                row_count,
+            } => {
+                write!(
+                    f,
+                    "{} frame row out of range {} row_ix={} row_count={}",
+                    self.code(),
+                    crate::hash::hex32(segment_id),
+                    row_ix,
+                    row_count
+                )
             }
         }
     }
@@ -140,7 +183,9 @@ pub fn verify_evidence_set_v1<S: ArtifactStore>(
 
     for it in set.items.iter() {
         if it.evidence_refs.is_empty() {
-            return Err(EvidenceSetVerifyError::EmptyEvidenceRefs { claim_id: it.claim_id });
+            return Err(EvidenceSetVerifyError::EmptyEvidenceRefs {
+                claim_id: it.claim_id,
+            });
         }
 
         for r in it.evidence_refs.iter() {
@@ -184,24 +229,21 @@ pub fn verify_evidence_set_v1<S: ArtifactStore>(
 mod tests {
     use super::*;
     use crate::artifact::FsArtifactStore;
+    use crate::evidence_artifact::put_evidence_bundle_v1;
+    use crate::evidence_bundle::{
+        EvidenceBundleV1, EvidenceItemDataV1, EvidenceItemV1, EvidenceLimitsV1, FrameRowRefV1,
+    };
     use crate::evidence_set::{EvidenceRowRefV1, EvidenceSetItemV1};
     use crate::frame::{DocId, FrameRowV1, Id64, SourceId};
     use crate::frame_segment::FrameSegmentV1;
     use crate::frame_store::put_frame_segment_v1;
-    use crate::evidence_artifact::put_evidence_bundle_v1;
-    use crate::evidence_bundle::{EvidenceBundleV1, EvidenceItemDataV1, EvidenceItemV1, EvidenceLimitsV1, FrameRowRefV1};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     static TMP_DIR_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
     fn tmp_dir(name: &str) -> std::path::PathBuf {
         let n = TMP_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let suffix = format!(
-            "fsa_lm_evset_verify_{}_{}_{}",
-            name,
-            std::process::id(),
-            n
-        );
+        let suffix = format!("fsa_lm_evset_verify_{}_{}_{}", name, std::process::id(), n);
 
         let mut bases: Vec<std::path::PathBuf> = Vec::new();
         bases.push(std::env::temp_dir());
@@ -267,7 +309,10 @@ mod tests {
             }],
         };
         let got = verify_evidence_set_v1(&store, &set);
-        assert!(matches!(got, Err(EvidenceSetVerifyError::EmptyEvidenceRefs { .. })));
+        assert!(matches!(
+            got,
+            Err(EvidenceSetVerifyError::EmptyEvidenceRefs { .. })
+        ));
     }
 
     #[test]
@@ -287,7 +332,10 @@ mod tests {
             }],
         };
         let got = verify_evidence_set_v1(&store, &set);
-        assert!(matches!(got, Err(EvidenceSetVerifyError::FrameRowOutOfRange { .. })));
+        assert!(matches!(
+            got,
+            Err(EvidenceSetVerifyError::FrameRowOutOfRange { .. })
+        ));
     }
 
     #[test]

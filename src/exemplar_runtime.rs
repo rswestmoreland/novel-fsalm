@@ -10,8 +10,8 @@
 use crate::answer_plan::{AnswerPlanItemKindV1, AnswerPlanV1};
 use crate::exemplar_memory::{
     ExemplarMemoryV1, ExemplarResponseModeV1, ExemplarRowFlagsV1, ExemplarStructureKindV1,
-    ExemplarToneKindV1, EXROW_FLAG_HAS_CLARIFIER, EXROW_FLAG_HAS_COMPARISON,
-    EXROW_FLAG_HAS_STEPS, EXROW_FLAG_HAS_SUMMARY,
+    ExemplarToneKindV1, EXROW_FLAG_HAS_CLARIFIER, EXROW_FLAG_HAS_COMPARISON, EXROW_FLAG_HAS_STEPS,
+    EXROW_FLAG_HAS_SUMMARY,
 };
 use crate::frame::Id64;
 use crate::planner_hints::{
@@ -131,11 +131,13 @@ fn target_from_runtime_inputs_v1(
             response_mode = ExemplarResponseModeV1::Compare;
         } else if (f & INTENT_FLAG_IS_RECOMMEND_REQUEST) != 0 || fallback_recommend {
             response_mode = ExemplarResponseModeV1::Recommend;
-        } else if (f & INTENT_FLAG_IS_SUMMARIZE_REQUEST) != 0 || summary_first || fallback_summarize {
+        } else if (f & INTENT_FLAG_IS_SUMMARIZE_REQUEST) != 0 || summary_first || fallback_summarize
+        {
             response_mode = ExemplarResponseModeV1::Summarize;
         } else if (f & INTENT_FLAG_IS_EXPLAIN_REQUEST) != 0 || fallback_explain {
             response_mode = ExemplarResponseModeV1::Explain;
-        } else if (f & INTENT_FLAG_IS_PROBLEM_SOLVE) != 0 || (f & INTENT_FLAG_IS_LOGIC_PUZZLE) != 0 {
+        } else if (f & INTENT_FLAG_IS_PROBLEM_SOLVE) != 0 || (f & INTENT_FLAG_IS_LOGIC_PUZZLE) != 0
+        {
             response_mode = ExemplarResponseModeV1::Troubleshoot;
         } else if prefer_clarify {
             response_mode = ExemplarResponseModeV1::Clarify;
@@ -175,14 +177,23 @@ fn target_from_runtime_inputs_v1(
         response_mode,
         structure_kind,
         tone_kind,
-        wants_summary: summary_first || fallback_summary_focus || structure_kind == ExemplarStructureKindV1::SummaryFirst,
-        wants_steps: prefer_steps || fallback_steps || structure_kind == ExemplarStructureKindV1::Steps,
-        wants_comparison: compare_hint || fallback_compare || response_mode == ExemplarResponseModeV1::Compare,
+        wants_summary: summary_first
+            || fallback_summary_focus
+            || structure_kind == ExemplarStructureKindV1::SummaryFirst,
+        wants_steps: prefer_steps
+            || fallback_steps
+            || structure_kind == ExemplarStructureKindV1::Steps,
+        wants_comparison: compare_hint
+            || fallback_compare
+            || response_mode == ExemplarResponseModeV1::Compare,
         wants_clarifier: prefer_clarify,
     }
 }
 
-fn row_match_flags_v1(row: &crate::exemplar_memory::ExemplarRowV1, target: &ExemplarTargetV1) -> u8 {
+fn row_match_flags_v1(
+    row: &crate::exemplar_memory::ExemplarRowV1,
+    target: &ExemplarTargetV1,
+) -> u8 {
     let mut flags = 0u8;
     if row.response_mode == target.response_mode {
         flags |= EXAD_MATCH_RESPONSE_MODE;
@@ -208,7 +219,10 @@ fn row_match_flags_v1(row: &crate::exemplar_memory::ExemplarRowV1, target: &Exem
     flags
 }
 
-fn row_match_score_v1(row: &crate::exemplar_memory::ExemplarRowV1, target: &ExemplarTargetV1) -> (u32, u8) {
+fn row_match_score_v1(
+    row: &crate::exemplar_memory::ExemplarRowV1,
+    target: &ExemplarTargetV1,
+) -> (u32, u8) {
     let flags = row_match_flags_v1(row, target);
     let mut score = 0u32;
     if (flags & EXAD_MATCH_RESPONSE_MODE) != 0 {
@@ -324,7 +338,9 @@ fn base_format_flags_for_structure_v1(k: ExemplarStructureKindV1) -> FormatFlags
         ExemplarStructureKindV1::SummaryFirst => FORMAT_FLAG_INCLUDE_SUMMARY,
         ExemplarStructureKindV1::Steps => FORMAT_FLAG_INCLUDE_NEXT_STEPS | FORMAT_FLAG_NUMBERED,
         ExemplarStructureKindV1::Comparison => FORMAT_FLAG_BULLETS,
-        ExemplarStructureKindV1::Recommendation => FORMAT_FLAG_INCLUDE_NEXT_STEPS | FORMAT_FLAG_BULLETS,
+        ExemplarStructureKindV1::Recommendation => {
+            FORMAT_FLAG_INCLUDE_NEXT_STEPS | FORMAT_FLAG_BULLETS
+        }
         ExemplarStructureKindV1::Clarifier => 0,
     }
 }
@@ -374,29 +390,51 @@ fn apply_summary_first_shape_v1(plan: &mut AnswerPlanV1) -> bool {
     if plan_has_kind_v1(plan, AnswerPlanItemKindV1::Summary) {
         return false;
     }
-    if promote_first_kind_to_v1(plan, AnswerPlanItemKindV1::Bullet, AnswerPlanItemKindV1::Summary) {
+    if promote_first_kind_to_v1(
+        plan,
+        AnswerPlanItemKindV1::Bullet,
+        AnswerPlanItemKindV1::Summary,
+    ) {
         return true;
     }
-    promote_first_kind_to_v1(plan, AnswerPlanItemKindV1::Step, AnswerPlanItemKindV1::Summary)
+    promote_first_kind_to_v1(
+        plan,
+        AnswerPlanItemKindV1::Step,
+        AnswerPlanItemKindV1::Summary,
+    )
 }
 
 fn apply_comparison_shape_v1(plan: &mut AnswerPlanV1) -> bool {
     if plan_has_kind_v1(plan, AnswerPlanItemKindV1::Bullet) {
         return false;
     }
-    convert_all_kind_v1(plan, AnswerPlanItemKindV1::Step, AnswerPlanItemKindV1::Bullet)
+    convert_all_kind_v1(
+        plan,
+        AnswerPlanItemKindV1::Step,
+        AnswerPlanItemKindV1::Bullet,
+    )
 }
 
 fn apply_recommendation_shape_v1(plan: &mut AnswerPlanV1, advisory: &ExemplarAdvisoryV1) -> bool {
     let mut changed = false;
     if !plan_has_kind_v1(plan, AnswerPlanItemKindV1::Summary) {
-        if promote_first_kind_to_v1(plan, AnswerPlanItemKindV1::Bullet, AnswerPlanItemKindV1::Summary) {
+        if promote_first_kind_to_v1(
+            plan,
+            AnswerPlanItemKindV1::Bullet,
+            AnswerPlanItemKindV1::Summary,
+        ) {
             changed = true;
-        } else if promote_first_kind_to_v1(plan, AnswerPlanItemKindV1::Step, AnswerPlanItemKindV1::Summary) {
+        } else if promote_first_kind_to_v1(
+            plan,
+            AnswerPlanItemKindV1::Step,
+            AnswerPlanItemKindV1::Summary,
+        ) {
             changed = true;
         }
     }
-    if (advisory.flags & EXROW_FLAG_HAS_STEPS) != 0 && !plan_has_kind_v1(plan, AnswerPlanItemKindV1::Step) {
+    if (advisory.flags & EXROW_FLAG_HAS_STEPS) != 0
+        && !plan_has_kind_v1(plan, AnswerPlanItemKindV1::Step)
+    {
         let mut converted = false;
         for it in plan.items.iter_mut() {
             if it.kind == AnswerPlanItemKindV1::Bullet {
@@ -422,7 +460,8 @@ pub fn apply_exemplar_advisory_v1(
     let advisory_tone = tone_kind_to_tone_v1(advisory.tone_kind);
     let advisory_style = structure_kind_to_style_v1(advisory.structure_kind);
     let advisory_flags = base_format_flags_for_structure_v1(advisory.structure_kind);
-    let (def_softeners, def_preface, def_hedges, def_questions) = default_limits_for_tone_v1(advisory_tone);
+    let (def_softeners, def_preface, def_hedges, def_questions) =
+        default_limits_for_tone_v1(advisory_tone);
 
     let mut changed = false;
     if directives_opt.is_none() {
@@ -571,7 +610,10 @@ mod tests {
             flags: 0,
             rows: Vec::new(),
         };
-        assert_eq!(lookup_exemplar_advisory_v1(&mem, None, &sample_hints(), None, None), None);
+        assert_eq!(
+            lookup_exemplar_advisory_v1(&mem, None, &sample_hints(), None, None),
+            None
+        );
     }
 
     #[test]
@@ -601,7 +643,8 @@ mod tests {
                 },
             ],
         };
-        let adv = lookup_exemplar_advisory_v1(&mem, None, &sample_hints(), None, None).expect("advisory");
+        let adv =
+            lookup_exemplar_advisory_v1(&mem, None, &sample_hints(), None, None).expect("advisory");
         assert_eq!(adv.exemplar_id, Id64(9));
         assert_eq!(adv.tone_kind, ExemplarToneKindV1::Supportive);
         assert_ne!(adv.match_flags & EXAD_MATCH_RESPONSE_MODE, 0);
@@ -640,7 +683,8 @@ mod tests {
 
     #[test]
     fn apply_advisory_can_synthesize_supportive_directives_and_steps() {
-        let mut plan = AnswerPlanV1::new(blake3_hash(b"q"), blake3_hash(b"s"), blake3_hash(b"e"), 1);
+        let mut plan =
+            AnswerPlanV1::new(blake3_hash(b"q"), blake3_hash(b"s"), blake3_hash(b"e"), 1);
         let mut it = AnswerPlanItemV1::new(AnswerPlanItemKindV1::Bullet);
         it.evidence_item_ix.push(0);
         plan.items.push(it);
@@ -653,7 +697,10 @@ mod tests {
             flags: EXROW_FLAG_HAS_STEPS | EXROW_FLAG_HAS_SUMMARY,
             support_count: 1,
             score: 160,
-            match_flags: EXAD_MATCH_RESPONSE_MODE | EXAD_MATCH_STRUCTURE | EXAD_MATCH_SUMMARY | EXAD_MATCH_STEPS,
+            match_flags: EXAD_MATCH_RESPONSE_MODE
+                | EXAD_MATCH_STRUCTURE
+                | EXAD_MATCH_SUMMARY
+                | EXAD_MATCH_STEPS,
         };
 
         let mut directives_opt: Option<RealizerDirectivesV1> = None;
@@ -668,7 +715,12 @@ mod tests {
 
     #[test]
     fn apply_advisory_summary_first_promotes_first_bullet() {
-        let mut plan = AnswerPlanV1::new(blake3_hash(b"q1"), blake3_hash(b"s1"), blake3_hash(b"e1"), 1);
+        let mut plan = AnswerPlanV1::new(
+            blake3_hash(b"q1"),
+            blake3_hash(b"s1"),
+            blake3_hash(b"e1"),
+            1,
+        );
         let mut it = AnswerPlanItemV1::new(AnswerPlanItemKindV1::Bullet);
         it.evidence_item_ix.push(0);
         plan.items.push(it);
@@ -693,14 +745,23 @@ mod tests {
             max_questions: 0,
             rationale_codes: Vec::new(),
         });
-        assert!(apply_exemplar_advisory_v1(&mut plan, &mut directives_opt, &adv));
+        assert!(apply_exemplar_advisory_v1(
+            &mut plan,
+            &mut directives_opt,
+            &adv
+        ));
         assert_eq!(plan.items[0].kind, AnswerPlanItemKindV1::Summary);
         assert_eq!(directives_opt.unwrap().style, StyleV1::Concise);
     }
 
     #[test]
     fn apply_advisory_comparison_can_convert_steps_to_bullets() {
-        let mut plan = AnswerPlanV1::new(blake3_hash(b"q2"), blake3_hash(b"s2"), blake3_hash(b"e2"), 1);
+        let mut plan = AnswerPlanV1::new(
+            blake3_hash(b"q2"),
+            blake3_hash(b"s2"),
+            blake3_hash(b"e2"),
+            1,
+        );
         let mut it = AnswerPlanItemV1::new(AnswerPlanItemKindV1::Step);
         it.evidence_item_ix.push(0);
         plan.items.push(it);
@@ -715,14 +776,23 @@ mod tests {
             match_flags: EXAD_MATCH_RESPONSE_MODE | EXAD_MATCH_STRUCTURE | EXAD_MATCH_COMPARISON,
         };
         let mut directives_opt = None;
-        assert!(apply_exemplar_advisory_v1(&mut plan, &mut directives_opt, &adv));
+        assert!(apply_exemplar_advisory_v1(
+            &mut plan,
+            &mut directives_opt,
+            &adv
+        ));
         assert_eq!(plan.items[0].kind, AnswerPlanItemKindV1::Bullet);
         assert_eq!(directives_opt.unwrap().style, StyleV1::Checklist);
     }
 
     #[test]
     fn apply_advisory_recommendation_can_shape_summary_and_steps() {
-        let mut plan = AnswerPlanV1::new(blake3_hash(b"q3"), blake3_hash(b"s3"), blake3_hash(b"e3"), 2);
+        let mut plan = AnswerPlanV1::new(
+            blake3_hash(b"q3"),
+            blake3_hash(b"s3"),
+            blake3_hash(b"e3"),
+            2,
+        );
         let mut it0 = AnswerPlanItemV1::new(AnswerPlanItemKindV1::Bullet);
         it0.evidence_item_ix.push(0);
         let mut it1 = AnswerPlanItemV1::new(AnswerPlanItemKindV1::Bullet);
@@ -737,10 +807,17 @@ mod tests {
             flags: EXROW_FLAG_HAS_SUMMARY | EXROW_FLAG_HAS_STEPS,
             support_count: 4,
             score: 170,
-            match_flags: EXAD_MATCH_RESPONSE_MODE | EXAD_MATCH_STRUCTURE | EXAD_MATCH_SUMMARY | EXAD_MATCH_STEPS,
+            match_flags: EXAD_MATCH_RESPONSE_MODE
+                | EXAD_MATCH_STRUCTURE
+                | EXAD_MATCH_SUMMARY
+                | EXAD_MATCH_STEPS,
         };
         let mut directives_opt = None;
-        assert!(apply_exemplar_advisory_v1(&mut plan, &mut directives_opt, &adv));
+        assert!(apply_exemplar_advisory_v1(
+            &mut plan,
+            &mut directives_opt,
+            &adv
+        ));
         assert_eq!(plan.items[0].kind, AnswerPlanItemKindV1::Summary);
         assert_eq!(plan.items[1].kind, AnswerPlanItemKindV1::Step);
     }

@@ -10,78 +10,91 @@
 // artifact exchange server/client for experimentation.
 
 use fsa_lm::artifact::{ArtifactStore, FsArtifactStore};
-use fsa_lm::hash::{blake3_hash, hex32, Hash32};
-use fsa_lm::prompt_pack::{Message, PromptIds, PromptLimits, PromptPack, Role};
-use fsa_lm::prompt_artifact::{get_prompt_pack, put_prompt_pack};
-use fsa_lm::replay::{ReplayLog, ReplayStep};
-use fsa_lm::replay_artifact::{append_prompt_step, get_replay_log, put_replay_log};
-use fsa_lm::replay_steps::{
-    step_from_slices, STEP_ANSWER_V1, STEP_BUILD_EVIDENCE_V1, STEP_RETRIEVE_V1,
-    STEP_REALIZER_DIRECTIVES_V1, STEP_PLANNER_HINTS_V1, STEP_FORECAST_V1,
-    STEP_MARKOV_HINTS_V1, STEP_MARKOV_TRACE_V1, STEP_CONTEXT_ANCHORS_V1, STEP_PUZZLE_SKETCH_V1,
-    STEP_PROOF_ARTIFACT_V1,
-};
 use fsa_lm::frame::{DocId, FrameRowV1, Id64, SourceId};
 use fsa_lm::frame_segment::FrameSegmentV1;
 use fsa_lm::frame_segment::FRAME_SEGMENT_MAGIC;
+use fsa_lm::hash::{blake3_hash, hex32, Hash32};
+use fsa_lm::index_query::{
+    query_terms_from_text, search_snapshot, search_snapshot_cached, search_snapshot_cached_gated,
+    search_snapshot_gated, QueryTermsCfg, SearchCfg,
+};
 use fsa_lm::index_segment::IndexSegmentV1;
 use fsa_lm::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
-use fsa_lm::index_query::{query_terms_from_text, search_snapshot, search_snapshot_cached, search_snapshot_gated, search_snapshot_cached_gated, QueryTermsCfg, SearchCfg};
+use fsa_lm::prompt_artifact::{get_prompt_pack, put_prompt_pack};
+use fsa_lm::prompt_pack::{Message, PromptIds, PromptLimits, PromptPack, Role};
+use fsa_lm::replay::{ReplayLog, ReplayStep};
+use fsa_lm::replay_artifact::{append_prompt_step, get_replay_log, put_replay_log};
+use fsa_lm::replay_steps::{
+    step_from_slices, STEP_ANSWER_V1, STEP_BUILD_EVIDENCE_V1, STEP_CONTEXT_ANCHORS_V1,
+    STEP_FORECAST_V1, STEP_MARKOV_HINTS_V1, STEP_MARKOV_TRACE_V1, STEP_PLANNER_HINTS_V1,
+    STEP_PROOF_ARTIFACT_V1, STEP_PUZZLE_SKETCH_V1, STEP_REALIZER_DIRECTIVES_V1, STEP_RETRIEVE_V1,
+};
 use fsa_lm::retrieval_control::RetrievalControlV1;
-use fsa_lm::retrieval_policy::{apply_retrieval_policy_from_text_v1_with_anchors, RetrievalPolicyCfgV1};
+use fsa_lm::retrieval_policy::{
+    apply_retrieval_policy_from_text_v1_with_anchors, RetrievalPolicyCfgV1,
+};
 
-use fsa_lm::logic_solver_v1::{extract_puzzle_block, parse_puzzle_block_v1, solve_puzzle_v1, LogicSolveCfgV1};
-use fsa_lm::puzzle_compile_v1::{try_compile_puzzle_spec_from_sketch_and_constraints_v1, PuzzleCompileErrV1};
-use fsa_lm::proof_artifact_store::put_proof_artifact_v1;
-use fsa_lm::planner_hints::{PH_FLAG_PREFER_CLARIFY, PH_FLAG_PREFER_STEPS};
+use fsa_lm::exemplar_memory_artifact::{get_exemplar_memory_v1, put_exemplar_memory_v1};
+use fsa_lm::exemplar_runtime::{
+    apply_exemplar_advisory_v1, lookup_exemplar_advisory_v1, ExemplarAdvisoryV1,
+    EXAD_MATCH_CLARIFIER, EXAD_MATCH_COMPARISON, EXAD_MATCH_RESPONSE_MODE, EXAD_MATCH_STEPS,
+    EXAD_MATCH_STRUCTURE, EXAD_MATCH_SUMMARY, EXAD_MATCH_TONE,
+};
 use fsa_lm::forecast::{
     ForecastIntentKindV1, ForecastIntentV1, ForecastQuestionV1, FORECAST_V1_MAX_INTENTS,
     FORECAST_V1_MAX_QUESTIONS,
 };
-use fsa_lm::realizer_directives::{
-    RealizerDirectivesV1, REALIZER_DIRECTIVES_V1_VERSION, StyleV1, ToneV1,
-};
-use fsa_lm::exemplar_memory_artifact::{get_exemplar_memory_v1, put_exemplar_memory_v1};
-use fsa_lm::graph_relevance_artifact::{get_graph_relevance_v1, put_graph_relevance_v1};
-use fsa_lm::exemplar_runtime::{
-    apply_exemplar_advisory_v1, lookup_exemplar_advisory_v1, ExemplarAdvisoryV1,
-    EXAD_MATCH_CLARIFIER, EXAD_MATCH_COMPARISON, EXAD_MATCH_RESPONSE_MODE,
-    EXAD_MATCH_STEPS, EXAD_MATCH_STRUCTURE, EXAD_MATCH_SUMMARY, EXAD_MATCH_TONE,
-};
 use fsa_lm::frame::derive_id64;
+use fsa_lm::graph_relevance_artifact::{get_graph_relevance_v1, put_graph_relevance_v1};
+use fsa_lm::logic_solver_v1::{
+    extract_puzzle_block, parse_puzzle_block_v1, solve_puzzle_v1, LogicSolveCfgV1,
+};
+use fsa_lm::planner_hints::{PH_FLAG_PREFER_CLARIFY, PH_FLAG_PREFER_STEPS};
+use fsa_lm::proof_artifact_store::put_proof_artifact_v1;
+use fsa_lm::puzzle_compile_v1::{
+    try_compile_puzzle_spec_from_sketch_and_constraints_v1, PuzzleCompileErrV1,
+};
+use fsa_lm::realizer_directives::{
+    RealizerDirectivesV1, StyleV1, ToneV1, REALIZER_DIRECTIVES_V1_VERSION,
+};
 
+use fsa_lm::cache::{Cache2Q, CacheCfgV1, CacheStatsV1};
 use fsa_lm::context_anchors::{build_context_anchors_v1, ContextAnchorsCfgV1};
 use fsa_lm::context_anchors_artifact::put_context_anchors_v1;
-use fsa_lm::planner_v1::{plan_from_evidence_bundle_v1_with_guidance, PlannerCfgV1, PlannerOutputV1};
-use fsa_lm::planner_hints_artifact::put_planner_hints_v1;
-use fsa_lm::forecast_artifact::put_forecast_v1;
-use fsa_lm::quality_gate_v1::{
-    build_markov_trace_tokens_v1, derive_directives_opt,
-    derive_markov_hints_surface_choices_opt, realize_with_quality_gate_v1,
-};
-use fsa_lm::shard_manifest::{ShardEntryV1, ShardManifestV1, ShardOutputV1, SHARD_MANIFEST_V1_VERSION};
-use fsa_lm::shard_manifest_artifact::{get_shard_manifest_v1, put_shard_manifest_v1};
-use fsa_lm::sharding_v1::{ShardCfgV1, SHARD_MAPPING_DOC_ID_HASH32_V1};
-use fsa_lm::reduce_index::{reduce_index_v1, ReduceIndexResultV1};
-use fsa_lm::realizer_v1::{
-    RealizerCfgV1,
-};
-use fsa_lm::markov_hints::MarkovHintsV1;
-use fsa_lm::markov_hints_artifact::put_markov_hints_v1;
-use fsa_lm::markov_model::MarkovTokenV1;
-use fsa_lm::markov_trace::{MarkovTraceV1, MARKOV_TRACE_V1_VERSION};
-use fsa_lm::markov_model_artifact::{get_markov_model_v1, put_markov_model_v1};
-use fsa_lm::markov_trace_artifact::{get_markov_trace_v1, put_markov_trace_v1};
-use fsa_lm::markov_train::{markov_corpus_hash_v1, MarkovTrainCfgV1, MarkovTrainerV1};
-use fsa_lm::evidence_builder::{build_evidence_bundle_v1_from_hits, build_evidence_bundle_v1_from_hits_cached, EvidenceBuildCfgV1};
-use fsa_lm::evidence_bundle::{EvidenceItemDataV1, EvidenceItemV1, EvidenceLimitsV1, ProofRefV1};
 use fsa_lm::evidence_artifact::put_evidence_bundle_v1;
+use fsa_lm::evidence_builder::{
+    build_evidence_bundle_v1_from_hits, build_evidence_bundle_v1_from_hits_cached,
+    EvidenceBuildCfgV1,
+};
+use fsa_lm::evidence_bundle::{EvidenceItemDataV1, EvidenceItemV1, EvidenceLimitsV1, ProofRefV1};
 use fsa_lm::evidence_set::{EvidenceRowRefV1, EvidenceSetItemV1, EvidenceSetV1};
 use fsa_lm::evidence_set_artifact::put_evidence_set_v1;
 use fsa_lm::evidence_set_verify::verify_evidence_set_v1;
+use fsa_lm::forecast_artifact::put_forecast_v1;
 use fsa_lm::hit_list::{HitListV1, HitV1};
 use fsa_lm::hit_list_artifact::put_hit_list_v1;
-use fsa_lm::cache::{Cache2Q, CacheCfgV1, CacheStatsV1};
+use fsa_lm::markov_hints::MarkovHintsV1;
+use fsa_lm::markov_hints_artifact::put_markov_hints_v1;
+use fsa_lm::markov_model::MarkovTokenV1;
+use fsa_lm::markov_model_artifact::{get_markov_model_v1, put_markov_model_v1};
+use fsa_lm::markov_trace::{MarkovTraceV1, MARKOV_TRACE_V1_VERSION};
+use fsa_lm::markov_trace_artifact::{get_markov_trace_v1, put_markov_trace_v1};
+use fsa_lm::markov_train::{markov_corpus_hash_v1, MarkovTrainCfgV1, MarkovTrainerV1};
+use fsa_lm::planner_hints_artifact::put_planner_hints_v1;
+use fsa_lm::planner_v1::{
+    plan_from_evidence_bundle_v1_with_guidance, PlannerCfgV1, PlannerOutputV1,
+};
+use fsa_lm::quality_gate_v1::{
+    build_markov_trace_tokens_v1, derive_directives_opt, derive_markov_hints_surface_choices_opt,
+    realize_with_quality_gate_v1,
+};
+use fsa_lm::realizer_v1::RealizerCfgV1;
+use fsa_lm::reduce_index::{reduce_index_v1, ReduceIndexResultV1};
+use fsa_lm::shard_manifest::{
+    ShardEntryV1, ShardManifestV1, ShardOutputV1, SHARD_MANIFEST_V1_VERSION,
+};
+use fsa_lm::shard_manifest_artifact::{get_shard_manifest_v1, put_shard_manifest_v1};
+use fsa_lm::sharding_v1::{ShardCfgV1, SHARD_MAPPING_DOC_ID_HASH32_V1};
 
 use fsa_lm::scale_report_artifact::put_scale_demo_scale_report_v1;
 
@@ -89,49 +102,61 @@ use fsa_lm::lexicon_snapshot_builder::build_lexicon_snapshot_v1_from_segments;
 
 use fsa_lm::lexicon_snapshot_validate::validate_lexicon_snapshot_v1_disjoint_owners;
 
-use fsa_lm::workspace::{read_workspace_v1, write_workspace_v1_atomic, WorkspaceV1, WORKSPACE_V1_FILENAME};
+use fsa_lm::workspace::{
+    read_workspace_v1, write_workspace_v1_atomic, WorkspaceV1, WORKSPACE_V1_FILENAME,
+};
 
-use fsa_lm::conversation_pack::{ConversationLimits, ConversationMessage, ConversationPackV1, ConversationPresentationModeV1 as PresentationModeV1, ConversationRole};
+use fsa_lm::conversation_pack::{
+    ConversationLimits, ConversationMessage, ConversationPackV1,
+    ConversationPresentationModeV1 as PresentationModeV1, ConversationRole,
+};
 use fsa_lm::conversation_pack_artifact::{get_conversation_pack, put_conversation_pack};
 use fsa_lm::exemplar_build::{
-    ExemplarBuildConfigV1, ExemplarBuildInputV1, ExemplarSourceArtifactV1,
     finalize_exemplar_memory_v1, mine_exemplar_rows_from_sources_v1,
-    prepare_exemplar_build_plan_v1,
+    prepare_exemplar_build_plan_v1, ExemplarBuildConfigV1, ExemplarBuildInputV1,
+    ExemplarSourceArtifactV1,
 };
 use fsa_lm::exemplar_memory::ExemplarSupportSourceKindV1;
 use fsa_lm::graph_build::{
-    GraphBuildConfigV1, GraphBuildInputV1, GraphBuildSourceKindV1, GraphSourceArtifactV1,
     empty_graph_relevance_v1, finalize_graph_relevance_v1, mine_graph_rows_from_sources_v1,
-    prepare_graph_build_plan_v1,
+    prepare_graph_build_plan_v1, GraphBuildConfigV1, GraphBuildInputV1, GraphBuildSourceKindV1,
+    GraphSourceArtifactV1,
 };
 
 use fsa_lm::wiktionary_build::ingest_wiktionary_xml_to_lexicon_snapshot_v1;
 use fsa_lm::wiktionary_ingest::WiktionaryParseCfg;
 
-use fsa_lm::pragmatics_extract::{extract_pragmatics_frames_for_prompt_pack_v1, PragmaticsExtractCfg};
-use fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1;
+use fsa_lm::pragmatics_extract::{
+    extract_pragmatics_frames_for_prompt_pack_v1, PragmaticsExtractCfg,
+};
 use fsa_lm::pragmatics_frame_store::get_pragmatics_frame_v1;
+use fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1;
 
 use fsa_lm::realizer_directives_artifact::put_realizer_directives_v1;
 
 use fsa_lm::compaction_report::CompactionCfgV1;
 use fsa_lm::index_compaction::compact_index_snapshot_v1;
 
+use bzip2::read::BzDecoder;
+use fsa_lm::artifact_sync::{
+    run_sync_server_v1, sync_lexicon_v1, sync_reduce_batch_v1, sync_reduce_v1, SyncClientCfgV1,
+    SyncServerCfgV1,
+};
+use fsa_lm::debug_bundle::{export_debug_bundle_v1, DebugBundleCfgV1};
 use fsa_lm::frame_store::{get_frame_segment_v1, put_frame_segment_v1};
-use fsa_lm::tokenizer::{term_freqs_from_text, term_id_from_token, TokenIter, TokenizerCfg};
-use fsa_lm::wiki_ingest::{ingest_wiki_tsv, ingest_wiki_tsv_sharded, WikiIngestCfg, ingest_wiki_xml, ingest_wiki_xml_sharded};
+use fsa_lm::net;
 use fsa_lm::scale_demo::{
-    run_scale_demo_build_answers_v1, run_scale_demo_build_evidence_bundles_v1,
-    run_scale_demo_build_index_from_manifest_v1, run_scale_demo_generate_and_ingest_frames_v1,
-    run_scale_demo_generate_and_store_prompts_v1, run_scale_demo_generate_only_v1,
-    build_scale_demo_scale_report_v1,
-    ScaleDemoCfgV1, SCALE_DEMO_V1_VERSION,
+    build_scale_demo_scale_report_v1, run_scale_demo_build_answers_v1,
+    run_scale_demo_build_evidence_bundles_v1, run_scale_demo_build_index_from_manifest_v1,
+    run_scale_demo_generate_and_ingest_frames_v1, run_scale_demo_generate_and_store_prompts_v1,
+    run_scale_demo_generate_only_v1, ScaleDemoCfgV1, SCALE_DEMO_V1_VERSION,
+};
+use fsa_lm::tokenizer::{term_freqs_from_text, term_id_from_token, TokenIter, TokenizerCfg};
+use fsa_lm::wiki_ingest::{
+    ingest_wiki_tsv, ingest_wiki_tsv_sharded, ingest_wiki_xml, ingest_wiki_xml_sharded,
+    WikiIngestCfg,
 };
 use fsa_lm::workload_gen::{WorkloadCfgV1, WORKLOAD_GEN_V1_VERSION};
-use fsa_lm::net;
-use fsa_lm::artifact_sync::{run_sync_server_v1, sync_reduce_v1, sync_reduce_batch_v1, sync_lexicon_v1, SyncClientCfgV1, SyncServerCfgV1};
-use fsa_lm::debug_bundle::{export_debug_bundle_v1, DebugBundleCfgV1};
-use bzip2::read::BzDecoder;
 
 use std::env;
 use std::fs;
@@ -238,7 +263,6 @@ fn collect_bin_paths(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
     }
 }
 
-
 fn read_all_from(path_opt: Option<&str>) -> io::Result<Vec<u8>> {
     let mut buf = Vec::new();
     match path_opt {
@@ -300,7 +324,10 @@ fn read_conversation_session_file(path: &Path) -> Result<Option<Hash32>, String>
 
     match last {
         Some(h) => Ok(Some(h)),
-        None => Err(format!("missing {} key (expected line: {}=<hash32hex>)", CONVERSATION_SESSION_FILE_KEY, CONVERSATION_SESSION_FILE_KEY)),
+        None => Err(format!(
+            "missing {} key (expected line: {}=<hash32hex>)",
+            CONVERSATION_SESSION_FILE_KEY, CONVERSATION_SESSION_FILE_KEY
+        )),
     }
 }
 
@@ -394,7 +421,6 @@ fn parse_u32(s: &str) -> Result<u32, String> {
 fn parse_u8(s: &str) -> Result<u8, String> {
     s.parse::<u8>().map_err(|_| "invalid u8".to_string())
 }
-
 
 fn env_u64(name: &str) -> Option<u64> {
     match env::var(name) {
@@ -563,7 +589,9 @@ fn resolve_runtime_expand_enabled_v1(
     workspace_defaults: &WorkspaceRuntimeDefaultsV1,
     runtime_state: ConversationRuntimeStateV1,
 ) -> bool {
-    explicit_expand || workspace_defaults.default_expand || runtime_state.graph_relevance_id.is_some()
+    explicit_expand
+        || workspace_defaults.default_expand
+        || runtime_state.graph_relevance_id.is_some()
 }
 
 fn hex_val(b: u8) -> Option<u8> {
@@ -660,7 +688,10 @@ fn graph_reason_flags_name_v1(flags: u8) -> &'static str {
 }
 
 fn operator_inspect_insert_ix_v1(lines: &[String]) -> usize {
-    if let Some(ix) = lines.iter().position(|line| line.starts_with("directives ")) {
+    if let Some(ix) = lines
+        .iter()
+        .position(|line| line.starts_with("directives "))
+    {
         return ix + 1;
     }
     if let Some(ix) = lines.iter().position(|line| line.starts_with("query_id=")) {
@@ -910,7 +941,9 @@ fn soften_clarifier_user_surface_v1(text: &str) -> String {
     let mut pending_blank = false;
     for line in text.lines() {
         let trimmed = line.trim();
-        if trimmed == "To make sure I answer the right thing:" || trimmed == "So I can answer the right thing:" {
+        if trimmed == "To make sure I answer the right thing:"
+            || trimmed == "So I can answer the right thing:"
+        {
             continue;
         }
         if let Some(rest) = line.strip_prefix("Clarifying question: ") {
@@ -962,8 +995,14 @@ fn soften_procedural_user_surface_v1(text: &str) -> Option<String> {
             continue;
         }
         match trimmed {
-            "Summary" | "Main answer" | "Steps" | "Suggested next steps" | "Details"
-            | "Supporting points" | "Caveats" | "Things to keep in mind" => continue,
+            "Summary"
+            | "Main answer"
+            | "Steps"
+            | "Suggested next steps"
+            | "Details"
+            | "Supporting points"
+            | "Caveats"
+            | "Things to keep in mind" => continue,
             _ => {}
         }
         if let Some((kind, refs)) = parse_plan_item_kind_and_refs_v1(trimmed) {
@@ -1137,8 +1176,14 @@ fn build_graph_trace_line_v1(
     let mut candidate_count: usize = 0;
     let mut reasons: Vec<String> = Vec::new();
     for (seed_id_u64, seed_text) in seed_pairs {
-        let key = (fsa_lm::graph_relevance::GraphNodeKindV1::Term as u8, seed_id_u64);
-        let row_ix = match graph.rows.binary_search_by(|row| ((row.seed_kind as u8), row.seed_id.0).cmp(&key)) {
+        let key = (
+            fsa_lm::graph_relevance::GraphNodeKindV1::Term as u8,
+            seed_id_u64,
+        );
+        let row_ix = match graph
+            .rows
+            .binary_search_by(|row| ((row.seed_kind as u8), row.seed_id.0).cmp(&key))
+        {
             Ok(ix) => ix,
             Err(_) => continue,
         };
@@ -1267,30 +1312,34 @@ enum LoadedGraphSourceV1 {
 impl LoadedGraphSourceV1 {
     fn as_borrowed(&self) -> GraphSourceArtifactV1<'_> {
         match self {
-            LoadedGraphSourceV1::FrameSegment { source_hash, artifact } => {
-                GraphSourceArtifactV1::FrameSegment {
-                    source_hash: *source_hash,
-                    artifact,
-                }
-            }
-            LoadedGraphSourceV1::ReplayLog { source_hash, artifact } => {
-                GraphSourceArtifactV1::ReplayLog {
-                    source_hash: *source_hash,
-                    artifact,
-                }
-            }
-            LoadedGraphSourceV1::PromptPack { source_hash, artifact } => {
-                GraphSourceArtifactV1::PromptPack {
-                    source_hash: *source_hash,
-                    artifact,
-                }
-            }
-            LoadedGraphSourceV1::ConversationPack { source_hash, artifact } => {
-                GraphSourceArtifactV1::ConversationPack {
-                    source_hash: *source_hash,
-                    artifact,
-                }
-            }
+            LoadedGraphSourceV1::FrameSegment {
+                source_hash,
+                artifact,
+            } => GraphSourceArtifactV1::FrameSegment {
+                source_hash: *source_hash,
+                artifact,
+            },
+            LoadedGraphSourceV1::ReplayLog {
+                source_hash,
+                artifact,
+            } => GraphSourceArtifactV1::ReplayLog {
+                source_hash: *source_hash,
+                artifact,
+            },
+            LoadedGraphSourceV1::PromptPack {
+                source_hash,
+                artifact,
+            } => GraphSourceArtifactV1::PromptPack {
+                source_hash: *source_hash,
+                artifact,
+            },
+            LoadedGraphSourceV1::ConversationPack {
+                source_hash,
+                artifact,
+            } => GraphSourceArtifactV1::ConversationPack {
+                source_hash: *source_hash,
+                artifact,
+            },
         }
     }
 }
@@ -1619,7 +1668,9 @@ fn escape_one_line(s: &str) -> String {
     // Keep stdout parse-friendly for operator tools.
     // This does not aim to be reversible for arbitrary bytes; it is intended
     // for human inspection.
-    s.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n")
+    s.replace("\\", "\\\\")
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
 }
 
 fn cmd_show_conversation(args: &[String]) -> i32 {
@@ -1713,9 +1764,15 @@ fn cmd_show_conversation(args: &[String]) -> i32 {
     }
 
     println!("limits.max_messages={}", pack.limits.max_messages);
-    println!("limits.max_total_message_bytes={}", pack.limits.max_total_message_bytes);
+    println!(
+        "limits.max_total_message_bytes={}",
+        pack.limits.max_total_message_bytes
+    );
     println!("limits.max_message_bytes={}", pack.limits.max_message_bytes);
-    println!("limits.keep_system={}", if pack.limits.keep_system { 1 } else { 0 });
+    println!(
+        "limits.keep_system={}",
+        if pack.limits.keep_system { 1 } else { 0 }
+    );
 
     println!("messages={}", pack.messages.len());
     for (idx, m) in pack.messages.iter().enumerate() {
@@ -1750,7 +1807,9 @@ fn forward_args_hash32_value(args: &[String], flag: &str) -> Result<Option<Hash3
     Ok(None)
 }
 
-fn forward_args_presentation_mode_v1(args: &[String]) -> Result<Option<PresentationModeV1>, String> {
+fn forward_args_presentation_mode_v1(
+    args: &[String],
+) -> Result<Option<PresentationModeV1>, String> {
     let mut i = 0usize;
     while i < args.len() {
         if args[i] == "--presentation" {
@@ -1855,7 +1914,9 @@ fn append_answer_runtime_args_v1(
         aa.push("--sig-map".to_string());
         aa.push(hex32(&resolved_sig_map_id));
     }
-    if runtime_setup.workspace_runtime.default_expand && !runtime_setup.forward_runtime.expand_explicit {
+    if runtime_setup.workspace_runtime.default_expand
+        && !runtime_setup.forward_runtime.expand_explicit
+    {
         aa.push("--expand".to_string());
     }
     if runtime_setup.effective_expand && !forward_args_has_flag(forward, "--lexicon-snapshot") {
@@ -1889,7 +1950,11 @@ fn append_answer_runtime_args_v1(
             aa.push(hex32(&h));
         }
     }
-    if runtime_setup.forward_runtime.explicit_presentation_mode.is_none() {
+    if runtime_setup
+        .forward_runtime
+        .explicit_presentation_mode
+        .is_none()
+    {
         if let Some(v) = runtime_setup.sticky_runtime_state.presentation_mode {
             aa.push("--presentation".to_string());
             aa.push(presentation_mode_name_v1(v).to_string());
@@ -1992,7 +2057,9 @@ fn cmd_ask(args: &[String]) -> i32 {
                 text_parts.push(args[i].to_string());
             }
             "--prompt" => {
-                eprintln!("ask does not accept --prompt (use answer if you already have a prompt hash)");
+                eprintln!(
+                    "ask does not accept --prompt (use answer if you already have a prompt hash)"
+                );
                 return 2;
             }
             "-h" | "--help" => {
@@ -2049,359 +2116,363 @@ fn cmd_ask(args: &[String]) -> i32 {
     let text = text_parts.join(" ");
 
     // IDs are zeros for now; later stages bind these to real snapshots/weights/tokenizers.
-let ids = PromptIds {
-    snapshot_id: [0u8; 32],
-    weights_id: [0u8; 32],
-    tokenizer_id: [0u8; 32],
-};
-
-if session_file.is_some() && conversation_hex_opt.is_some() {
-    eprintln!("ask: cannot use both --session-file and --conversation");
-    return 2;
-}
-
-let store = store_for(&root);
-
-let expand_explicit = forward_args_has_flag(&forward, "--expand");
-let override_snapshot = forward_args_has_flag(&forward, "--snapshot");
-let override_sig_map = forward_args_has_flag(&forward, "--sig-map");
-let override_lexicon = forward_args_has_flag(&forward, "--lexicon-snapshot");
-
-let mut resume_hash_opt: Option<Hash32> = None;
-if let Some(ref sf) = session_file {
-    match read_conversation_session_file(sf) {
-        Ok(Some(h)) => resume_hash_opt = Some(h),
-        Ok(None) => {
-            // New session.
-        }
-        Err(e) => {
-            eprintln!("ask: invalid session file: {}", e);
-            return 2;
-        }
-    }
-} else if let Some(ref ch) = conversation_hex_opt {
-    let h = match parse_hash32_hex(ch) {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("ask: bad --conversation hash: {}", e);
-            return 2;
-        }
+    let ids = PromptIds {
+        snapshot_id: [0u8; 32],
+        weights_id: [0u8; 32],
+        tokenizer_id: [0u8; 32],
     };
-    resume_hash_opt = Some(h);
-}
 
-let mut conv_msgs: Vec<ConversationMessage> = Vec::new();
-let mut prior_replay_id_opt: Option<Hash32> = None;
-let mut resolved_snapshot_id: Option<Hash32> = None;
-let mut resolved_sig_map_id: Option<Hash32> = None;
-let mut resolved_lexicon_id: Option<Hash32> = None;
-let mut prior_runtime_state = ConversationRuntimeStateV1::default();
-
-if let Some(h) = resume_hash_opt {
-    if override_snapshot || override_sig_map || override_lexicon {
-        eprintln!("ask: cannot override snapshot/sig-map/lexicon-snapshot when resuming a conversation");
+    if session_file.is_some() && conversation_hex_opt.is_some() {
+        eprintln!("ask: cannot use both --session-file and --conversation");
         return 2;
     }
 
-    let pack = match get_conversation_pack(&store, &h) {
-        Ok(Some(p)) => p,
-        Ok(None) => {
-            eprintln!("ask: missing conversation pack {}", hex32(&h));
-            return 3;
+    let store = store_for(&root);
+
+    let expand_explicit = forward_args_has_flag(&forward, "--expand");
+    let override_snapshot = forward_args_has_flag(&forward, "--snapshot");
+    let override_sig_map = forward_args_has_flag(&forward, "--sig-map");
+    let override_lexicon = forward_args_has_flag(&forward, "--lexicon-snapshot");
+
+    let mut resume_hash_opt: Option<Hash32> = None;
+    if let Some(ref sf) = session_file {
+        match read_conversation_session_file(sf) {
+            Ok(Some(h)) => resume_hash_opt = Some(h),
+            Ok(None) => {
+                // New session.
+            }
+            Err(e) => {
+                eprintln!("ask: invalid session file: {}", e);
+                return 2;
+            }
         }
+    } else if let Some(ref ch) = conversation_hex_opt {
+        let h = match parse_hash32_hex(ch) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("ask: bad --conversation hash: {}", e);
+                return 2;
+            }
+        };
+        resume_hash_opt = Some(h);
+    }
+
+    let mut conv_msgs: Vec<ConversationMessage> = Vec::new();
+    let mut prior_replay_id_opt: Option<Hash32> = None;
+    let mut resolved_snapshot_id: Option<Hash32> = None;
+    let mut resolved_sig_map_id: Option<Hash32> = None;
+    let mut resolved_lexicon_id: Option<Hash32> = None;
+    let mut prior_runtime_state = ConversationRuntimeStateV1::default();
+
+    if let Some(h) = resume_hash_opt {
+        if override_snapshot || override_sig_map || override_lexicon {
+            eprintln!("ask: cannot override snapshot/sig-map/lexicon-snapshot when resuming a conversation");
+            return 2;
+        }
+
+        let pack = match get_conversation_pack(&store, &h) {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                eprintln!("ask: missing conversation pack {}", hex32(&h));
+                return 3;
+            }
+            Err(e) => {
+                eprintln!("ask: load failed: {}", e);
+                return 1;
+            }
+        };
+
+        if !seed_set {
+            seed = pack.seed;
+        }
+        if !max_tokens_set {
+            max_tokens = pack.max_output_tokens;
+        }
+
+        prior_runtime_state = ConversationRuntimeStateV1::from_pack(&pack);
+        conv_msgs = pack.messages;
+
+        // Capture the most recent assistant replay id for cross-turn continuation.
+        for m in conv_msgs.iter().rev() {
+            if m.role == ConversationRole::Assistant {
+                if let Some(rid) = m.replay_id {
+                    prior_replay_id_opt = Some(rid);
+                    break;
+                }
+            }
+        }
+
+        resolved_snapshot_id = Some(pack.snapshot_id);
+        resolved_sig_map_id = Some(pack.sig_map_id);
+        resolved_lexicon_id = pack.lexicon_snapshot_id;
+    }
+
+    let runtime_setup = match prepare_command_runtime_setup_v1(
+        &root,
+        &forward,
+        expand_explicit,
+        prior_runtime_state,
+    ) {
+        Ok(v) => v,
         Err(e) => {
-            eprintln!("ask: load failed: {}", e);
-            return 1;
+            eprintln!("ask: {}", e);
+            return 2;
         }
     };
+    let workspace_runtime = &runtime_setup.workspace_runtime;
 
-    if !seed_set {
-        seed = pack.seed;
-    }
-    if !max_tokens_set {
-        max_tokens = pack.max_output_tokens;
-    }
+    // If we do not have determinism-critical ids yet (new session), bind them to either
+    // explicit flags or workspace defaults so the session is resumeable.
+    if resolved_snapshot_id.is_none() || resolved_sig_map_id.is_none() {
+        let mut snapshot_hex_opt: Option<String> = None;
+        let mut sig_map_hex_opt: Option<String> = None;
+        let mut lexicon_hex_opt: Option<String> = None;
 
-    prior_runtime_state = ConversationRuntimeStateV1::from_pack(&pack);
-    conv_msgs = pack.messages;
-
-    // Capture the most recent assistant replay id for cross-turn continuation.
-    for m in conv_msgs.iter().rev() {
-        if m.role == ConversationRole::Assistant {
-            if let Some(rid) = m.replay_id {
-                prior_replay_id_opt = Some(rid);
-                break;
+        let mut j = 0usize;
+        while j < forward.len() {
+            match forward[j].as_str() {
+                "--snapshot" => {
+                    if j + 1 < forward.len() {
+                        snapshot_hex_opt = Some(forward[j + 1].clone());
+                    }
+                }
+                "--sig-map" => {
+                    if j + 1 < forward.len() {
+                        sig_map_hex_opt = Some(forward[j + 1].clone());
+                    }
+                }
+                "--lexicon-snapshot" => {
+                    if j + 1 < forward.len() {
+                        lexicon_hex_opt = Some(forward[j + 1].clone());
+                    }
+                }
+                _ => {}
             }
+            j += 1;
         }
-    }
 
-    resolved_snapshot_id = Some(pack.snapshot_id);
-    resolved_sig_map_id = Some(pack.sig_map_id);
-    resolved_lexicon_id = pack.lexicon_snapshot_id;
-}
+        let mut snap: Option<Hash32> = None;
+        let mut sig: Option<Hash32> = None;
+        let mut lex: Option<Hash32> = None;
 
-let runtime_setup = match prepare_command_runtime_setup_v1(
-    &root,
-    &forward,
-    expand_explicit,
-    prior_runtime_state,
-) {
-    Ok(v) => v,
-    Err(e) => {
-        eprintln!("ask: {}", e);
-        return 2;
-    }
-};
-let workspace_runtime = &runtime_setup.workspace_runtime;
-
-// If we do not have determinism-critical ids yet (new session), bind them to either
-// explicit flags or workspace defaults so the session is resumeable.
-if resolved_snapshot_id.is_none() || resolved_sig_map_id.is_none() {
-    let mut snapshot_hex_opt: Option<String> = None;
-    let mut sig_map_hex_opt: Option<String> = None;
-    let mut lexicon_hex_opt: Option<String> = None;
-
-    let mut j = 0usize;
-    while j < forward.len() {
-        match forward[j].as_str() {
-            "--snapshot" => {
-                if j + 1 < forward.len() {
-                    snapshot_hex_opt = Some(forward[j + 1].clone());
-                }
-            }
-            "--sig-map" => {
-                if j + 1 < forward.len() {
-                    sig_map_hex_opt = Some(forward[j + 1].clone());
-                }
-            }
-            "--lexicon-snapshot" => {
-                if j + 1 < forward.len() {
-                    lexicon_hex_opt = Some(forward[j + 1].clone());
-                }
-            }
-            _ => {}
-        }
-        j += 1;
-    }
-
-    let mut snap: Option<Hash32> = None;
-    let mut sig: Option<Hash32> = None;
-    let mut lex: Option<Hash32> = None;
-
-    if let Some(sh) = snapshot_hex_opt.as_ref() {
-        snap = match parse_hash32_hex(sh) {
-            Ok(h) => Some(h),
-            Err(e) => {
-                eprintln!("ask: bad --snapshot hash: {}", e);
-                return 2;
-            }
-        };
-    }
-    if let Some(sm) = sig_map_hex_opt.as_ref() {
-        sig = match parse_hash32_hex(sm) {
-            Ok(h) => Some(h),
-            Err(e) => {
-                eprintln!("ask: bad --sig-map hash: {}", e);
-                return 2;
-            }
-        };
-    }
-    if runtime_setup.pre_sticky_expand {
-        if let Some(lh) = lexicon_hex_opt.as_ref() {
-            lex = match parse_hash32_hex(lh) {
+        if let Some(sh) = snapshot_hex_opt.as_ref() {
+            snap = match parse_hash32_hex(sh) {
                 Ok(h) => Some(h),
                 Err(e) => {
-                    eprintln!("ask: bad --lexicon-snapshot hash: {}", e);
+                    eprintln!("ask: bad --snapshot hash: {}", e);
                     return 2;
                 }
             };
         }
+        if let Some(sm) = sig_map_hex_opt.as_ref() {
+            sig = match parse_hash32_hex(sm) {
+                Ok(h) => Some(h),
+                Err(e) => {
+                    eprintln!("ask: bad --sig-map hash: {}", e);
+                    return 2;
+                }
+            };
+        }
+        if runtime_setup.pre_sticky_expand {
+            if let Some(lh) = lexicon_hex_opt.as_ref() {
+                lex = match parse_hash32_hex(lh) {
+                    Ok(h) => Some(h),
+                    Err(e) => {
+                        eprintln!("ask: bad --lexicon-snapshot hash: {}", e);
+                        return 2;
+                    }
+                };
+            }
+        }
+
+        if snap.is_none() || sig.is_none() {
+            let ws = if let Some(ws) = workspace_runtime.workspace.as_ref() {
+                ws.clone()
+            } else if let Some(e) = workspace_runtime.read_error.as_ref() {
+                eprintln!("ask: read {} failed: {}", WORKSPACE_V1_FILENAME, e);
+                return 1;
+            } else if let Some(e) = workspace_runtime.invalid_error.as_ref() {
+                eprintln!("ask: invalid {}: {}", WORKSPACE_V1_FILENAME, e);
+                return 2;
+            } else {
+                eprintln!("ask: need snapshot+sig-map. Provide --snapshot/--sig-map or run load-wikipedia to create {}", WORKSPACE_V1_FILENAME);
+                return 2;
+            };
+            if !ws.has_required_answer_keys() {
+                eprintln!("ask: {} missing merged_snapshot/merged_sig_map (run load-wikipedia or edit the file)", WORKSPACE_V1_FILENAME);
+                return 2;
+            }
+            if snap.is_none() {
+                snap = ws.merged_snapshot;
+            }
+            if sig.is_none() {
+                sig = ws.merged_sig_map;
+            }
+            if runtime_setup.pre_sticky_expand && lex.is_none() {
+                lex = ws.lexicon_snapshot;
+            }
+        }
+
+        resolved_snapshot_id = snap;
+        resolved_sig_map_id = sig;
+        resolved_lexicon_id = lex;
+    } else if runtime_setup.pre_sticky_expand && resolved_lexicon_id.is_none() {
+        if let Some(ws) = workspace_runtime.workspace.as_ref() {
+            resolved_lexicon_id = ws.lexicon_snapshot;
+        }
     }
 
-    if snap.is_none() || sig.is_none() {
-        let ws = if let Some(ws) = workspace_runtime.workspace.as_ref() {
-            ws.clone()
-        } else if let Some(e) = workspace_runtime.read_error.as_ref() {
-            eprintln!("ask: read {} failed: {}", WORKSPACE_V1_FILENAME, e);
-            return 1;
-        } else if let Some(e) = workspace_runtime.invalid_error.as_ref() {
-            eprintln!("ask: invalid {}: {}", WORKSPACE_V1_FILENAME, e);
+    let resolved_snapshot_id = match resolved_snapshot_id {
+        Some(h) => h,
+        None => {
+            eprintln!("ask: missing snapshot id");
             return 2;
-        } else {
-            eprintln!("ask: need snapshot+sig-map. Provide --snapshot/--sig-map or run load-wikipedia to create {}", WORKSPACE_V1_FILENAME);
-            return 2;
-        };
-        if !ws.has_required_answer_keys() {
-            eprintln!("ask: {} missing merged_snapshot/merged_sig_map (run load-wikipedia or edit the file)", WORKSPACE_V1_FILENAME);
-            return 2;
         }
-        if snap.is_none() {
-            snap = ws.merged_snapshot;
-        }
-        if sig.is_none() {
-            sig = ws.merged_sig_map;
-        }
-        if runtime_setup.pre_sticky_expand && lex.is_none() {
-            lex = ws.lexicon_snapshot;
-        }
-    }
-
-    resolved_snapshot_id = snap;
-    resolved_sig_map_id = sig;
-    resolved_lexicon_id = lex;
-} else if runtime_setup.pre_sticky_expand && resolved_lexicon_id.is_none() {
-    if let Some(ws) = workspace_runtime.workspace.as_ref() {
-        resolved_lexicon_id = ws.lexicon_snapshot;
-    }
-}
-
-let resolved_snapshot_id = match resolved_snapshot_id {
-    Some(h) => h,
-    None => {
-        eprintln!("ask: missing snapshot id");
-        return 2;
-    }
-};
-let resolved_sig_map_id = match resolved_sig_map_id {
-    Some(h) => h,
-    None => {
-        eprintln!("ask: missing sig-map id");
-        return 2;
-    }
-};
-let sticky_runtime_state = runtime_setup.sticky_runtime_state;
-
-// Append this turn's prompt message to the conversation history.
-let conv_role = match role {
-    Role::System => ConversationRole::System,
-    Role::User => ConversationRole::User,
-    Role::Assistant => ConversationRole::Assistant,
-};
-conv_msgs.push(ConversationMessage {
-    role: conv_role,
-    content: text,
-    replay_id: None,
-});
-
-// Canonicalize conversation history deterministically.
-{
-    let mut cp = ConversationPackV1::new(
-        seed,
-        max_tokens,
-        resolved_snapshot_id,
-        resolved_sig_map_id,
-        resolved_lexicon_id,
-        ConversationLimits::default_v1(),
-    );
-    cp.messages = conv_msgs;
-    cp.canonicalize_in_place();
-    conv_msgs = cp.messages;
-}
-
-// Build a PromptPack from the conversation messages.
-let mut pack = PromptPack::new(seed, max_tokens, ids);
-let mut pm: Vec<Message> = Vec::with_capacity(conv_msgs.len());
-for m in conv_msgs.iter() {
-    let role = match m.role {
-        ConversationRole::System => Role::System,
-        ConversationRole::User => Role::User,
-        ConversationRole::Assistant => Role::Assistant,
     };
-    pm.push(Message { role, content: m.content.clone() });
-}
-pack.messages = pm;
+    let resolved_sig_map_id = match resolved_sig_map_id {
+        Some(h) => h,
+        None => {
+            eprintln!("ask: missing sig-map id");
+            return 2;
+        }
+    };
+    let sticky_runtime_state = runtime_setup.sticky_runtime_state;
 
-// Apply default canonical limits to make a bounded artifact.
-let limits = PromptLimits::default_v1();
-
-let prompt_hash = match put_prompt_pack(&store, &mut pack, limits) {
-    Ok(h) => h,
-    Err(e) => {
-        eprintln!("put failed: {}", e);
-        return 1;
-    }
-};
-
-let mut aa: Vec<String> = Vec::new();
-aa.push("--root".to_string());
-aa.push(root.to_string_lossy().to_string());
-aa.push("--prompt".to_string());
-aa.push(hex32(&prompt_hash));
-aa.extend(forward.clone());
-append_answer_runtime_args_v1(
-    &mut aa,
-    &forward,
-    &runtime_setup,
-    resolved_snapshot_id,
-    resolved_sig_map_id,
-    resolved_lexicon_id,
-);
-if let Some(rh) = prior_replay_id_opt {
-    aa.push("--prior-replay".to_string());
-    aa.push(hex32(&rh));
-}
-
-let mut markov_ctx_tail: Vec<MarkovTokenV1> = Vec::new();
-if sticky_runtime_state.markov_model_id.is_some() && !conv_msgs.is_empty() {
-    markov_ctx_tail = rebuild_markov_ctx_tail_from_conversation(&store, &conv_msgs, 64);
-}
-
-let (ans_text, out_file, _mt_tokens, replay_hash) = match answer_run_text_inner(&aa, &markov_ctx_tail) {
-    Ok(x) => x,
-    Err(code) => return code,
-};
-
-if let Some(path) = out_file {
-    if let Err(e) = fs::write(&path, ans_text.as_bytes()) {
-        eprintln!("write failed: {}", e);
-        return 1;
-    }
-}
-
-if let Err(e) = write_all_to_stdout(ans_text.as_bytes()) {
-    eprintln!("stdout error: {}", e);
-    return 1;
-}
-
-// Persist the updated conversation when requested (session-file or explicit conversation mode).
-if session_file.is_some() || conversation_hex_opt.is_some() {
+    // Append this turn's prompt message to the conversation history.
+    let conv_role = match role {
+        Role::System => ConversationRole::System,
+        Role::User => ConversationRole::User,
+        Role::Assistant => ConversationRole::Assistant,
+    };
     conv_msgs.push(ConversationMessage {
-        role: ConversationRole::Assistant,
-        content: ans_text,
-        replay_id: Some(replay_hash),
+        role: conv_role,
+        content: text,
+        replay_id: None,
     });
 
-    let mut cp = ConversationPackV1::new(
-        seed,
-        max_tokens,
-        resolved_snapshot_id,
-        resolved_sig_map_id,
-        resolved_lexicon_id,
-        ConversationLimits::default_v1(),
-    );
-    sticky_runtime_state.apply_to_pack(&mut cp);
-    cp.messages = conv_msgs;
-    cp.canonicalize_in_place();
+    // Canonicalize conversation history deterministically.
+    {
+        let mut cp = ConversationPackV1::new(
+            seed,
+            max_tokens,
+            resolved_snapshot_id,
+            resolved_sig_map_id,
+            resolved_lexicon_id,
+            ConversationLimits::default_v1(),
+        );
+        cp.messages = conv_msgs;
+        cp.canonicalize_in_place();
+        conv_msgs = cp.messages;
+    }
 
-    let h = match put_conversation_pack(&store, &mut cp) {
+    // Build a PromptPack from the conversation messages.
+    let mut pack = PromptPack::new(seed, max_tokens, ids);
+    let mut pm: Vec<Message> = Vec::with_capacity(conv_msgs.len());
+    for m in conv_msgs.iter() {
+        let role = match m.role {
+            ConversationRole::System => Role::System,
+            ConversationRole::User => Role::User,
+            ConversationRole::Assistant => Role::Assistant,
+        };
+        pm.push(Message {
+            role,
+            content: m.content.clone(),
+        });
+    }
+    pack.messages = pm;
+
+    // Apply default canonical limits to make a bounded artifact.
+    let limits = PromptLimits::default_v1();
+
+    let prompt_hash = match put_prompt_pack(&store, &mut pack, limits) {
         Ok(h) => h,
         Err(e) => {
-            eprintln!("save failed: {}", e);
+            eprintln!("put failed: {}", e);
             return 1;
         }
     };
 
-    if let Some(ref sf) = session_file {
-        if let Err(e) = write_conversation_session_file_atomic(sf, &h) {
-            eprintln!("save failed: {}", e);
+    let mut aa: Vec<String> = Vec::new();
+    aa.push("--root".to_string());
+    aa.push(root.to_string_lossy().to_string());
+    aa.push("--prompt".to_string());
+    aa.push(hex32(&prompt_hash));
+    aa.extend(forward.clone());
+    append_answer_runtime_args_v1(
+        &mut aa,
+        &forward,
+        &runtime_setup,
+        resolved_snapshot_id,
+        resolved_sig_map_id,
+        resolved_lexicon_id,
+    );
+    if let Some(rh) = prior_replay_id_opt {
+        aa.push("--prior-replay".to_string());
+        aa.push(hex32(&rh));
+    }
+
+    let mut markov_ctx_tail: Vec<MarkovTokenV1> = Vec::new();
+    if sticky_runtime_state.markov_model_id.is_some() && !conv_msgs.is_empty() {
+        markov_ctx_tail = rebuild_markov_ctx_tail_from_conversation(&store, &conv_msgs, 64);
+    }
+
+    let (ans_text, out_file, _mt_tokens, replay_hash) =
+        match answer_run_text_inner(&aa, &markov_ctx_tail) {
+            Ok(x) => x,
+            Err(code) => return code,
+        };
+
+    if let Some(path) = out_file {
+        if let Err(e) = fs::write(&path, ans_text.as_bytes()) {
+            eprintln!("write failed: {}", e);
             return 1;
         }
     }
 
-    eprintln!("conversation_pack={}", hex32(&h));
-}
+    if let Err(e) = write_all_to_stdout(ans_text.as_bytes()) {
+        eprintln!("stdout error: {}", e);
+        return 1;
+    }
 
-0
+    // Persist the updated conversation when requested (session-file or explicit conversation mode).
+    if session_file.is_some() || conversation_hex_opt.is_some() {
+        conv_msgs.push(ConversationMessage {
+            role: ConversationRole::Assistant,
+            content: ans_text,
+            replay_id: Some(replay_hash),
+        });
+
+        let mut cp = ConversationPackV1::new(
+            seed,
+            max_tokens,
+            resolved_snapshot_id,
+            resolved_sig_map_id,
+            resolved_lexicon_id,
+            ConversationLimits::default_v1(),
+        );
+        sticky_runtime_state.apply_to_pack(&mut cp);
+        cp.messages = conv_msgs;
+        cp.canonicalize_in_place();
+
+        let h = match put_conversation_pack(&store, &mut cp) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("save failed: {}", e);
+                return 1;
+            }
+        };
+
+        if let Some(ref sf) = session_file {
+            if let Err(e) = write_conversation_session_file_atomic(sf, &h) {
+                eprintln!("save failed: {}", e);
+                return 1;
+            }
+        }
+
+        eprintln!("conversation_pack={}", hex32(&h));
+    }
+
+    0
 }
 
 fn cmd_chat(args: &[String]) -> i32 {
@@ -2864,7 +2935,10 @@ fn cmd_chat(args: &[String]) -> i32 {
                 ConversationRole::User => Role::User,
                 ConversationRole::Assistant => Role::Assistant,
             };
-            pm.push(Message { role, content: m.content.clone() });
+            pm.push(Message {
+                role,
+                content: m.content.clone(),
+            });
         }
         pack.messages = pm;
 
@@ -2906,10 +2980,11 @@ fn cmd_chat(args: &[String]) -> i32 {
             aa.push(hex32(&rh));
         }
 
-        let (ans_text, _out_file, mt_tokens, replay_hash) = match answer_run_text_inner(&aa, &markov_ctx_tail) {
-            Ok(x) => x,
-            Err(code) => return code,
-        };
+        let (ans_text, _out_file, mt_tokens, replay_hash) =
+            match answer_run_text_inner(&aa, &markov_ctx_tail) {
+                Ok(x) => x,
+                Err(code) => return code,
+            };
 
         // Print answer to stdout.
         if let Err(e) = write_all_to_stdout(ans_text.as_bytes()) {
@@ -2975,8 +3050,6 @@ fn cmd_chat(args: &[String]) -> i32 {
 
     0
 }
-
-
 
 fn cmd_prompt(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -3061,7 +3134,10 @@ fn cmd_prompt(args: &[String]) -> i32 {
     };
 
     let mut pack = PromptPack::new(seed, max_tokens, ids);
-    pack.messages.push(Message { role, content: text });
+    pack.messages.push(Message {
+        role,
+        content: text,
+    });
 
     // Apply default canonical limits to make a bounded artifact.
     let limits = PromptLimits::default_v1();
@@ -3152,7 +3228,6 @@ fn cmd_replay_decode(args: &[String]) -> i32 {
     0
 }
 
-
 fn cmd_replay_new(args: &[String]) -> i32 {
     let mut root = default_root();
 
@@ -3188,7 +3263,6 @@ fn cmd_replay_new(args: &[String]) -> i32 {
         }
     }
 }
-
 
 fn cmd_frame_seg_demo(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -3488,7 +3562,10 @@ fn cmd_ingest_wiki(args: &[String]) -> i32 {
                 eprintln!("shard-id out of range");
                 return 2;
             }
-            Some(ShardCfgV1 { shard_count: sc, shard_id: sid })
+            Some(ShardCfgV1 {
+                shard_count: sc,
+                shard_id: sid,
+            })
         }
         _ => {
             eprintln!("provide both --shards and --shard-id");
@@ -3517,7 +3594,11 @@ fn cmd_ingest_wiki(args: &[String]) -> i32 {
     // seg_rows is a target row cap, not a hard byte cap.
     let seg_bytes = (seg_mb as u64) * 1024 * 1024;
     let row_bytes = (row_kb as u64) * 1024;
-    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
+    let mut seg_rows = if row_bytes == 0 {
+        1
+    } else {
+        seg_bytes / row_bytes
+    };
     if seg_rows < 1 {
         seg_rows = 1;
     }
@@ -3545,7 +3626,6 @@ fn cmd_ingest_wiki(args: &[String]) -> i32 {
     println!("{}", hex32(&mh));
     0
 }
-
 
 fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -3581,7 +3661,7 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
                 }
                 xml_path = Some(&args[i]);
             }
-            
+
             "--xml-bz2" => {
                 i += 1;
                 if i >= args.len() {
@@ -3591,8 +3671,7 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
                 xml_bz2_path = Some(&args[i]);
             }
 
-
-"--seg_mb" => {
+            "--seg_mb" => {
                 i += 1;
                 if i >= args.len() {
                     eprintln!("missing --seg_mb value");
@@ -3695,17 +3774,17 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
     }
 
     let (xml_path, is_bz2) = match (xml_path, xml_bz2_path) {
-    (Some(p), None) => (p, false),
-    (None, Some(p)) => (p, true),
-    (None, None) => {
-        eprintln!("missing --xml or --xml-bz2 value");
-        return 2;
-    }
-    (Some(_), Some(_)) => {
-        eprintln!("provide only one of --xml or --xml-bz2");
-        return 2;
-    }
-};
+        (Some(p), None) => (p, false),
+        (None, Some(p)) => (p, true),
+        (None, None) => {
+            eprintln!("missing --xml or --xml-bz2 value");
+            return 2;
+        }
+        (Some(_), Some(_)) => {
+            eprintln!("provide only one of --xml or --xml-bz2");
+            return 2;
+        }
+    };
 
     let shard_cfg = match (shards, shard_id) {
         (None, None) => None,
@@ -3714,7 +3793,10 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
                 eprintln!("shard-id out of range");
                 return 2;
             }
-            Some(ShardCfgV1 { shard_count: sc, shard_id: sid })
+            Some(ShardCfgV1 {
+                shard_count: sc,
+                shard_id: sid,
+            })
         }
         _ => {
             eprintln!("provide both --shards and --shard-id");
@@ -3730,7 +3812,6 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
 
     let store = store_for(&root);
 
-
     let file = match std::fs::File::open(xml_path) {
         Ok(f) => f,
         Err(e) => {
@@ -3739,9 +3820,15 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
         }
     };
     // Translate sizing knobs to row/segment parameters.
-    let seg_bytes: u64 = (seg_mb as u64).saturating_mul(1024u64).saturating_mul(1024u64);
+    let seg_bytes: u64 = (seg_mb as u64)
+        .saturating_mul(1024u64)
+        .saturating_mul(1024u64);
     let row_bytes: u64 = (row_kb as u64).saturating_mul(1024u64);
-    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
+    let mut seg_rows = if row_bytes == 0 {
+        1
+    } else {
+        seg_bytes / row_bytes
+    };
     if seg_rows == 0 {
         seg_rows = 1;
     }
@@ -3756,36 +3843,35 @@ fn cmd_ingest_wiki_xml(args: &[String]) -> i32 {
     cfg.max_docs = max_docs;
 
     let mh = if is_bz2 {
-    let dec = BzDecoder::new(file);
-    let rr = std::io::BufReader::new(dec);
-    match match shard_cfg {
-        Some(sc) => ingest_wiki_xml_sharded(&store, rr, cfg, sc),
-        None => ingest_wiki_xml(&store, rr, cfg),
-    } {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("ingest failed: {}", e);
-            return 1;
+        let dec = BzDecoder::new(file);
+        let rr = std::io::BufReader::new(dec);
+        match match shard_cfg {
+            Some(sc) => ingest_wiki_xml_sharded(&store, rr, cfg, sc),
+            None => ingest_wiki_xml(&store, rr, cfg),
+        } {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("ingest failed: {}", e);
+                return 1;
+            }
         }
-    }
-} else {
-    let rr = std::io::BufReader::new(file);
-    match match shard_cfg {
-        Some(sc) => ingest_wiki_xml_sharded(&store, rr, cfg, sc),
-        None => ingest_wiki_xml(&store, rr, cfg),
-    } {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("ingest failed: {}", e);
-            return 1;
+    } else {
+        let rr = std::io::BufReader::new(file);
+        match match shard_cfg {
+            Some(sc) => ingest_wiki_xml_sharded(&store, rr, cfg, sc),
+            None => ingest_wiki_xml(&store, rr, cfg),
+        } {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("ingest failed: {}", e);
+                return 1;
+            }
         }
-    }
-};
+    };
 
     println!("{}", hex32(&mh));
     0
 }
-
 
 fn cmd_ingest_wiki_sharded(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -3930,7 +4016,11 @@ fn cmd_ingest_wiki_sharded(args: &[String]) -> i32 {
     // Derive segment sizing deterministically from seg_mb and row_kb.
     let seg_bytes = (seg_mb as u64) * 1024 * 1024;
     let row_bytes = (row_kb as u64) * 1024;
-    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
+    let mut seg_rows = if row_bytes == 0 {
+        1
+    } else {
+        seg_bytes / row_bytes
+    };
     if seg_rows < 1 {
         seg_rows = 1;
     }
@@ -3941,7 +4031,10 @@ fn cmd_ingest_wiki_sharded(args: &[String]) -> i32 {
     let mut entries: Vec<ShardEntryV1> = Vec::with_capacity(shard_count as usize);
 
     for sid in 0..shard_count {
-        let shard = ShardCfgV1 { shard_count, shard_id: sid };
+        let shard = ShardCfgV1 {
+            shard_count,
+            shard_id: sid,
+        };
         if shard.validate().is_err() {
             eprintln!("bad shard cfg");
             return 2;
@@ -4000,8 +4093,11 @@ fn cmd_ingest_wiki_sharded(args: &[String]) -> i32 {
     };
 
     if let Some(p) = out_file {
-        let s = format!("{}
-", hex32(&man_hash));
+        let s = format!(
+            "{}
+",
+            hex32(&man_hash)
+        );
         if let Err(e) = std::fs::write(&p, s.as_bytes()) {
             eprintln!("write error: {}", e);
             return 1;
@@ -4166,9 +4262,15 @@ fn cmd_ingest_wiki_xml_sharded(args: &[String]) -> i32 {
         }
     };
 
-    let seg_bytes: u64 = (seg_mb as u64).saturating_mul(1024u64).saturating_mul(1024u64);
+    let seg_bytes: u64 = (seg_mb as u64)
+        .saturating_mul(1024u64)
+        .saturating_mul(1024u64);
     let row_bytes: u64 = (row_kb as u64).saturating_mul(1024u64);
-    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
+    let mut seg_rows = if row_bytes == 0 {
+        1
+    } else {
+        seg_bytes / row_bytes
+    };
     if seg_rows == 0 {
         seg_rows = 1;
     }
@@ -4179,7 +4281,10 @@ fn cmd_ingest_wiki_xml_sharded(args: &[String]) -> i32 {
     let mut entries: Vec<ShardEntryV1> = Vec::with_capacity(shard_count as usize);
 
     for sid in 0..shard_count {
-        let shard = ShardCfgV1 { shard_count, shard_id: sid };
+        let shard = ShardCfgV1 {
+            shard_count,
+            shard_id: sid,
+        };
         if shard.validate().is_err() {
             eprintln!("bad shard cfg");
             return 2;
@@ -4250,8 +4355,11 @@ fn cmd_ingest_wiki_xml_sharded(args: &[String]) -> i32 {
     };
 
     if let Some(p) = out_file {
-        let s = format!("{}
-", hex32(&man_hash));
+        let s = format!(
+            "{}
+",
+            hex32(&man_hash)
+        );
         if let Err(e) = std::fs::write(&p, s.as_bytes()) {
             eprintln!("write error: {}", e);
             return 1;
@@ -4427,9 +4535,15 @@ fn cmd_load_wikipedia(args: &[String]) -> i32 {
     };
 
     // Derive segment sizing deterministically from seg_mb and row_kb.
-    let seg_bytes: u64 = (seg_mb as u64).saturating_mul(1024u64).saturating_mul(1024u64);
+    let seg_bytes: u64 = (seg_mb as u64)
+        .saturating_mul(1024u64)
+        .saturating_mul(1024u64);
     let row_bytes: u64 = (row_kb as u64).saturating_mul(1024u64);
-    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
+    let mut seg_rows = if row_bytes == 0 {
+        1
+    } else {
+        seg_bytes / row_bytes
+    };
     if seg_rows < 1 {
         seg_rows = 1;
     }
@@ -4440,7 +4554,10 @@ fn cmd_load_wikipedia(args: &[String]) -> i32 {
     // Sharded ingest.
     let mut entries: Vec<ShardEntryV1> = Vec::with_capacity(shard_count as usize);
     for sid in 0..shard_count {
-        let shard = ShardCfgV1 { shard_count, shard_id: sid };
+        let shard = ShardCfgV1 {
+            shard_count,
+            shard_id: sid,
+        };
         if shard.validate().is_err() {
             eprintln!("bad shard cfg");
             return 2;
@@ -4623,7 +4740,11 @@ fn cmd_load_wikipedia(args: &[String]) -> i32 {
         Ok(None) => WorkspaceV1::default(),
         Err(e) => {
             eprintln!("workspace read error: {}", e);
-            eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+            eprintln!(
+                "workspace file: {}/{}",
+                root.to_string_lossy(),
+                WORKSPACE_V1_FILENAME
+            );
             return 1;
         }
     };
@@ -4635,15 +4756,31 @@ fn cmd_load_wikipedia(args: &[String]) -> i32 {
     }
     if let Err(e) = write_workspace_v1_atomic(&root, &ws) {
         eprintln!("workspace write error: {}", e);
-        eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+        eprintln!(
+            "workspace file: {}/{}",
+            root.to_string_lossy(),
+            WORKSPACE_V1_FILENAME
+        );
         return 1;
     }
 
     let mut out = String::new();
-    out.push_str(&format!("shard_manifest_ingest={}\n", hex32(&ingest_man_hash)));
-    out.push_str(&format!("shard_manifest_index={}\n", hex32(&index_man_hash)));
-    out.push_str(&format!("reduce_manifest={}\n", hex32(&red.reduce_manifest)));
-    out.push_str(&format!("merged_snapshot={}\n", hex32(&red.merged_snapshot)));
+    out.push_str(&format!(
+        "shard_manifest_ingest={}\n",
+        hex32(&ingest_man_hash)
+    ));
+    out.push_str(&format!(
+        "shard_manifest_index={}\n",
+        hex32(&index_man_hash)
+    ));
+    out.push_str(&format!(
+        "reduce_manifest={}\n",
+        hex32(&red.reduce_manifest)
+    ));
+    out.push_str(&format!(
+        "merged_snapshot={}\n",
+        hex32(&red.merged_snapshot)
+    ));
     out.push_str(&format!("merged_sig_map={}\n", hex32(&red.merged_sig_map)));
     out.push_str(&format!("workspace_written=1\n"));
 
@@ -4657,7 +4794,6 @@ fn cmd_load_wikipedia(args: &[String]) -> i32 {
     print!("{}", out);
     0
 }
-
 
 fn cmd_load_wiktionary(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -4803,7 +4939,11 @@ fn cmd_load_wiktionary(args: &[String]) -> i32 {
         Ok(None) => WorkspaceV1::default(),
         Err(e) => {
             eprintln!("workspace read error: {}", e);
-            eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+            eprintln!(
+                "workspace file: {}/{}",
+                root.to_string_lossy(),
+                WORKSPACE_V1_FILENAME
+            );
             return 1;
         }
     };
@@ -4814,13 +4954,20 @@ fn cmd_load_wiktionary(args: &[String]) -> i32 {
     }
     if let Err(e) = write_workspace_v1_atomic(&root, &ws) {
         eprintln!("workspace write error: {}", e);
-        eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+        eprintln!(
+            "workspace file: {}/{}",
+            root.to_string_lossy(),
+            WORKSPACE_V1_FILENAME
+        );
         return 1;
     }
 
     let mut out = String::new();
     out.push_str(&format!("lexicon_snapshot={}\n", hex32(&rep.snapshot_hash)));
-    out.push_str(&format!("segments_written={}\n", rep.segment_hashes.len() as u64));
+    out.push_str(&format!(
+        "segments_written={}\n",
+        rep.segment_hashes.len() as u64
+    ));
     if stats {
         out.push_str(&format!("pages_seen={}\n", rep.pages_seen));
         out.push_str(&format!("pages_english={}\n", rep.pages_kept));
@@ -4841,7 +4988,6 @@ fn cmd_load_wiktionary(args: &[String]) -> i32 {
     print!("{}", out);
     0
 }
-
 
 fn cmd_build_index(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -4891,7 +5037,7 @@ fn cmd_build_index(args: &[String]) -> i32 {
         if bytes.len() < FRAME_SEGMENT_MAGIC.len() {
             continue;
         }
-                if &bytes[..FRAME_SEGMENT_MAGIC.len()] != &FRAME_SEGMENT_MAGIC[..] {
+        if &bytes[..FRAME_SEGMENT_MAGIC.len()] != &FRAME_SEGMENT_MAGIC[..] {
             continue;
         }
 
@@ -4913,8 +5059,7 @@ fn cmd_build_index(args: &[String]) -> i32 {
             if idx.source_id != src {
                 eprintln!(
                     "mixed source_id detected; expected {}, saw {}",
-                    src.0 .0,
-                    idx.source_id.0 .0
+                    src.0 .0, idx.source_id.0 .0
                 );
                 eprintln!("build-index currently requires a single source_id per snapshot");
                 return 1;
@@ -4931,7 +5076,6 @@ fn cmd_build_index(args: &[String]) -> i32 {
             }
         };
 
-
         let idx_hash = match store.put(&idx_bytes) {
             Ok(h) => h,
             Err(e) => {
@@ -4946,7 +5090,12 @@ fn cmd_build_index(args: &[String]) -> i32 {
         for t in &idx.terms {
             sig_terms.push(t.term);
         }
-        let sig = match fsa_lm::segment_sig::SegmentSigV1::build(idx_hash, &sig_terms, bloom_bytes, bloom_k) {
+        let sig = match fsa_lm::segment_sig::SegmentSigV1::build(
+            idx_hash,
+            &sig_terms,
+            bloom_bytes,
+            bloom_k,
+        ) {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("segment sig build error: {}", e);
@@ -5010,7 +5159,6 @@ fn cmd_build_index(args: &[String]) -> i32 {
             return 1;
         }
     };
-
 
     // Store IndexSigMapV1 sidecar for this snapshot.
     let mut sig_map = fsa_lm::index_sig_map::IndexSigMapV1::new(src);
@@ -5142,19 +5290,22 @@ fn cmd_compact_index(args: &[String]) -> i32 {
         let r = res.report;
         println!("dry_run=1");
         println!("input_snapshot={}", hex32(&r.input_snapshot_id));
-        println!("target_bytes_per_out_segment={}", r.cfg.target_bytes_per_out_segment);
+        println!(
+            "target_bytes_per_out_segment={}",
+            r.cfg.target_bytes_per_out_segment
+        );
         println!("max_out_segments={}", r.cfg.max_out_segments);
-        println!("used_even_pack_fallback={}", if r.cfg.used_even_pack_fallback { 1 } else { 0 });
+        println!(
+            "used_even_pack_fallback={}",
+            if r.cfg.used_even_pack_fallback { 1 } else { 0 }
+        );
         println!("bytes_input_total={}", r.bytes_input_total);
         println!("groups={}", r.groups.len());
         if verbose {
             for (gi, g) in r.groups.iter().enumerate() {
                 println!(
                     "group={} start_ix={} len={} est_bytes_in={}",
-                    gi,
-                    g.start_ix,
-                    g.len,
-                    g.est_bytes_in
+                    gi, g.start_ix, g.len, g.est_bytes_in
                 );
             }
         }
@@ -5185,7 +5336,11 @@ fn cmd_compact_index(args: &[String]) -> i32 {
         res.report.bytes_input_total,
         res.report.bytes_output_total,
         res.report.groups.len(),
-        if res.report.cfg.used_even_pack_fallback { 1 } else { 0 }
+        if res.report.cfg.used_even_pack_fallback {
+            1
+        } else {
+            0
+        }
     );
 
     if verbose {
@@ -5196,12 +5351,7 @@ fn cmd_compact_index(args: &[String]) -> i32 {
             };
             eprintln!(
                 "group={} start_ix={} len={} est_bytes_in={} out_id={} out_bytes={}",
-                gi,
-                g.start_ix,
-                g.len,
-                g.est_bytes_in,
-                out_id,
-                g.out_bytes
+                gi, g.start_ix, g.len, g.est_bytes_in, out_id, g.out_bytes
             );
         }
     }
@@ -5209,9 +5359,9 @@ fn cmd_compact_index(args: &[String]) -> i32 {
     0
 }
 
-
-
-fn try_build_index_v1_in_store(store: &FsArtifactStore) -> Result<Option<(Hash32, Hash32)>, String> {
+fn try_build_index_v1_in_store(
+    store: &FsArtifactStore,
+) -> Result<Option<(Hash32, Hash32)>, String> {
     let mut paths: Vec<PathBuf> = Vec::new();
     collect_bin_paths(store.root(), &mut paths);
 
@@ -5251,8 +5401,7 @@ fn try_build_index_v1_in_store(store: &FsArtifactStore) -> Result<Option<(Hash32
             if idx.source_id != src {
                 return Err(format!(
                     "mixed source_id detected; expected {}, saw {}",
-                    src.0 .0,
-                    idx.source_id.0 .0
+                    src.0 .0, idx.source_id.0 .0
                 ));
             }
         } else {
@@ -5278,7 +5427,12 @@ fn try_build_index_v1_in_store(store: &FsArtifactStore) -> Result<Option<(Hash32
         for t in &idx.terms {
             sig_terms.push(t.term);
         }
-        let sig = match fsa_lm::segment_sig::SegmentSigV1::build(idx_hash, &sig_terms, bloom_bytes, bloom_k) {
+        let sig = match fsa_lm::segment_sig::SegmentSigV1::build(
+            idx_hash,
+            &sig_terms,
+            bloom_bytes,
+            bloom_k,
+        ) {
             Ok(s) => s,
             Err(e) => {
                 return Err(format!("segment sig build error: {}", e));
@@ -5544,7 +5698,6 @@ fn cmd_build_index_sharded(args: &[String]) -> i32 {
     0
 }
 
-
 fn cmd_reduce_index(args: &[String]) -> i32 {
     let mut root = default_root();
     let mut manifest_hex: Option<&str> = None;
@@ -5609,7 +5762,8 @@ fn cmd_reduce_index(args: &[String]) -> i32 {
         }
     };
 
-    let out_lines = format!("{}\n{}\n{}\n",
+    let out_lines = format!(
+        "{}\n{}\n{}\n",
         hex32(&res.reduce_manifest),
         hex32(&res.merged_snapshot),
         hex32(&res.merged_sig_map),
@@ -5832,7 +5986,11 @@ fn cmd_run_workflow(args: &[String]) -> i32 {
     // Derive segment sizing deterministically from seg_mb and row_kb.
     let seg_bytes = (seg_mb as u64) * 1024 * 1024;
     let row_bytes = (row_kb as u64) * 1024;
-    let mut seg_rows = if row_bytes == 0 { 1 } else { seg_bytes / row_bytes };
+    let mut seg_rows = if row_bytes == 0 {
+        1
+    } else {
+        seg_bytes / row_bytes
+    };
     if seg_rows < 1 {
         seg_rows = 1;
     }
@@ -5843,7 +6001,10 @@ fn cmd_run_workflow(args: &[String]) -> i32 {
     // Sharded ingest.
     let mut entries: Vec<ShardEntryV1> = Vec::with_capacity(shard_count as usize);
     for sid in 0..shard_count {
-        let shard = ShardCfgV1 { shard_count, shard_id: sid };
+        let shard = ShardCfgV1 {
+            shard_count,
+            shard_id: sid,
+        };
         if shard.validate().is_err() {
             eprintln!("bad shard cfg");
             return 2;
@@ -5979,16 +6140,31 @@ fn cmd_run_workflow(args: &[String]) -> i32 {
     };
 
     let mut out = String::new();
-    out.push_str(&format!("shard_manifest_ingest={}
-", hex32(&ingest_man_hash)));
-    out.push_str(&format!("shard_manifest_index={}
-", hex32(&index_man_hash)));
-    out.push_str(&format!("reduce_manifest={}
-", hex32(&red.reduce_manifest)));
-    out.push_str(&format!("merged_snapshot={}
-", hex32(&red.merged_snapshot)));
-    out.push_str(&format!("merged_sig_map={}
-", hex32(&red.merged_sig_map)));
+    out.push_str(&format!(
+        "shard_manifest_ingest={}
+",
+        hex32(&ingest_man_hash)
+    ));
+    out.push_str(&format!(
+        "shard_manifest_index={}
+",
+        hex32(&index_man_hash)
+    ));
+    out.push_str(&format!(
+        "reduce_manifest={}
+",
+        hex32(&red.reduce_manifest)
+    ));
+    out.push_str(&format!(
+        "merged_snapshot={}
+",
+        hex32(&red.merged_snapshot)
+    ));
+    out.push_str(&format!(
+        "merged_sig_map={}
+",
+        hex32(&red.merged_sig_map)
+    ));
 
     // Optional: 6c client sync step (assumes server is already running).
     if sync_addr.is_some() || sync_root.is_some() {
@@ -6041,10 +6217,7 @@ fn cmd_run_workflow(args: &[String]) -> i32 {
         out.push_str(&format!(
             "sync_stats needed_total={} already_present={} fetched={} bytes_fetched={}
 ",
-            stats.needed_total,
-            stats.already_present,
-            stats.fetched,
-            stats.bytes_fetched
+            stats.needed_total, stats.already_present, stats.fetched, stats.bytes_fetched
         ));
     }
 
@@ -6057,7 +6230,6 @@ fn cmd_run_workflow(args: &[String]) -> i32 {
     }
     0
 }
-
 
 fn cmd_ingest_wiktionary_xml(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -6202,19 +6374,18 @@ fn cmd_ingest_wiktionary_xml(args: &[String]) -> i32 {
         out.push_str(&format!("segment={}\n", hex32(h)));
     }
     out.push_str(&format!("lexicon_snapshot={}\n", hex32(&rep.snapshot_hash)));
-if stats {
-    out.push_str(&format!("pages_seen={}\n", rep.pages_seen));
-    out.push_str(&format!("pages_english={}\n", rep.pages_kept));
-    out.push_str(&format!("lemmas={}\n", rep.lemmas_total));
-    out.push_str(&format!("senses={}\n", rep.senses_total));
-    out.push_str(&format!("rel_edges={}\n", rep.rels_total));
-    out.push_str(&format!("prons={}\n", rep.prons_total));
-    out.push_str(&format!(
-        "segments_written={}\n",
-        rep.segment_hashes.len() as u64
-    ));
-}
-
+    if stats {
+        out.push_str(&format!("pages_seen={}\n", rep.pages_seen));
+        out.push_str(&format!("pages_english={}\n", rep.pages_kept));
+        out.push_str(&format!("lemmas={}\n", rep.lemmas_total));
+        out.push_str(&format!("senses={}\n", rep.senses_total));
+        out.push_str(&format!("rel_edges={}\n", rep.rels_total));
+        out.push_str(&format!("prons={}\n", rep.prons_total));
+        out.push_str(&format!(
+            "segments_written={}\n",
+            rep.segment_hashes.len() as u64
+        ));
+    }
 
     print!("{}", out);
     if let Some(p) = out_file {
@@ -6225,7 +6396,6 @@ if stats {
     }
     0
 }
-
 
 fn cmd_build_lexicon_snapshot(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -6313,7 +6483,6 @@ fn cmd_build_lexicon_snapshot(args: &[String]) -> i32 {
     0
 }
 
-
 fn cmd_validate_lexicon_snapshot(args: &[String]) -> i32 {
     let mut root = default_root();
     let mut snap_hex: Option<String> = None;
@@ -6380,7 +6549,6 @@ fn cmd_validate_lexicon_snapshot(args: &[String]) -> i32 {
         }
     }
 }
-
 
 fn cmd_build_pragmatics(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -6461,7 +6629,6 @@ fn cmd_build_pragmatics(args: &[String]) -> i32 {
         i += 1;
     }
 
-
     if tok_max_bytes == 0 {
         eprintln!("tok-max-bytes must be > 0");
         return 2;
@@ -6521,13 +6688,14 @@ fn cmd_build_pragmatics(args: &[String]) -> i32 {
             }
         };
 
-        let view_opt = match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(&store, &lh) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("lexicon load error: {}", e);
-                return 1;
-            }
-        };
+        let view_opt =
+            match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(&store, &lh) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("lexicon load error: {}", e);
+                    return 1;
+                }
+            };
         let view = match view_opt {
             Some(v) => v,
             None => {
@@ -6587,13 +6755,14 @@ fn cmd_build_pragmatics(args: &[String]) -> i32 {
     0
 }
 
-
 #[cfg(test)]
 mod validate_lexicon_snapshot_cli_tests {
     use super::*;
 
     use fsa_lm::frame::Id64;
-    use fsa_lm::lexicon::{LemmaId, LemmaKeyId, LemmaRowV1, SenseId, SenseRowV1, TextId, LEXICON_SCHEMA_V1};
+    use fsa_lm::lexicon::{
+        LemmaId, LemmaKeyId, LemmaRowV1, SenseId, SenseRowV1, TextId, LEXICON_SCHEMA_V1,
+    };
     use fsa_lm::lexicon_segment::LexiconSegmentV1;
     use fsa_lm::lexicon_segment_store::put_lexicon_segment_v1;
     use fsa_lm::lexicon_snapshot::{LexiconSnapshotEntryV1, LexiconSnapshotV1};
@@ -6891,16 +7060,16 @@ mod scale_demo_cli_tests {
     }
 }
 
-
-
 #[cfg(test)]
 mod sharded_ingest_cli_tests {
     use super::*;
 
     use fsa_lm::frame::{derive_id64, DocId};
-    use fsa_lm::index_snapshot_store::get_index_snapshot_v1;
+    use fsa_lm::index_query::{
+        query_terms_from_text, search_snapshot_gated, QueryTermsCfg, SearchCfg,
+    };
     use fsa_lm::index_sig_map_store::get_index_sig_map_v1;
-    use fsa_lm::index_query::{query_terms_from_text, search_snapshot_gated, QueryTermsCfg, SearchCfg};
+    use fsa_lm::index_snapshot_store::get_index_snapshot_v1;
     use fsa_lm::prompt_artifact::put_prompt_pack;
     use fsa_lm::prompt_pack::{Message, PromptIds, PromptLimits, PromptPack, Role};
     use fsa_lm::reduce_manifest_artifact::get_reduce_manifest_v1;
@@ -6954,10 +7123,16 @@ mod sharded_ingest_cli_tests {
         let t1 = title_for_shard(1, shard_count);
 
         let mut data = String::new();
-        data.push_str(&format!("{}	{}
-", t0, "hello world"));
-        data.push_str(&format!("{}	{}
-", t1, "hello world"));
+        data.push_str(&format!(
+            "{}	{}
+",
+            t0, "hello world"
+        ));
+        data.push_str(&format!(
+            "{}	{}
+",
+            t1, "hello world"
+        ));
         std::fs::write(&dump, data.as_bytes()).unwrap();
 
         let args = vec![
@@ -6979,7 +7154,9 @@ mod sharded_ingest_cli_tests {
         let man_hash = parse_hash32_hex(hex).unwrap();
 
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let man = get_shard_manifest_v1(&base_store, &man_hash).unwrap().unwrap();
+        let man = get_shard_manifest_v1(&base_store, &man_hash)
+            .unwrap()
+            .unwrap();
         assert_eq!(man.shard_count, shard_count);
         assert_eq!(man.mapping_id, SHARD_MAPPING_DOC_ID_HASH32_V1.to_string());
         assert_eq!(man.shards.len(), 2);
@@ -7069,7 +7246,9 @@ mod sharded_ingest_cli_tests {
 
         // Verify ReduceManifestV1 references match the printed merged ids.
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let rm = get_reduce_manifest_v1(&base_store, &reduce_hash).unwrap().unwrap();
+        let rm = get_reduce_manifest_v1(&base_store, &reduce_hash)
+            .unwrap()
+            .unwrap();
         let mut got_snap: Option<Hash32> = None;
         let mut got_sig: Option<Hash32> = None;
         for o in rm.outputs.iter() {
@@ -7123,12 +7302,7 @@ mod sharded_ingest_cli_tests {
             for (j, t) in titles.iter().enumerate() {
                 // Keep tokens simple and deterministic.
                 // All rows include "alpha" so we can assert non-empty search hits.
-                let body = format!(
-                    "alpha beta gamma shard{} doc{} x{}",
-                    sid,
-                    j,
-                    (j % 13)
-                );
+                let body = format!("alpha beta gamma shard{} doc{} x{}", sid, j, (j % 13));
                 data.push_str(&format!("{}\t{}\n", t, body));
             }
         }
@@ -7194,8 +7368,12 @@ mod sharded_ingest_cli_tests {
 
         // Load merged artifacts and sanity-check counts.
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let snap = get_index_snapshot_v1(&base_store, &merged_snapshot).unwrap().unwrap();
-        let sig_map = get_index_sig_map_v1(&base_store, &merged_sig_map).unwrap().unwrap();
+        let snap = get_index_snapshot_v1(&base_store, &merged_snapshot)
+            .unwrap()
+            .unwrap();
+        let sig_map = get_index_sig_map_v1(&base_store, &merged_sig_map)
+            .unwrap()
+            .unwrap();
 
         // With seg_rows=16 and docs_per_shard=64, we should usually have >= 24 entries.
         // Keep the bound conservative to avoid brittleness.
@@ -7206,7 +7384,11 @@ mod sharded_ingest_cli_tests {
         let qcfg = QueryTermsCfg::new();
         let qterms = query_terms_from_text("alpha beta", &qcfg);
         assert!(!qterms.is_empty());
-        let scfg = SearchCfg { k: 20, entry_cap: 0, dense_row_threshold: 200_000 };
+        let scfg = SearchCfg {
+            k: 20,
+            entry_cap: 0,
+            dense_row_threshold: 200_000,
+        };
         let (hits, _gate_stats) = search_snapshot_gated(
             &base_store,
             &merged_snapshot,
@@ -7217,7 +7399,6 @@ mod sharded_ingest_cli_tests {
         .unwrap();
         assert!(!hits.is_empty());
     }
-
 
     fn find_output(outputs: &[ShardOutputV1], tag: &str) -> Option<Hash32> {
         for o in outputs.iter() {
@@ -7382,7 +7563,6 @@ mod sharded_ingest_cli_tests {
         assert_eq!(rc, 0);
     }
 
-
     #[test]
     fn cmd_reduce_index_ok_when_primary_root_already_has_some_artifacts() {
         let root = tmp_dir("reduce_preexisting");
@@ -7402,13 +7582,17 @@ mod sharded_ingest_cli_tests {
 
         // Pre-copy one frame segment into the primary root before reduce.
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let man = get_shard_manifest_v1(&base_store, &man1_hash).unwrap().unwrap();
+        let man = get_shard_manifest_v1(&base_store, &man1_hash)
+            .unwrap()
+            .unwrap();
         let se0 = &man.shards[0];
         let shard0_root = root.join(&se0.shard_root_rel);
         let shard0_store = FsArtifactStore::new(&shard0_root).unwrap();
 
         let snap0 = find_output(&se0.outputs, "index_snapshot_v1").unwrap();
-        let snap = get_index_snapshot_v1(&shard0_store, &snap0).unwrap().unwrap();
+        let snap = get_index_snapshot_v1(&shard0_store, &snap0)
+            .unwrap()
+            .unwrap();
         let frame_seg = snap.entries[0].frame_seg;
 
         let bytes = shard0_store.get(&frame_seg).unwrap().unwrap();
@@ -7469,9 +7653,16 @@ mod sharded_ingest_cli_tests {
         // Create a minimal PromptPack and run answer on merged ids.
         let store = FsArtifactStore::new(&root).unwrap();
         let zero: Hash32 = [0u8; 32];
-        let ids = PromptIds { snapshot_id: zero, weights_id: zero, tokenizer_id: zero };
+        let ids = PromptIds {
+            snapshot_id: zero,
+            weights_id: zero,
+            tokenizer_id: zero,
+        };
         let mut pack = PromptPack::new(1, 256, ids);
-        pack.messages.push(Message { role: Role::User, content: "hello world".to_string() });
+        pack.messages.push(Message {
+            role: Role::User,
+            content: "hello world".to_string(),
+        });
         let prompt_hash = put_prompt_pack(&store, &mut pack, PromptLimits::default_v1()).unwrap();
 
         let out_ans = root.join("answer.txt");
@@ -7495,7 +7686,6 @@ mod sharded_ingest_cli_tests {
         let ans_s = std::fs::read_to_string(&out_ans).unwrap();
         assert!(!ans_s.trim().is_empty());
     }
-
 
     #[test]
     fn cmd_run_operator_workflow_pipeline_end_to_end_small() {
@@ -7564,9 +7754,7 @@ mod sharded_ingest_cli_tests {
         assert!(store.get(&snap_h.unwrap()).unwrap().is_some());
         assert!(store.get(&sig_h.unwrap()).unwrap().is_some());
     }
-
 }
-
 
 #[cfg(test)]
 mod sharded_index_cli_tests {
@@ -7578,7 +7766,11 @@ mod sharded_index_cli_tests {
 
     fn tmp_dir(name: &str) -> PathBuf {
         let base = std::env::temp_dir();
-        let p = base.join(format!("fsa_lm_cli_shard_index_{}_{}", name, std::process::id()));
+        let p = base.join(format!(
+            "fsa_lm_cli_shard_index_{}_{}",
+            name,
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p
@@ -7658,7 +7850,9 @@ mod sharded_index_cli_tests {
         let man1_hash = parse_hash32_hex(man1_hex).unwrap();
 
         let base_store = FsArtifactStore::new(&root).unwrap();
-        let man1 = get_shard_manifest_v1(&base_store, &man1_hash).unwrap().unwrap();
+        let man1 = get_shard_manifest_v1(&base_store, &man1_hash)
+            .unwrap()
+            .unwrap();
         assert_eq!(man1.shard_count, shard_count);
         assert_eq!(man1.shards.len(), 2);
 
@@ -7699,7 +7893,6 @@ mod sharded_index_cli_tests {
         assert_eq!(rc, 0);
     }
 }
-
 
 #[cfg(test)]
 mod markov_model_build_cli_tests {
@@ -7854,8 +8047,6 @@ mod markov_model_build_cli_tests {
         assert!(o.lines().count() >= 1);
     }
 
-
-
     #[test]
     fn cmd_build_markov_model_truncation_is_deterministic() {
         use fsa_lm::scale_report::hash_hash32_list_v1;
@@ -7980,7 +8171,11 @@ mod exemplar_build_cli_tests {
 
     fn tmp_dir(name: &str) -> PathBuf {
         let base = std::env::temp_dir();
-        let p = base.join(format!("fsa_lm_cli_exemplar_{}_{}", name, std::process::id()));
+        let p = base.join(format!(
+            "fsa_lm_cli_exemplar_{}_{}",
+            name,
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p
@@ -8022,7 +8217,10 @@ mod exemplar_build_cli_tests {
             query_id: [9u8; 32],
             tokens: vec![
                 MarkovTokenV1::new(MarkovChoiceKindV1::Opener, Id64(1)),
-                MarkovTokenV1::new(MarkovChoiceKindV1::Other, derive_id64(b"markov_choice_v1", b"other:clarifier_intro:0")),
+                MarkovTokenV1::new(
+                    MarkovChoiceKindV1::Other,
+                    derive_id64(b"markov_choice_v1", b"other:clarifier_intro:0"),
+                ),
             ],
         };
         let trace_hash = put_markov_trace_v1(&store, &trace).unwrap();
@@ -8045,10 +8243,18 @@ mod exemplar_build_cli_tests {
         let text = std::fs::read_to_string(&out).unwrap();
         assert!(text.starts_with("exemplar_memory_v1 "));
         let exemplar_hash = parse_exemplar_hash(&text);
-        let memory = get_exemplar_memory_v1(&store, &exemplar_hash).unwrap().unwrap();
+        let memory = get_exemplar_memory_v1(&store, &exemplar_hash)
+            .unwrap()
+            .unwrap();
         assert!(!memory.rows.is_empty());
-        assert_eq!(memory.flags & EXMEM_FLAG_HAS_PROMPT_PACK, EXMEM_FLAG_HAS_PROMPT_PACK);
-        assert_eq!(memory.flags & EXMEM_FLAG_HAS_MARKOV_TRACE, EXMEM_FLAG_HAS_MARKOV_TRACE);
+        assert_eq!(
+            memory.flags & EXMEM_FLAG_HAS_PROMPT_PACK,
+            EXMEM_FLAG_HAS_PROMPT_PACK
+        );
+        assert_eq!(
+            memory.flags & EXMEM_FLAG_HAS_MARKOV_TRACE,
+            EXMEM_FLAG_HAS_MARKOV_TRACE
+        );
     }
 
     #[test]
@@ -8072,20 +8278,25 @@ mod exemplar_build_cli_tests {
 
         let text = std::fs::read_to_string(&out).unwrap();
         let exemplar_hash = parse_exemplar_hash(&text);
-        let memory = get_exemplar_memory_v1(&store, &exemplar_hash).unwrap().unwrap();
+        let memory = get_exemplar_memory_v1(&store, &exemplar_hash)
+            .unwrap()
+            .unwrap();
         assert!(memory.rows.is_empty());
-        assert_eq!(memory.flags & EXMEM_FLAG_HAS_REPLAY_LOG, EXMEM_FLAG_HAS_REPLAY_LOG);
+        assert_eq!(
+            memory.flags & EXMEM_FLAG_HAS_REPLAY_LOG,
+            EXMEM_FLAG_HAS_REPLAY_LOG
+        );
     }
 }
 
 #[cfg(test)]
 mod graph_build_cli_tests {
     use super::*;
-    use fsa_lm::graph_relevance_artifact::get_graph_relevance_v1;
     use fsa_lm::frame::{DocId, EntityId, FrameRowV1, SourceId};
     use fsa_lm::graph_relevance::{
         GR_FLAG_HAS_ENTITY_ROWS, GR_FLAG_HAS_TERM_ROWS, GR_FLAG_HAS_VERB_ROWS,
     };
+    use fsa_lm::graph_relevance_artifact::get_graph_relevance_v1;
 
     fn tmp_dir(name: &str) -> PathBuf {
         let base = std::env::temp_dir();
@@ -8131,10 +8342,15 @@ mod graph_build_cli_tests {
         let text = std::fs::read_to_string(&out).unwrap();
         assert!(text.starts_with("graph_relevance_v1 "));
         let graph_hash = parse_graph_hash(&text);
-        let graph = get_graph_relevance_v1(&store, &graph_hash).unwrap().unwrap();
+        let graph = get_graph_relevance_v1(&store, &graph_hash)
+            .unwrap()
+            .unwrap();
         assert!(!graph.rows.is_empty());
         assert_eq!(graph.flags & GR_FLAG_HAS_TERM_ROWS, GR_FLAG_HAS_TERM_ROWS);
-        assert_eq!(graph.flags & GR_FLAG_HAS_ENTITY_ROWS, GR_FLAG_HAS_ENTITY_ROWS);
+        assert_eq!(
+            graph.flags & GR_FLAG_HAS_ENTITY_ROWS,
+            GR_FLAG_HAS_ENTITY_ROWS
+        );
         assert_eq!(graph.flags & GR_FLAG_HAS_VERB_ROWS, GR_FLAG_HAS_VERB_ROWS);
     }
 
@@ -8158,7 +8374,9 @@ mod graph_build_cli_tests {
 
         let text = std::fs::read_to_string(&out).unwrap();
         let graph_hash = parse_graph_hash(&text);
-        let graph = get_graph_relevance_v1(&store, &graph_hash).unwrap().unwrap();
+        let graph = get_graph_relevance_v1(&store, &graph_hash)
+            .unwrap()
+            .unwrap();
         assert!(graph.rows.is_empty());
         assert_eq!(graph.flags, 0);
     }
@@ -8171,9 +8389,9 @@ mod answer_cli_tests {
     use fsa_lm::frame_segment::FrameSegmentV1;
     use fsa_lm::frame_store::put_frame_segment_v1;
     use fsa_lm::index_segment::IndexSegmentV1;
-    use fsa_lm::index_store::put_index_segment_v1;
     use fsa_lm::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
     use fsa_lm::index_snapshot_store::put_index_snapshot_v1;
+    use fsa_lm::index_store::put_index_segment_v1;
     use fsa_lm::markov_hints::MarkovChoiceKindV1;
     use fsa_lm::prompt_artifact::put_prompt_pack;
     use fsa_lm::prompt_pack::{PromptIds, PromptLimits, PromptPack, Role};
@@ -8206,8 +8424,10 @@ mod answer_cli_tests {
         }
     }
 
-
-    fn find_markov_trace_hash_for_answer(store_root: &std::path::Path, answer_hash: Hash32) -> Hash32 {
+    fn find_markov_trace_hash_for_answer(
+        store_root: &std::path::Path,
+        answer_hash: Hash32,
+    ) -> Hash32 {
         // Locate the replay log that produced this answer (STEP_ANSWER_V1 outputs contain answer_hash),
         // then extract the STEP_MARKOV_TRACE_V1 output hash whose inputs include answer_hash.
         let mut files: Vec<PathBuf> = Vec::new();
@@ -8264,7 +8484,6 @@ mod answer_cli_tests {
 
         panic!("markov trace hash not found");
     }
-
 
     fn parse_query_id_from_answer_text(s: &str) -> Hash32 {
         for line in s.lines() {
@@ -8384,7 +8603,10 @@ mod answer_cli_tests {
 
     #[test]
     fn parse_presentation_mode_v1_smoke() {
-        assert_eq!(parse_presentation_mode_v1("user").unwrap(), PresentationModeV1::User);
+        assert_eq!(
+            parse_presentation_mode_v1("user").unwrap(),
+            PresentationModeV1::User
+        );
         assert_eq!(
             parse_presentation_mode_v1("operator").unwrap(),
             PresentationModeV1::Operator
@@ -8409,7 +8631,8 @@ Evidence
         let inspect = vec![
             "routing_trace top_hint=SummaryFirst".to_string(),
             "graph_trace seeds=1 candidates=1 reasons=banana:fruit".to_string(),
-            "exemplar_match exemplar_id=7 response_mode=Direct structure=Direct tone=Supportive".to_string(),
+            "exemplar_match exemplar_id=7 response_mode=Direct structure=Direct tone=Supportive"
+                .to_string(),
         ];
         let user = render_answer_surface_v1(PresentationModeV1::User, base, &inspect);
         assert!(!user.contains("Answer v1"));
@@ -8575,8 +8798,13 @@ Plan
         assert_eq!(resolved.markov_model_id, Some([7u8; 32]));
         assert_eq!(resolved.exemplar_memory_id, Some([5u8; 32]));
         assert_eq!(resolved.graph_relevance_id, Some([6u8; 32]));
-        assert_eq!(resolved.presentation_mode, Some(PresentationModeV1::Operator));
-        assert!(resolve_runtime_expand_enabled_v1(false, &workspace, resolved));
+        assert_eq!(
+            resolved.presentation_mode,
+            Some(PresentationModeV1::Operator)
+        );
+        assert!(resolve_runtime_expand_enabled_v1(
+            false, &workspace, resolved
+        ));
     }
 
     #[test]
@@ -8589,12 +8817,22 @@ Plan
             graph_relevance_id: Some([7u8; 32]),
             presentation_mode: Some(PresentationModeV1::Operator),
         };
-        let setup = prepare_command_runtime_setup_v1(&root, &forward, false, prior).expect("runtime setup");
+        let setup =
+            prepare_command_runtime_setup_v1(&root, &forward, false, prior).expect("runtime setup");
         assert_eq!(setup.forward_runtime.meta_explicit, true);
         assert_eq!(setup.sticky_runtime_state.markov_model_id, Some([9u8; 32]));
-        assert_eq!(setup.sticky_runtime_state.exemplar_memory_id, Some([8u8; 32]));
-        assert_eq!(setup.sticky_runtime_state.graph_relevance_id, Some([7u8; 32]));
-        assert_eq!(setup.sticky_runtime_state.presentation_mode, Some(PresentationModeV1::Operator));
+        assert_eq!(
+            setup.sticky_runtime_state.exemplar_memory_id,
+            Some([8u8; 32])
+        );
+        assert_eq!(
+            setup.sticky_runtime_state.graph_relevance_id,
+            Some([7u8; 32])
+        );
+        assert_eq!(
+            setup.sticky_runtime_state.presentation_mode,
+            Some(PresentationModeV1::Operator)
+        );
         assert_eq!(setup.effective_meta, true);
     }
 
@@ -8674,7 +8912,8 @@ Plan
         let inspect = vec![
             "routing_trace top_hint=SummaryFirst".to_string(),
             "graph_trace seeds=1 candidates=1 reasons=banana:fruit".to_string(),
-            "exemplar_match exemplar_id=7 response_mode=Direct structure=Direct tone=Supportive".to_string(),
+            "exemplar_match exemplar_id=7 response_mode=Direct structure=Direct tone=Supportive"
+                .to_string(),
         ];
         let operator = render_answer_surface_v1(PresentationModeV1::Operator, base, &inspect);
         let lines: Vec<&str> = operator.lines().collect();
@@ -8699,10 +8938,7 @@ Plan
 
     #[test]
     fn cmd_answer_rejects_bad_presentation_mode() {
-        let rc = cmd_answer(&[
-            "--presentation".to_string(),
-            "debug".to_string(),
-        ]);
+        let rc = cmd_answer(&["--presentation".to_string(), "debug".to_string()]);
         assert_eq!(rc, 1);
     }
 
@@ -8768,7 +9004,6 @@ Plan
         assert!(!s.contains("Evidence"));
         assert!(s.contains("[E0]"));
     }
-
 
     #[test]
     fn cmd_answer_presentation_mode_preserves_grounding_and_refs() {
@@ -8902,11 +9137,19 @@ Plan
                 )],
             }],
         };
-        let graph_hash = fsa_lm::graph_relevance_artifact::put_graph_relevance_v1(&store, &graph).unwrap();
+        let graph_hash =
+            fsa_lm::graph_relevance_artifact::put_graph_relevance_v1(&store, &graph).unwrap();
 
-        let ids = PromptIds { snapshot_id: [0u8; 32], weights_id: [0u8; 32], tokenizer_id: [0u8; 32] };
+        let ids = PromptIds {
+            snapshot_id: [0u8; 32],
+            weights_id: [0u8; 32],
+            tokenizer_id: [0u8; 32],
+        };
         let mut pack = PromptPack::new(123, 256, ids);
-        pack.messages.push(fsa_lm::prompt_pack::Message { role: Role::User, content: "banana".to_string() });
+        pack.messages.push(fsa_lm::prompt_pack::Message {
+            role: Role::User,
+            content: "banana".to_string(),
+        });
         let prompt_hash = put_prompt_pack(&store, &mut pack, PromptLimits::default_v1()).unwrap();
 
         let out_path = root.join("answer_graph.txt");
@@ -8979,11 +9222,19 @@ Plan
                 )],
             }],
         };
-        let graph_hash = fsa_lm::graph_relevance_artifact::put_graph_relevance_v1(&store, &graph).unwrap();
+        let graph_hash =
+            fsa_lm::graph_relevance_artifact::put_graph_relevance_v1(&store, &graph).unwrap();
 
-        let ids = PromptIds { snapshot_id: [0u8; 32], weights_id: [0u8; 32], tokenizer_id: [0u8; 32] };
+        let ids = PromptIds {
+            snapshot_id: [0u8; 32],
+            weights_id: [0u8; 32],
+            tokenizer_id: [0u8; 32],
+        };
         let mut pack = PromptPack::new(123, 256, ids);
-        pack.messages.push(fsa_lm::prompt_pack::Message { role: Role::User, content: "banana".to_string() });
+        pack.messages.push(fsa_lm::prompt_pack::Message {
+            role: Role::User,
+            content: "banana".to_string(),
+        });
         let prompt_hash = put_prompt_pack(&store, &mut pack, PromptLimits::default_v1()).unwrap();
 
         let out_path = root.join("answer_graph_precedence.txt");
@@ -9034,9 +9285,16 @@ Plan
         });
         let snap_hash = put_index_snapshot_v1(&store, &snap).unwrap();
 
-        let ids = PromptIds { snapshot_id: [0u8; 32], weights_id: [0u8; 32], tokenizer_id: [0u8; 32] };
+        let ids = PromptIds {
+            snapshot_id: [0u8; 32],
+            weights_id: [0u8; 32],
+            tokenizer_id: [0u8; 32],
+        };
         let mut pack = PromptPack::new(123, 256, ids);
-        pack.messages.push(fsa_lm::prompt_pack::Message { role: Role::User, content: "banana".to_string() });
+        pack.messages.push(fsa_lm::prompt_pack::Message {
+            role: Role::User,
+            content: "banana".to_string(),
+        });
         let prompt_hash = put_prompt_pack(&store, &mut pack, PromptLimits::default_v1()).unwrap();
 
         let exemplar_memory = fsa_lm::exemplar_memory::ExemplarMemoryV1 {
@@ -9053,7 +9311,9 @@ Plan
                 support_refs: Vec::new(),
             }],
         };
-        let exemplar_hash = fsa_lm::exemplar_memory_artifact::put_exemplar_memory_v1(&store, &exemplar_memory).unwrap();
+        let exemplar_hash =
+            fsa_lm::exemplar_memory_artifact::put_exemplar_memory_v1(&store, &exemplar_memory)
+                .unwrap();
 
         let base_out = root.join("answer_base.txt");
         let shaped_out = root.join("answer_exemplar.txt");
@@ -9116,9 +9376,16 @@ Plan
         });
         let snap_hash = put_index_snapshot_v1(&store, &snap).unwrap();
 
-        let ids = PromptIds { snapshot_id: [0u8; 32], weights_id: [0u8; 32], tokenizer_id: [0u8; 32] };
+        let ids = PromptIds {
+            snapshot_id: [0u8; 32],
+            weights_id: [0u8; 32],
+            tokenizer_id: [0u8; 32],
+        };
         let mut pack = PromptPack::new(123, 256, ids);
-        pack.messages.push(fsa_lm::prompt_pack::Message { role: Role::User, content: "banana".to_string() });
+        pack.messages.push(fsa_lm::prompt_pack::Message {
+            role: Role::User,
+            content: "banana".to_string(),
+        });
         let prompt_hash = put_prompt_pack(&store, &mut pack, PromptLimits::default_v1()).unwrap();
 
         let pf = fsa_lm::pragmatics_frame::PragmaticsFrameV1 {
@@ -9150,9 +9417,12 @@ Plan
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash =
+            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
-        use fsa_lm::markov_model::{MarkovModelV1, MarkovNextV1, MarkovStateV1, MARKOV_MODEL_V1_VERSION};
+        use fsa_lm::markov_model::{
+            MarkovModelV1, MarkovNextV1, MarkovStateV1, MARKOV_MODEL_V1_VERSION,
+        };
         let cid0 = fsa_lm::frame::derive_id64(b"markov_choice_v1", b"preface:supportive:0");
         let cid1 = fsa_lm::frame::derive_id64(b"markov_choice_v1", b"preface:supportive:1");
         let model = MarkovModelV1 {
@@ -9165,13 +9435,20 @@ Plan
                 context: Vec::new(),
                 escape_count: 0,
                 next: vec![
-                    MarkovNextV1 { token: MarkovTokenV1::new(MarkovChoiceKindV1::Opener, cid1), count: 20 },
-                    MarkovNextV1 { token: MarkovTokenV1::new(MarkovChoiceKindV1::Opener, cid0), count: 10 },
+                    MarkovNextV1 {
+                        token: MarkovTokenV1::new(MarkovChoiceKindV1::Opener, cid1),
+                        count: 20,
+                    },
+                    MarkovNextV1 {
+                        token: MarkovTokenV1::new(MarkovChoiceKindV1::Opener, cid0),
+                        count: 10,
+                    },
                 ],
             }],
         };
         assert!(model.validate().is_ok());
-        let model_hash = fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
+        let model_hash =
+            fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
 
         let base_out = root.join("answer_markov_base.txt");
         let shaped_out = root.join("answer_markov_shaped.txt");
@@ -9255,11 +9532,19 @@ Plan
                 )],
             }],
         };
-        let graph_hash = fsa_lm::graph_relevance_artifact::put_graph_relevance_v1(&store, &graph).unwrap();
+        let graph_hash =
+            fsa_lm::graph_relevance_artifact::put_graph_relevance_v1(&store, &graph).unwrap();
 
-        let ids = PromptIds { snapshot_id: [0u8; 32], weights_id: [0u8; 32], tokenizer_id: [0u8; 32] };
+        let ids = PromptIds {
+            snapshot_id: [0u8; 32],
+            weights_id: [0u8; 32],
+            tokenizer_id: [0u8; 32],
+        };
         let mut pack = PromptPack::new(123, 256, ids);
-        pack.messages.push(fsa_lm::prompt_pack::Message { role: Role::User, content: "banana".to_string() });
+        pack.messages.push(fsa_lm::prompt_pack::Message {
+            role: Role::User,
+            content: "banana".to_string(),
+        });
         let prompt_hash = put_prompt_pack(&store, &mut pack, PromptLimits::default_v1()).unwrap();
 
         let out_path = root.join("answer_graph_unsupported_lock.txt");
@@ -9309,9 +9594,16 @@ Plan
         });
         let snap_hash = put_index_snapshot_v1(&store, &snap).unwrap();
 
-        let ids = PromptIds { snapshot_id: [0u8; 32], weights_id: [0u8; 32], tokenizer_id: [0u8; 32] };
+        let ids = PromptIds {
+            snapshot_id: [0u8; 32],
+            weights_id: [0u8; 32],
+            tokenizer_id: [0u8; 32],
+        };
         let mut pack = PromptPack::new(123, 256, ids);
-        pack.messages.push(fsa_lm::prompt_pack::Message { role: Role::User, content: "banana".to_string() });
+        pack.messages.push(fsa_lm::prompt_pack::Message {
+            role: Role::User,
+            content: "banana".to_string(),
+        });
         let prompt_hash = put_prompt_pack(&store, &mut pack, PromptLimits::default_v1()).unwrap();
 
         let exemplar_memory = fsa_lm::exemplar_memory::ExemplarMemoryV1 {
@@ -9328,7 +9620,9 @@ Plan
                 support_refs: Vec::new(),
             }],
         };
-        let exemplar_hash = fsa_lm::exemplar_memory_artifact::put_exemplar_memory_v1(&store, &exemplar_memory).unwrap();
+        let exemplar_hash =
+            fsa_lm::exemplar_memory_artifact::put_exemplar_memory_v1(&store, &exemplar_memory)
+                .unwrap();
 
         let base_out = root.join("answer_plan_base.txt");
         let shaped_out = root.join("answer_plan_exemplar.txt");
@@ -9389,9 +9683,16 @@ Plan
         });
         let snap_hash = put_index_snapshot_v1(&store, &snap).unwrap();
 
-        let ids = PromptIds { snapshot_id: [0u8; 32], weights_id: [0u8; 32], tokenizer_id: [0u8; 32] };
+        let ids = PromptIds {
+            snapshot_id: [0u8; 32],
+            weights_id: [0u8; 32],
+            tokenizer_id: [0u8; 32],
+        };
         let mut pack = PromptPack::new(123, 256, ids);
-        pack.messages.push(fsa_lm::prompt_pack::Message { role: Role::User, content: "banana".to_string() });
+        pack.messages.push(fsa_lm::prompt_pack::Message {
+            role: Role::User,
+            content: "banana".to_string(),
+        });
         let prompt_hash = put_prompt_pack(&store, &mut pack, PromptLimits::default_v1()).unwrap();
 
         let pf = fsa_lm::pragmatics_frame::PragmaticsFrameV1 {
@@ -9423,9 +9724,12 @@ Plan
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash =
+            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
-        use fsa_lm::markov_model::{MarkovModelV1, MarkovNextV1, MarkovStateV1, MARKOV_MODEL_V1_VERSION};
+        use fsa_lm::markov_model::{
+            MarkovModelV1, MarkovNextV1, MarkovStateV1, MARKOV_MODEL_V1_VERSION,
+        };
         let cid0 = fsa_lm::frame::derive_id64(b"markov_choice_v1", b"preface:supportive:0");
         let cid1 = fsa_lm::frame::derive_id64(b"markov_choice_v1", b"preface:supportive:1");
         let model = MarkovModelV1 {
@@ -9438,13 +9742,20 @@ Plan
                 context: Vec::new(),
                 escape_count: 0,
                 next: vec![
-                    MarkovNextV1 { token: MarkovTokenV1::new(MarkovChoiceKindV1::Opener, cid1), count: 20 },
-                    MarkovNextV1 { token: MarkovTokenV1::new(MarkovChoiceKindV1::Opener, cid0), count: 10 },
+                    MarkovNextV1 {
+                        token: MarkovTokenV1::new(MarkovChoiceKindV1::Opener, cid1),
+                        count: 20,
+                    },
+                    MarkovNextV1 {
+                        token: MarkovTokenV1::new(MarkovChoiceKindV1::Opener, cid0),
+                        count: 10,
+                    },
                 ],
             }],
         };
         assert!(model.validate().is_ok());
-        let model_hash = fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
+        let model_hash =
+            fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
 
         let base_out = root.join("answer_markov_plan_base.txt");
         let shaped_out = root.join("answer_markov_plan_shaped.txt");
@@ -9555,7 +9866,8 @@ Plan
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash =
+            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
         let out_path = root.join("answer.txt");
         let rc = cmd_answer(&[
@@ -9585,10 +9897,12 @@ Plan
             "output={}",
             s
         );
-        assert!(s.contains("Sources") || s.contains("Evidence"), "output={}", s);
+        assert!(
+            s.contains("Sources") || s.contains("Evidence"),
+            "output={}",
+            s
+        );
     }
-
-    
 
     #[test]
     fn cmd_answer_with_empty_exemplar_memory_falls_back_cleanly() {
@@ -9655,7 +9969,8 @@ Plan
 
         let s = std::fs::read_to_string(&out_path).unwrap();
         assert!(!s.contains("directives tone="));
-        assert!(!s.contains("I can help with that. Based on the evidence, here is the clearest answer:"));
+        assert!(!s
+            .contains("I can help with that. Based on the evidence, here is the clearest answer:"));
     }
 
     #[test]
@@ -9732,9 +10047,13 @@ Plan
         let s = std::fs::read_to_string(&out_path).unwrap();
         assert!(s.contains("directives tone=Supportive style=Default"));
         assert!(s.contains("routing_trace top_hint="));
-        assert!(s.contains("exemplar_match exemplar_id=7 response_mode=Direct structure=Direct tone=Supportive"));
+        assert!(s.contains(
+            "exemplar_match exemplar_id=7 response_mode=Direct structure=Direct tone=Supportive"
+        ));
         assert!(s.contains("reasons=mode,structure"));
-        assert!(s.contains("I can help with that. Based on the evidence, here is the clearest answer:"));
+        assert!(
+            s.contains("I can help with that. Based on the evidence, here is the clearest answer:")
+        );
     }
 
     #[test]
@@ -9884,7 +10203,8 @@ Plan
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash =
+            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
         let banana = term_id_from_token("banana", TokenizerCfg::default());
         let carrot = term_id_from_token("carrot", TokenizerCfg::default());
@@ -9904,7 +10224,8 @@ Plan
                 )],
             }],
         };
-        let graph_hash = fsa_lm::graph_relevance_artifact::put_graph_relevance_v1(&store, &graph).unwrap();
+        let graph_hash =
+            fsa_lm::graph_relevance_artifact::put_graph_relevance_v1(&store, &graph).unwrap();
 
         let exemplar_memory = fsa_lm::exemplar_memory::ExemplarMemoryV1 {
             version: fsa_lm::exemplar_memory::EXEMPLAR_MEMORY_V1_VERSION,
@@ -9949,7 +10270,8 @@ Plan
             }],
         };
         assert!(model.validate().is_ok());
-        let model_hash = fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
+        let model_hash =
+            fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
 
         let base_out_path = root.join("answer_base.txt");
         let rc = cmd_answer(&[
@@ -10000,8 +10322,10 @@ Plan
         assert!(shaped_text.contains(
             "exemplar_match exemplar_id=21 response_mode=Summarize structure=SummaryFirst tone=Supportive"
         ));
-        assert!(shaped_text.contains("Happy to help. Based on the evidence, here is the clearest answer:"));
-        assert!(!shaped_text.contains("I can help with that. Based on the evidence, here is the clearest answer:"));
+        assert!(shaped_text
+            .contains("Happy to help. Based on the evidence, here is the clearest answer:"));
+        assert!(!shaped_text
+            .contains("I can help with that. Based on the evidence, here is the clearest answer:"));
         assert_eq!(
             evidence_lines_from_answer_text(&base_text),
             evidence_lines_from_answer_text(&shaped_text)
@@ -10082,7 +10406,8 @@ Plan
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash =
+            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
         let out_path = root.join("answer.txt");
         let rc = cmd_answer(&[
@@ -10108,7 +10433,9 @@ Plan
 
         let answer_hash = fsa_lm::hash::blake3_hash(s.as_bytes());
         let mt_hash = find_markov_trace_hash_for_answer(&store_root, answer_hash);
-        let trace = fsa_lm::markov_trace_artifact::get_markov_trace_v1(&store, &mt_hash).unwrap().unwrap();
+        let trace = fsa_lm::markov_trace_artifact::get_markov_trace_v1(&store, &mt_hash)
+            .unwrap()
+            .unwrap();
         assert!(!trace.tokens.is_empty());
 
         // If the realizer emits an opener preface line, the MarkovTrace must start
@@ -10118,7 +10445,8 @@ Plan
         assert_eq!(tone, fsa_lm::realizer_directives::ToneV1::Supportive);
         assert_eq!(style, fsa_lm::realizer_directives::StyleV1::Default);
 
-        let preface_line_v0 = "I can help with that. Based on the evidence, here is the clearest answer:";
+        let preface_line_v0 =
+            "I can help with that. Based on the evidence, here is the clearest answer:";
         assert!(s.contains(preface_line_v0));
 
         assert!(trace.tokens.len() >= 2);
@@ -10149,8 +10477,6 @@ Plan
             "unexpected markov token id after preface"
         );
     }
-
-
 
     #[test]
     fn cmd_answer_with_markov_model_selects_preface_variant1_and_trace() {
@@ -10222,7 +10548,8 @@ Plan
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash =
+            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
         // Store a MarkovModelV1 whose unconditional state prefers the supportive
         // alternate preface template (variant 1).
@@ -10255,7 +10582,8 @@ Plan
                 states: vec![s0],
             };
             assert!(model.validate().is_ok());
-            let model_hash = fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
+            let model_hash =
+                fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
 
             let out_path = root.join("answer.txt");
             let rc = cmd_answer(&[
@@ -10280,7 +10608,8 @@ Plan
             assert!(s.contains("directives tone=Supportive"));
 
             let preface_v1 = "Happy to help. Based on the evidence, here is the clearest answer:";
-            let preface_v0 = "I can help with that. Based on the evidence, here is the clearest answer:";
+            let preface_v0 =
+                "I can help with that. Based on the evidence, here is the clearest answer:";
             assert!(s.contains(preface_v1));
             assert!(!s.contains(preface_v0));
 
@@ -10291,7 +10620,8 @@ Plan
                 .unwrap();
             assert!(!trace.tokens.is_empty());
 
-            let preface_cid = fsa_lm::frame::derive_id64(b"markov_choice_v1", b"preface:supportive:1");
+            let preface_cid =
+                fsa_lm::frame::derive_id64(b"markov_choice_v1", b"preface:supportive:1");
             assert_eq!(
                 trace.tokens[0],
                 MarkovTokenV1::new(MarkovChoiceKindV1::Opener, preface_cid)
@@ -10364,7 +10694,8 @@ Plan
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash =
+            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
         use fsa_lm::markov_model::{
             MarkovModelV1, MarkovNextV1, MarkovStateV1, MARKOV_MODEL_V1_VERSION,
@@ -10393,7 +10724,8 @@ Plan
             }],
         };
         assert!(model.validate().is_ok());
-        let model_hash = fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
+        let model_hash =
+            fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
 
         let base_out = root.join("answer_workspace_markov_base.txt");
         let rc0 = cmd_answer(&[
@@ -10511,7 +10843,8 @@ Plan
             gratitude_count: 0,
             insult_count: 0,
         };
-        let prag_hash = fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
+        let prag_hash =
+            fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1(&store, &pf).unwrap();
 
         use fsa_lm::markov_model::{
             MarkovModelV1, MarkovNextV1, MarkovStateV1, MARKOV_MODEL_V1_VERSION,
@@ -10541,7 +10874,8 @@ Plan
             states: vec![s0],
         };
         assert!(model.validate().is_ok());
-        let model_hash = fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
+        let model_hash =
+            fsa_lm::markov_model_artifact::put_markov_model_v1(&store, &model).unwrap();
 
         let ws_text = format!("markov_model={}\n", hex32(&model_hash));
         std::fs::write(store_root.join(WORKSPACE_V1_FILENAME), ws_text.as_bytes()).unwrap();
@@ -10565,7 +10899,8 @@ Plan
 
         let s = std::fs::read_to_string(&out_path).unwrap();
         let preface_v1 = "Happy to help. Based on the evidence, here is the clearest answer:";
-        let preface_v0 = "I can help with that. Based on the evidence, here is the clearest answer:";
+        let preface_v0 =
+            "I can help with that. Based on the evidence, here is the clearest answer:";
         assert!(s.contains(preface_v1));
         assert!(!s.contains(preface_v0));
 
@@ -10757,7 +11092,11 @@ fn cmd_query_index(args: &[String]) -> i32 {
     };
 
     // Build the query-id blob for retrieve-v1 so ReplayLog steps are fully hash-addressed.
-    let k_u32 = if k > (u32::MAX as usize) { u32::MAX } else { k as u32 };
+    let k_u32 = if k > (u32::MAX as usize) {
+        u32::MAX
+    } else {
+        k as u32
+    };
     let entry_cap_u32: u32 = 0;
     let dense_row_threshold: u32 = 200_000;
 
@@ -10785,13 +11124,19 @@ fn cmd_query_index(args: &[String]) -> i32 {
 
     let mut qcfg = QueryTermsCfg::new();
     qcfg.include_metaphone = include_meta;
-    let scfg = SearchCfg { k, entry_cap: entry_cap_u32 as usize, dense_row_threshold };
+    let scfg = SearchCfg {
+        k,
+        entry_cap: entry_cap_u32 as usize,
+        dense_row_threshold,
+    };
 
     let qterms = query_terms_from_text(&qtext, &qcfg);
 
     let hits = if cache_stats {
-        let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> = Cache2Q::new(cache_cfg_kind("SNAPSHOT"));
-        let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> = Cache2Q::new(cache_cfg_kind("INDEX"));
+        let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> =
+            Cache2Q::new(cache_cfg_kind("SNAPSHOT"));
+        let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> =
+            Cache2Q::new(cache_cfg_kind("INDEX"));
 
         let (h, gate) = match sig_map_hash {
             Some(ref smh) => match search_snapshot_cached_gated(
@@ -10872,9 +11217,18 @@ fn cmd_query_index(args: &[String]) -> i32 {
     // Store HitList and emit a ReplayLog step for retrieve-v1.
     let mut hl_hits: Vec<HitV1> = Vec::with_capacity(hits.len());
     for h in hits.iter() {
-        hl_hits.push(HitV1 { frame_seg: h.frame_seg, row_ix: h.row_ix, score: h.score });
+        hl_hits.push(HitV1 {
+            frame_seg: h.frame_seg,
+            row_ix: h.row_ix,
+            score: h.score,
+        });
     }
-    let hl = HitListV1 { query_id, snapshot_id: snap_hash, tie_control_id: None, hits: hl_hits };
+    let hl = HitListV1 {
+        query_id,
+        snapshot_id: snap_hash,
+        tie_control_id: None,
+        hits: hl_hits,
+    };
     let hit_list_hash = match put_hit_list_v1(&store, &hl) {
         Ok(h) => h,
         Err(e) => {
@@ -10890,7 +11244,11 @@ fn cmd_query_index(args: &[String]) -> i32 {
         inputs.push(smh);
     }
     inputs.push(query_id);
-    rlog.steps.push(step_from_slices(STEP_RETRIEVE_V1, &inputs, &[hit_list_hash]));
+    rlog.steps.push(step_from_slices(
+        STEP_RETRIEVE_V1,
+        &inputs,
+        &[hit_list_hash],
+    ));
     let _replay_hash = match put_replay_log(&store, &rlog) {
         Ok(h) => h,
         Err(e) => {
@@ -10906,13 +11264,16 @@ fn cmd_query_index(args: &[String]) -> i32 {
 
     for h in hits.iter() {
         // Print as: score frame_seg row_ix
-        println!("{}\t{}\t{}", h.score, fsa_lm::hash::hex32(&h.frame_seg), h.row_ix);
+        println!(
+            "{}\t{}\t{}",
+            h.score,
+            fsa_lm::hash::hex32(&h.frame_seg),
+            h.row_ix
+        );
     }
 
     0
 }
-
-
 
 fn cmd_build_evidence(args: &[String]) -> i32 {
     let mut root = default_root();
@@ -11110,8 +11471,10 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
     };
 
     let hits = if cache_stats {
-        let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> = Cache2Q::new(cache_cfg_kind("SNAPSHOT"));
-        let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> = Cache2Q::new(cache_cfg_kind("INDEX"));
+        let mut snap_cache: Cache2Q<Hash32, Arc<IndexSnapshotV1>> =
+            Cache2Q::new(cache_cfg_kind("SNAPSHOT"));
+        let mut idx_cache: Cache2Q<Hash32, Arc<IndexSegmentV1>> =
+            Cache2Q::new(cache_cfg_kind("INDEX"));
 
         let (h, gate) = match sig_map_hash {
             Some(ref smh) => match search_snapshot_cached_gated(
@@ -11189,7 +11552,11 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
         }
     };
 
-    let k_u32 = if k > (u32::MAX as usize) { u32::MAX } else { k as u32 };
+    let k_u32 = if k > (u32::MAX as usize) {
+        u32::MAX
+    } else {
+        k as u32
+    };
     let mi = max_items.unwrap_or(k_u32);
     let mb = max_bytes.unwrap_or(64 * 1024);
 
@@ -11219,8 +11586,11 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
         return 1;
     }
 
-
-    let limits = EvidenceLimitsV1 { segments_touched: 0, max_items: mi, max_bytes: mb };
+    let limits = EvidenceLimitsV1 {
+        segments_touched: 0,
+        max_items: mi,
+        max_bytes: mb,
+    };
 
     let mut bcfg = EvidenceBuildCfgV1::new();
     bcfg.verify_refs = !no_verify;
@@ -11286,7 +11656,11 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
         inputs.push(smh);
     }
     inputs.push(query_id);
-    rlog.steps.push(step_from_slices(STEP_BUILD_EVIDENCE_V1, &inputs, &[ev_hash]));
+    rlog.steps.push(step_from_slices(
+        STEP_BUILD_EVIDENCE_V1,
+        &inputs,
+        &[ev_hash],
+    ));
     let replay_hash = match put_replay_log(&store, &rlog) {
         Ok(h) => h,
         Err(e) => {
@@ -11297,7 +11671,6 @@ fn cmd_build_evidence(args: &[String]) -> i32 {
     if verbose {
         eprintln!("replay_log={}", hex32(&replay_hash));
     }
-
 
     if verbose {
         let mut sketch_count: u32 = 0;
@@ -11700,20 +12073,36 @@ fn answer_run_text_inner(
             ws
         } else if let Some(e) = workspace_runtime.invalid_error.as_ref() {
             eprintln!("workspace error: {}", e);
-            eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+            eprintln!(
+                "workspace file: {}/{}",
+                root.to_string_lossy(),
+                WORKSPACE_V1_FILENAME
+            );
             return Err(1);
         } else if let Some(e) = workspace_runtime.read_error.as_ref() {
             eprintln!("workspace read error: {}", e);
-            eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+            eprintln!(
+                "workspace file: {}/{}",
+                root.to_string_lossy(),
+                WORKSPACE_V1_FILENAME
+            );
             return Err(1);
         } else {
             eprintln!("missing --snapshot and workspace defaults not found");
-            eprintln!("create workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+            eprintln!(
+                "create workspace file: {}/{}",
+                root.to_string_lossy(),
+                WORKSPACE_V1_FILENAME
+            );
             return Err(1);
         };
         if !ws.has_required_answer_keys() {
             eprintln!("workspace missing merged_snapshot/merged_sig_map");
-            eprintln!("workspace file: {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+            eprintln!(
+                "workspace file: {}/{}",
+                root.to_string_lossy(),
+                WORKSPACE_V1_FILENAME
+            );
             return Err(1);
         }
         snapshot_hash = ws.merged_snapshot;
@@ -11824,15 +12213,13 @@ fn answer_run_text_inner(
             if let Ok(spec) = parse_puzzle_block_v1(block) {
                 let cfg = LogicSolveCfgV1::default_v1();
                 match solve_puzzle_v1(&spec, cfg) {
-                    Ok(proof) => {
-                        match put_proof_artifact_v1(&store, &proof) {
-                            Ok(h) => proof_hash_opt = Some(h),
-                            Err(e) => {
-                                eprintln!("proof store failed: {}", e);
-                                return Err(1);
-                            }
+                    Ok(proof) => match put_proof_artifact_v1(&store, &proof) {
+                        Ok(h) => proof_hash_opt = Some(h),
+                        Err(e) => {
+                            eprintln!("proof store failed: {}", e);
+                            return Err(1);
                         }
-                    }
+                    },
                     Err(_) => {
                         // If the puzzle is not solvable under the supported constraint
                         // set or caps, fall back to the normal clarify behavior.
@@ -11863,8 +12250,14 @@ fn answer_run_text_inner(
                         break;
                     }
                     let prev_sketch_hash = st.outputs[0];
-                    if let Ok(Some(prev_art)) = fsa_lm::puzzle_sketch_artifact_store::get_puzzle_sketch_artifact_v1(&store, &prev_sketch_hash) {
-                        if (prev_art.flags & fsa_lm::puzzle_sketch_artifact::PSA_FLAG_PENDING) != 0 {
+                    if let Ok(Some(prev_art)) =
+                        fsa_lm::puzzle_sketch_artifact_store::get_puzzle_sketch_artifact_v1(
+                            &store,
+                            &prev_sketch_hash,
+                        )
+                    {
+                        if (prev_art.flags & fsa_lm::puzzle_sketch_artifact::PSA_FLAG_PENDING) != 0
+                        {
                             pending_sketch_opt = Some(fsa_lm::puzzle_sketch_v1::PuzzleSketchV1 {
                                 is_logic_puzzle_likely: true,
                                 var_names: prev_art.var_names.clone(),
@@ -11879,7 +12272,8 @@ fn answer_run_text_inner(
             }
         }
 
-        let pending_vars_for_fallback: Option<Vec<String>> = pending_sketch_opt.as_ref().map(|sk| sk.var_names.clone());
+        let pending_vars_for_fallback: Option<Vec<String>> =
+            pending_sketch_opt.as_ref().map(|sk| sk.var_names.clone());
 
         // Parse constraints once and compile/solve using the same parsed list.
         //
@@ -11898,94 +12292,105 @@ fn answer_run_text_inner(
                 Ok(mut cs) => {
                     if cs.is_empty() {
                         if let Some(vs) = pending_vars_for_fallback.as_ref() {
-                            cs = fsa_lm::logic_solver_v1::extract_eq_constraints_for_vars_v1(&qtext, vs, 256);
+                            cs = fsa_lm::logic_solver_v1::extract_eq_constraints_for_vars_v1(
+                                &qtext, vs, 256,
+                            );
                         }
                     }
 
                     if !cs.is_empty() {
-                    // First try: pending sketch (vars/domain/shape from prior turns).
-                    if let Some(mut sk) = pending_sketch_opt {
-                        sk.has_constraints = true;
-                        match try_compile_puzzle_spec_from_sketch_and_constraints_v1(&sk, cs.clone()) {
-                            Ok(Some(spec)) => {
-                                let cfg = LogicSolveCfgV1::default_v1();
-                                match solve_puzzle_v1(&spec, cfg) {
-                                    Ok(proof) => match put_proof_artifact_v1(&store, &proof) {
-                                        Ok(h) => proof_hash_opt = Some(h),
-                                        Err(e) => {
-                                            eprintln!("proof store failed: {}", e);
-                                            return Err(1);
+                        // First try: pending sketch (vars/domain/shape from prior turns).
+                        if let Some(mut sk) = pending_sketch_opt {
+                            sk.has_constraints = true;
+                            match try_compile_puzzle_spec_from_sketch_and_constraints_v1(
+                                &sk,
+                                cs.clone(),
+                            ) {
+                                Ok(Some(spec)) => {
+                                    let cfg = LogicSolveCfgV1::default_v1();
+                                    match solve_puzzle_v1(&spec, cfg) {
+                                        Ok(proof) => match put_proof_artifact_v1(&store, &proof) {
+                                            Ok(h) => proof_hash_opt = Some(h),
+                                            Err(e) => {
+                                                eprintln!("proof store failed: {}", e);
+                                                return Err(1);
+                                            }
+                                        },
+                                        Err(_) => {
+                                            puzzle_constraints_parse_failed = true;
                                         }
-                                    },
-                                    Err(_) => {
-                                        puzzle_constraints_parse_failed = true;
                                     }
                                 }
-                            }
-                            Ok(None) => {}
-                            Err(PuzzleCompileErrV1::ConstraintParseFailed) => {
-                                puzzle_constraints_parse_failed = true;
-                            }
-                            Err(_) => {}
-                        }
-                    }
-
-                    // Second try: best-effort sketch from the current turn text.
-                    if proof_hash_opt.is_none() {
-                        let pscfg = fsa_lm::puzzle_sketch_v1::PuzzleSketchCfgV1::default();
-
-                        let mut lex_for_sketch: Option<Hash32> = lexicon_snapshot_hash;
-                        if lex_for_sketch.is_none() {
-                            if let Some(ws) = ws_opt {
-                                lex_for_sketch = ws.lexicon_snapshot;
-                            }
-                        }
-
-                        let mut view_opt: Option<fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1> = None;
-                        let mut cues_opt: Option<fsa_lm::lexicon_neighborhoods::LexiconCueNeighborhoodsV1> = None;
-
-                        if let Some(lh) = lex_for_sketch.as_ref() {
-                            match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(&store, lh) {
-                                Ok(Some(view)) => {
-                                    let ncfg = fsa_lm::lexicon_neighborhoods::LexiconNeighborhoodCfgV1::new();
-                                    let cues = fsa_lm::lexicon_neighborhoods::build_lexicon_cue_neighborhoods_v1(&view, &ncfg);
-                                    view_opt = Some(view);
-                                    cues_opt = Some(cues);
+                                Ok(None) => {}
+                                Err(PuzzleCompileErrV1::ConstraintParseFailed) => {
+                                    puzzle_constraints_parse_failed = true;
                                 }
-                                _ => {}
+                                Err(_) => {}
                             }
                         }
 
-                        let sk = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(
-                            &qtext,
-                            view_opt.as_ref(),
-                            cues_opt.as_ref(),
-                            pscfg,
-                        );
+                        // Second try: best-effort sketch from the current turn text.
+                        if proof_hash_opt.is_none() {
+                            let pscfg = fsa_lm::puzzle_sketch_v1::PuzzleSketchCfgV1::default();
 
-                        match try_compile_puzzle_spec_from_sketch_and_constraints_v1(&sk, cs) {
-                            Ok(Some(spec)) => {
-                                let cfg = LogicSolveCfgV1::default_v1();
-                                match solve_puzzle_v1(&spec, cfg) {
-                                    Ok(proof) => match put_proof_artifact_v1(&store, &proof) {
-                                        Ok(h) => proof_hash_opt = Some(h),
-                                        Err(e) => {
-                                            eprintln!("proof store failed: {}", e);
-                                            return Err(1);
+                            let mut lex_for_sketch: Option<Hash32> = lexicon_snapshot_hash;
+                            if lex_for_sketch.is_none() {
+                                if let Some(ws) = ws_opt {
+                                    lex_for_sketch = ws.lexicon_snapshot;
+                                }
+                            }
+
+                            let mut view_opt: Option<
+                                fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1,
+                            > = None;
+                            let mut cues_opt: Option<
+                                fsa_lm::lexicon_neighborhoods::LexiconCueNeighborhoodsV1,
+                            > = None;
+
+                            if let Some(lh) = lex_for_sketch.as_ref() {
+                                match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(
+                                    &store, lh,
+                                ) {
+                                    Ok(Some(view)) => {
+                                        let ncfg = fsa_lm::lexicon_neighborhoods::LexiconNeighborhoodCfgV1::new();
+                                        let cues = fsa_lm::lexicon_neighborhoods::build_lexicon_cue_neighborhoods_v1(&view, &ncfg);
+                                        view_opt = Some(view);
+                                        cues_opt = Some(cues);
+                                    }
+                                    _ => {}
+                                }
+                            }
+
+                            let sk = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(
+                                &qtext,
+                                view_opt.as_ref(),
+                                cues_opt.as_ref(),
+                                pscfg,
+                            );
+
+                            match try_compile_puzzle_spec_from_sketch_and_constraints_v1(&sk, cs) {
+                                Ok(Some(spec)) => {
+                                    let cfg = LogicSolveCfgV1::default_v1();
+                                    match solve_puzzle_v1(&spec, cfg) {
+                                        Ok(proof) => match put_proof_artifact_v1(&store, &proof) {
+                                            Ok(h) => proof_hash_opt = Some(h),
+                                            Err(e) => {
+                                                eprintln!("proof store failed: {}", e);
+                                                return Err(1);
+                                            }
+                                        },
+                                        Err(_) => {
+                                            puzzle_constraints_parse_failed = true;
                                         }
-                                    },
-                                    Err(_) => {
-                                        puzzle_constraints_parse_failed = true;
                                     }
                                 }
+                                Ok(None) => {}
+                                Err(PuzzleCompileErrV1::ConstraintParseFailed) => {
+                                    puzzle_constraints_parse_failed = true;
+                                }
+                                Err(_) => {}
                             }
-                            Ok(None) => {}
-                            Err(PuzzleCompileErrV1::ConstraintParseFailed) => {
-                                puzzle_constraints_parse_failed = true;
-                            }
-                            Err(_) => {}
                         }
-                    }
                     }
                 }
                 Err(_) => {
@@ -11994,7 +12399,6 @@ fn answer_run_text_inner(
             }
         }
     }
-
 
     let mut qcfg = QueryTermsCfg::new();
     qcfg.include_metaphone = include_meta;
@@ -12058,7 +12462,11 @@ fn answer_run_text_inner(
         pcfg.enable_query_expansion = 1;
         if lexicon_snapshot_hash.is_none() && graph_relevance_hash.is_none() {
             eprintln!("missing --lexicon-snapshot or --graph-relevance (required when --expand)");
-            eprintln!("or set lexicon_snapshot in {}/{}", root.to_string_lossy(), WORKSPACE_V1_FILENAME);
+            eprintln!(
+                "or set lexicon_snapshot in {}/{}",
+                root.to_string_lossy(),
+                WORKSPACE_V1_FILENAME
+            );
             return Err(1);
         }
     }
@@ -12073,7 +12481,8 @@ fn answer_run_text_inner(
     let mut puzzle_sketch_hash_opt: Option<Hash32> = None;
     let mut puzzle_sketch_lex_hash_opt: Option<Hash32> = None;
     if query_msg_ix > 0 && pack.messages.len() >= 2 {
-        let mut lex_for_anchors: Option<fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1> = None;
+        let mut lex_for_anchors: Option<fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1> =
+            None;
         // Best-effort: if a lexicon snapshot is not explicitly in use, try workspace defaults.
         let mut lex_hash_opt = lexicon_snapshot_hash;
         if lex_hash_opt.is_none() {
@@ -12180,7 +12589,15 @@ fn answer_run_text_inner(
     };
     let score_model_id: u32 = 1;
     let bcfg = EvidenceBuildCfgV1::new();
-    let mut bundle = match build_evidence_bundle_v1_from_hits(&store, query_id, snapshot_hash, limits, score_model_id, &hits, &bcfg) {
+    let mut bundle = match build_evidence_bundle_v1_from_hits(
+        &store,
+        query_id,
+        snapshot_hash,
+        limits,
+        score_model_id,
+        &hits,
+        &bcfg,
+    ) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("build-evidence failed: {}", e);
@@ -12190,7 +12607,7 @@ fn answer_run_text_inner(
 
     let has_proof: bool = proof_hash_opt.is_some();
 
-// If the logic solver produced a ProofArtifact, attach it as evidence.
+    // If the logic solver produced a ProofArtifact, attach it as evidence.
     if let Some(ph) = proof_hash_opt.as_ref() {
         let ph = *ph;
         // Increase max_items so canonical validation remains satisfied.
@@ -12288,7 +12705,12 @@ fn answer_run_text_inner(
     let mut markov_hints_hash_opt: Option<Hash32> = None;
     let mut markov_hints_opt: Option<MarkovHintsV1> = None;
 
-    let PlannerOutputV1 { mut plan, hints: mut planner_hints, mut forecast } = match plan_from_evidence_bundle_v1_with_guidance(&bundle, ev_hash, &pl_cfg, pf_opt.as_ref()) {
+    let PlannerOutputV1 {
+        mut plan,
+        hints: mut planner_hints,
+        mut forecast,
+    } = match plan_from_evidence_bundle_v1_with_guidance(&bundle, ev_hash, &pl_cfg, pf_opt.as_ref())
+    {
         Ok(x) => x,
         Err(e) => {
             eprintln!("plan failed: {}", e);
@@ -12316,99 +12738,115 @@ fn answer_run_text_inner(
         }
     }
 
-
-
     if !has_proof {
+        // Logic puzzle sketch + clarify (conversational, deterministic).
+        //
+        // We treat the structured [puzzle] block as optional input. When present and
+        // malformed, we ask a clarifying question without requiring a specific format.
+        // When absent, we attempt a conservative sketch from free text and ask for the
+        // single most useful missing piece.
 
-// Logic puzzle sketch + clarify (conversational, deterministic).
-    //
-    // We treat the structured [puzzle] block as optional input. When present and
-    // malformed, we ask a clarifying question without requiring a specific format.
-    // When absent, we attempt a conservative sketch from free text and ask for the
-    // single most useful missing piece.
+        let mut puzzle_sketch_opt: Option<fsa_lm::puzzle_sketch_v1::PuzzleSketchV1> = None;
+        let mut puzzle_sketch_used_lexicon: bool = false;
 
-    let mut puzzle_sketch_opt: Option<fsa_lm::puzzle_sketch_v1::PuzzleSketchV1> = None;
-    let mut puzzle_sketch_used_lexicon: bool = false;
+        let mut puzzle_clarify_opt: Option<fsa_lm::puzzle_sketch_v1::PuzzleClarifyV1> = None;
 
-    let mut puzzle_clarify_opt: Option<fsa_lm::puzzle_sketch_v1::PuzzleClarifyV1> = None;
+        // Pending puzzle continuation (cross-turn).
+        //
+        // If the previous assistant replay produced a pending puzzle sketch, and this
+        // user message looks like a clarification reply, merge the reply into the
+        // prior sketch deterministically and continue the clarify sequence.
+        let mut merged_from_pending: bool = false;
 
-
-    // Pending puzzle continuation (cross-turn).
-    //
-    // If the previous assistant replay produced a pending puzzle sketch, and this
-    // user message looks like a clarification reply, merge the reply into the
-    // prior sketch deterministically and continue the clarify sequence.
-    let mut merged_from_pending: bool = false;
-
-    if let Some(prh) = prior_replay_hash.as_ref() {
-        if !puzzle_parse_failed {
-            if let Ok(Some(rlog)) = fsa_lm::replay_artifact::get_replay_log(&store, prh) {
-                // Find the most recent puzzle sketch step.
-                let mut prev_step_opt: Option<&fsa_lm::replay::ReplayStep> = None;
-                for st in rlog.steps.iter().rev() {
-                    if st.name == STEP_PUZZLE_SKETCH_V1 {
-                        prev_step_opt = Some(st);
-                        break;
+        if let Some(prh) = prior_replay_hash.as_ref() {
+            if !puzzle_parse_failed {
+                if let Ok(Some(rlog)) = fsa_lm::replay_artifact::get_replay_log(&store, prh) {
+                    // Find the most recent puzzle sketch step.
+                    let mut prev_step_opt: Option<&fsa_lm::replay::ReplayStep> = None;
+                    for st in rlog.steps.iter().rev() {
+                        if st.name == STEP_PUZZLE_SKETCH_V1 {
+                            prev_step_opt = Some(st);
+                            break;
+                        }
                     }
-                }
 
-                if let Some(st) = prev_step_opt {
-                    if st.outputs.len() == 1 {
-                        let prev_sketch_hash = st.outputs[0];
-                        if let Ok(Some(prev_art)) = fsa_lm::puzzle_sketch_artifact_store::get_puzzle_sketch_artifact_v1(&store, &prev_sketch_hash) {
-                            if (prev_art.flags & fsa_lm::puzzle_sketch_artifact::PSA_FLAG_PENDING) != 0 {
-                                // Treat only short replies as clarifications to avoid pulling a prior
-                                // sketch into an unrelated new question.
-                                if qtext.len() <= 256 {
-                                    let mut reply = fsa_lm::puzzle_sketch_v1::parse_puzzle_clarify_reply_v1(&qtext, 16);
+                    if let Some(st) = prev_step_opt {
+                        if st.outputs.len() == 1 {
+                            let prev_sketch_hash = st.outputs[0];
+                            if let Ok(Some(prev_art)) =
+                                fsa_lm::puzzle_sketch_artifact_store::get_puzzle_sketch_artifact_v1(
+                                    &store,
+                                    &prev_sketch_hash,
+                                )
+                            {
+                                if (prev_art.flags
+                                    & fsa_lm::puzzle_sketch_artifact::PSA_FLAG_PENDING)
+                                    != 0
+                                {
+                                    // Treat only short replies as clarifications to avoid pulling a prior
+                                    // sketch into an unrelated new question.
+                                    if qtext.len() <= 256 {
+                                        let mut reply =
+                                            fsa_lm::puzzle_sketch_v1::parse_puzzle_clarify_reply_v1(
+                                                &qtext, 16,
+                                            );
 
-                                    let q_has_ops = qtext.contains("!=")
-                                        || qtext.contains("<=")
-                                        || qtext.contains(">=")
-                                        || qtext.contains("=")
-                                        || qtext.contains("<")
-                                        || qtext.contains(">");
-                                    if q_has_ops {
-                                        reply.has_constraints = true;
-                                    }
-
-                                    let mut provides: bool = false;
-                                    if prev_art.var_names.is_empty() && !reply.var_names.is_empty() {
-                                        provides = true;
-                                    }
-                                    if prev_art.domain_range.is_none() && reply.domain_range.is_some() {
-                                        provides = true;
-                                    }
-                                    if prev_art.shape == fsa_lm::puzzle_sketch_v1::PuzzleShapeHintV1::Unknown && reply.shape.is_some() {
-                                        provides = true;
-                                    }
-                                    if !prev_art.has_constraints && reply.has_constraints {
-                                        provides = true;
-                                    }
-
-                                    if provides {
-                                        let prev_sk = fsa_lm::puzzle_sketch_v1::PuzzleSketchV1 {
-                                            is_logic_puzzle_likely: prev_art.is_logic_puzzle_likely,
-                                            var_names: prev_art.var_names.clone(),
-                                            domain_range: prev_art.domain_range,
-                                            has_constraints: prev_art.has_constraints,
-                                            shape: prev_art.shape,
-                                        };
-
-                                        let merged = fsa_lm::puzzle_sketch_v1::merge_puzzle_sketch_with_reply_v1(&prev_sk, &reply, 16);
-                                        let next_q = fsa_lm::puzzle_sketch_v1::choose_puzzle_clarify_question_v1(&merged);
-
-                                        let used_lex = (prev_art.flags & fsa_lm::puzzle_sketch_artifact::PSA_FLAG_USED_LEXICON) != 0;
-                                        puzzle_sketch_used_lexicon = used_lex;
-
-                                        // Carry forward the lexicon snapshot hash used for the prior sketch step,
-                                        // if it was recorded as an input.
-                                        if st.inputs.len() >= 2 {
-                                            puzzle_sketch_lex_hash_opt = Some(st.inputs[1]);
+                                        let q_has_ops = qtext.contains("!=")
+                                            || qtext.contains("<=")
+                                            || qtext.contains(">=")
+                                            || qtext.contains("=")
+                                            || qtext.contains("<")
+                                            || qtext.contains(">");
+                                        if q_has_ops {
+                                            reply.has_constraints = true;
                                         }
 
-                                        let src_hash = fsa_lm::puzzle_sketch_artifact::puzzle_sketch_merged_source_hash_v1(&prev_art.source_hash, &qtext);
-                                        let psa = match fsa_lm::puzzle_sketch_artifact::PuzzleSketchArtifactV1::from_sketch(
+                                        let mut provides: bool = false;
+                                        if prev_art.var_names.is_empty()
+                                            && !reply.var_names.is_empty()
+                                        {
+                                            provides = true;
+                                        }
+                                        if prev_art.domain_range.is_none()
+                                            && reply.domain_range.is_some()
+                                        {
+                                            provides = true;
+                                        }
+                                        if prev_art.shape
+                                            == fsa_lm::puzzle_sketch_v1::PuzzleShapeHintV1::Unknown
+                                            && reply.shape.is_some()
+                                        {
+                                            provides = true;
+                                        }
+                                        if !prev_art.has_constraints && reply.has_constraints {
+                                            provides = true;
+                                        }
+
+                                        if provides {
+                                            let prev_sk =
+                                                fsa_lm::puzzle_sketch_v1::PuzzleSketchV1 {
+                                                    is_logic_puzzle_likely: prev_art
+                                                        .is_logic_puzzle_likely,
+                                                    var_names: prev_art.var_names.clone(),
+                                                    domain_range: prev_art.domain_range,
+                                                    has_constraints: prev_art.has_constraints,
+                                                    shape: prev_art.shape,
+                                                };
+
+                                            let merged = fsa_lm::puzzle_sketch_v1::merge_puzzle_sketch_with_reply_v1(&prev_sk, &reply, 16);
+                                            let next_q = fsa_lm::puzzle_sketch_v1::choose_puzzle_clarify_question_v1(&merged);
+
+                                            let used_lex = (prev_art.flags & fsa_lm::puzzle_sketch_artifact::PSA_FLAG_USED_LEXICON) != 0;
+                                            puzzle_sketch_used_lexicon = used_lex;
+
+                                            // Carry forward the lexicon snapshot hash used for the prior sketch step,
+                                            // if it was recorded as an input.
+                                            if st.inputs.len() >= 2 {
+                                                puzzle_sketch_lex_hash_opt = Some(st.inputs[1]);
+                                            }
+
+                                            let src_hash = fsa_lm::puzzle_sketch_artifact::puzzle_sketch_merged_source_hash_v1(&prev_art.source_hash, &qtext);
+                                            let psa = match fsa_lm::puzzle_sketch_artifact::PuzzleSketchArtifactV1::from_sketch(
                                             prompt_hash,
                                             query_msg_ix as u32,
                                             used_lex,
@@ -12424,7 +12862,7 @@ fn answer_run_text_inner(
                                             }
                                         };
 
-                                        let psh = match fsa_lm::puzzle_sketch_artifact_store::put_puzzle_sketch_artifact_v1(&store, &psa) {
+                                            let psh = match fsa_lm::puzzle_sketch_artifact_store::put_puzzle_sketch_artifact_v1(&store, &psa) {
                                             Ok(h) => h,
                                             Err(e) => {
                                                 eprintln!("puzzle sketch merge: store failed: {}", e);
@@ -12432,10 +12870,11 @@ fn answer_run_text_inner(
                                             }
                                         };
 
-                                        puzzle_sketch_hash_opt = Some(psh);
-                                        puzzle_sketch_opt = Some(merged);
-                                        puzzle_clarify_opt = next_q;
-                                        merged_from_pending = true;
+                                            puzzle_sketch_hash_opt = Some(psh);
+                                            puzzle_sketch_opt = Some(merged);
+                                            puzzle_clarify_opt = next_q;
+                                            merged_from_pending = true;
+                                        }
                                     }
                                 }
                             }
@@ -12444,232 +12883,260 @@ fn answer_run_text_inner(
                 }
             }
         }
-    }
 
-    if !merged_from_pending {
+        if !merged_from_pending {
+            // If the user supplied a structured puzzle block and it failed to parse, prefer a
+            // bounded clarifying question to repair the intent.
+            if puzzle_parse_failed {
+                planner_hints.flags |= PH_FLAG_PREFER_CLARIFY | PH_FLAG_PREFER_STEPS;
 
-    // If the user supplied a structured puzzle block and it failed to parse, prefer a
-    // bounded clarifying question to repair the intent.
-    if puzzle_parse_failed {
-        planner_hints.flags |= PH_FLAG_PREFER_CLARIFY | PH_FLAG_PREFER_STEPS;
+                let qid = derive_id64(
+                    b"forecast_question_v1",
+                    b"clarify:logic_puzzle:parse_failed",
+                );
+                let qtxt = "I could not parse that puzzle description. Could you restate the variables, their possible values, and the constraints? Plain text is fine.";
+                puzzle_clarify_opt = Some(fsa_lm::puzzle_sketch_v1::PuzzleClarifyV1 {
+                    question_id: qid,
+                    score: 10_000,
+                    text: qtxt.to_string(),
+                    kind: fsa_lm::puzzle_sketch_v1::PuzzleClarifyKindV1::NeedConstraints,
+                });
 
-        let qid = derive_id64(b"forecast_question_v1", b"clarify:logic_puzzle:parse_failed");
-        let qtxt = "I could not parse that puzzle description. Could you restate the variables, their possible values, and the constraints? Plain text is fine.";
-        puzzle_clarify_opt = Some(fsa_lm::puzzle_sketch_v1::PuzzleClarifyV1 {
-            question_id: qid,
-            score: 10_000,
-            text: qtxt.to_string(),
-            kind: fsa_lm::puzzle_sketch_v1::PuzzleClarifyKindV1::NeedConstraints,
-        });
-
-        // Build a best-effort sketch so we can persist pending puzzle state.
-        let pscfg = fsa_lm::puzzle_sketch_v1::PuzzleSketchCfgV1::default();
-        let mut lex_for_sketch: Option<Hash32> = lexicon_snapshot_hash;
-        if lex_for_sketch.is_none() {
-            if let Some(ws) = ws_opt {
-                lex_for_sketch = ws.lexicon_snapshot;
-            }
-        }
-
-        let mut view_opt: Option<fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1> = None;
-        let mut cues_opt: Option<fsa_lm::lexicon_neighborhoods::LexiconCueNeighborhoodsV1> = None;
-        if let Some(lh) = lex_for_sketch.as_ref() {
-            match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(&store, lh) {
-                Ok(Some(view)) => {
-                    let ncfg = fsa_lm::lexicon_neighborhoods::LexiconNeighborhoodCfgV1::new();
-                    let cues = fsa_lm::lexicon_neighborhoods::build_lexicon_cue_neighborhoods_v1(&view, &ncfg);
-                    view_opt = Some(view);
-                    cues_opt = Some(cues);
-                    puzzle_sketch_used_lexicon = true;
-                    puzzle_sketch_lex_hash_opt = Some(*lh);
-                }
-                Ok(None) => {}
-                Err(_) => {}
-            }
-        }
-
-        let sk = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(
-            &qtext,
-            view_opt.as_ref(),
-            cues_opt.as_ref(),
-            pscfg,
-        );
-        puzzle_sketch_opt = Some(sk);
-    } else {
-        // Prefer pragmatics flags when present, but allow a lexicon-first free-text sketch
-        // to trigger logic-puzzle clarification even without explicit pragmatics input.
-        let mut is_logic_from_prag: bool = false;
-        if let Some(pf) = pf_opt.as_ref() {
-            let f = pf.flags;
-            is_logic_from_prag = (f & fsa_lm::pragmatics_frame::INTENT_FLAG_IS_LOGIC_PUZZLE) != 0;
-        }
-
-        let pscfg = fsa_lm::puzzle_sketch_v1::PuzzleSketchCfgV1::default();
-        let sk0 = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(&qtext, None, None, pscfg);
-        let mut is_logic = is_logic_from_prag || sk0.is_logic_puzzle_likely;
-
-        if is_logic {
-            // Best-effort lexicon view for lexicon-first sketching.
-            let mut lex_for_sketch: Option<Hash32> = None;
-            if lexicon_snapshot_hash.is_some() {
-                lex_for_sketch = lexicon_snapshot_hash;
-            }
-            if lex_for_sketch.is_none() {
-                if let Some(ws) = ws_opt {
-                    lex_for_sketch = ws.lexicon_snapshot;
-                }
-            }
-
-            let mut view_opt: Option<fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1> = None;
-            let mut cues_opt: Option<fsa_lm::lexicon_neighborhoods::LexiconCueNeighborhoodsV1> = None;
-
-            if let Some(lh) = lex_for_sketch.as_ref() {
-                match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(&store, lh) {
-                    Ok(Some(view)) => {
-                        let ncfg = fsa_lm::lexicon_neighborhoods::LexiconNeighborhoodCfgV1::new();
-                        let cues = fsa_lm::lexicon_neighborhoods::build_lexicon_cue_neighborhoods_v1(&view, &ncfg);
-                        view_opt = Some(view);
-                        cues_opt = Some(cues);
-                    }
-                    Ok(None) => {
-                        // No lexicon; keep fallback sketch.
-                    }
-                    Err(_) => {
-                        // Keep fallback sketch on lexicon load errors.
+                // Build a best-effort sketch so we can persist pending puzzle state.
+                let pscfg = fsa_lm::puzzle_sketch_v1::PuzzleSketchCfgV1::default();
+                let mut lex_for_sketch: Option<Hash32> = lexicon_snapshot_hash;
+                if lex_for_sketch.is_none() {
+                    if let Some(ws) = ws_opt {
+                        lex_for_sketch = ws.lexicon_snapshot;
                     }
                 }
-            }
 
-            let sk = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(
-                &qtext,
-                view_opt.as_ref(),
-                cues_opt.as_ref(),
-                pscfg,
-            );
-            // Use the refined sketch to determine whether we still treat this as a puzzle.
-            is_logic = is_logic_from_prag || sk.is_logic_puzzle_likely;
-            if is_logic {
-                puzzle_clarify_opt = fsa_lm::puzzle_sketch_v1::choose_puzzle_clarify_question_v1(&sk);
+                let mut view_opt: Option<fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1> =
+                    None;
+                let mut cues_opt: Option<fsa_lm::lexicon_neighborhoods::LexiconCueNeighborhoodsV1> =
+                    None;
+                if let Some(lh) = lex_for_sketch.as_ref() {
+                    match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(&store, lh) {
+                        Ok(Some(view)) => {
+                            let ncfg =
+                                fsa_lm::lexicon_neighborhoods::LexiconNeighborhoodCfgV1::new();
+                            let cues =
+                                fsa_lm::lexicon_neighborhoods::build_lexicon_cue_neighborhoods_v1(
+                                    &view, &ncfg,
+                                );
+                            view_opt = Some(view);
+                            cues_opt = Some(cues);
+                            puzzle_sketch_used_lexicon = true;
+                            puzzle_sketch_lex_hash_opt = Some(*lh);
+                        }
+                        Ok(None) => {}
+                        Err(_) => {}
+                    }
+                }
+
+                let sk = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(
+                    &qtext,
+                    view_opt.as_ref(),
+                    cues_opt.as_ref(),
+                    pscfg,
+                );
                 puzzle_sketch_opt = Some(sk);
-                if view_opt.is_some() {
-                    puzzle_sketch_used_lexicon = true;
+            } else {
+                // Prefer pragmatics flags when present, but allow a lexicon-first free-text sketch
+                // to trigger logic-puzzle clarification even without explicit pragmatics input.
+                let mut is_logic_from_prag: bool = false;
+                if let Some(pf) = pf_opt.as_ref() {
+                    let f = pf.flags;
+                    is_logic_from_prag =
+                        (f & fsa_lm::pragmatics_frame::INTENT_FLAG_IS_LOGIC_PUZZLE) != 0;
+                }
+
+                let pscfg = fsa_lm::puzzle_sketch_v1::PuzzleSketchCfgV1::default();
+                let sk0 =
+                    fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(&qtext, None, None, pscfg);
+                let mut is_logic = is_logic_from_prag || sk0.is_logic_puzzle_likely;
+
+                if is_logic {
+                    // Best-effort lexicon view for lexicon-first sketching.
+                    let mut lex_for_sketch: Option<Hash32> = None;
+                    if lexicon_snapshot_hash.is_some() {
+                        lex_for_sketch = lexicon_snapshot_hash;
+                    }
+                    if lex_for_sketch.is_none() {
+                        if let Some(ws) = ws_opt {
+                            lex_for_sketch = ws.lexicon_snapshot;
+                        }
+                    }
+
+                    let mut view_opt: Option<fsa_lm::lexicon_expand_lookup::LexiconExpandLookupV1> =
+                        None;
+                    let mut cues_opt: Option<
+                        fsa_lm::lexicon_neighborhoods::LexiconCueNeighborhoodsV1,
+                    > = None;
+
                     if let Some(lh) = lex_for_sketch.as_ref() {
-                        puzzle_sketch_lex_hash_opt = Some(*lh);
+                        match fsa_lm::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(
+                            &store, lh,
+                        ) {
+                            Ok(Some(view)) => {
+                                let ncfg =
+                                    fsa_lm::lexicon_neighborhoods::LexiconNeighborhoodCfgV1::new();
+                                let cues = fsa_lm::lexicon_neighborhoods::build_lexicon_cue_neighborhoods_v1(&view, &ncfg);
+                                view_opt = Some(view);
+                                cues_opt = Some(cues);
+                            }
+                            Ok(None) => {
+                                // No lexicon; keep fallback sketch.
+                            }
+                            Err(_) => {
+                                // Keep fallback sketch on lexicon load errors.
+                            }
+                        }
+                    }
+
+                    let sk = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(
+                        &qtext,
+                        view_opt.as_ref(),
+                        cues_opt.as_ref(),
+                        pscfg,
+                    );
+                    // Use the refined sketch to determine whether we still treat this as a puzzle.
+                    is_logic = is_logic_from_prag || sk.is_logic_puzzle_likely;
+                    if is_logic {
+                        puzzle_clarify_opt =
+                            fsa_lm::puzzle_sketch_v1::choose_puzzle_clarify_question_v1(&sk);
+                        puzzle_sketch_opt = Some(sk);
+                        if view_opt.is_some() {
+                            puzzle_sketch_used_lexicon = true;
+                            if let Some(lh) = lex_for_sketch.as_ref() {
+                                puzzle_sketch_lex_hash_opt = Some(*lh);
+                            }
+                        }
                     }
                 }
             }
         }
-    }
 
-    }
-
-    // If the prompt looks like it contains constraint operators, but we could not
-    // compile a parseable constraint set, ask for a constraint restatement.
-    //
-    // This avoids a "no clarify" outcome when the user provided constraints in a
-    // format the v1 solver does not support.
-    if puzzle_clarify_opt.is_none() && puzzle_constraints_parse_failed {
-        let qid = derive_id64(b"forecast_question_v1", b"clarify:logic_puzzle:constraints_parse_failed");
-        let qtxt = "I could not parse the constraints. Could you provide each constraint on its own line using forms like A != B, A < B, all_different: A,B,C, or if A = 1 then B != 2? Plain text is fine.";
-        puzzle_clarify_opt = Some(fsa_lm::puzzle_sketch_v1::PuzzleClarifyV1 {
-            question_id: qid,
-            score: 10_000,
-            text: qtxt.to_string(),
-            kind: fsa_lm::puzzle_sketch_v1::PuzzleClarifyKindV1::NeedConstraints,
-        });
-    }
-
-    if let Some(pq) = puzzle_clarify_opt.as_ref() {
-        planner_hints.flags |= PH_FLAG_PREFER_CLARIFY | PH_FLAG_PREFER_STEPS;
-
-        if puzzle_sketch_hash_opt.is_none() {
-        // Persist a pending puzzle sketch for cross-turn continuation.
-        if puzzle_sketch_opt.is_none() {
-            let pscfg = fsa_lm::puzzle_sketch_v1::PuzzleSketchCfgV1::default();
-            let sk = fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(&qtext, None, None, pscfg);
-            puzzle_sketch_opt = Some(sk);
-        }
-        let src_hash = fsa_lm::puzzle_sketch_artifact::puzzle_sketch_source_hash_v1(&qtext);
-        let psa = match fsa_lm::puzzle_sketch_artifact::PuzzleSketchArtifactV1::from_sketch(
-            prompt_hash,
-            query_msg_ix as u32,
-            puzzle_sketch_used_lexicon,
-            false,
-            true,
-            src_hash,
-            puzzle_sketch_opt.as_ref().expect("puzzle_sketch"),
-        ) {
-            Ok(x) => x,
-            Err(e) => {
-                eprintln!("puzzle sketch: encode failed: {}", e);
-                return Err(1);
-            }
-        };
-        let psh = match fsa_lm::puzzle_sketch_artifact_store::put_puzzle_sketch_artifact_v1(&store, &psa) {
-            Ok(h) => h,
-            Err(e) => {
-                eprintln!("puzzle sketch: store failed: {}", e);
-                return Err(1);
-            }
-        };
-        puzzle_sketch_hash_opt = Some(psh);
-        }
-
-        // Ensure the clarifying-question append can emit one question even when
-        // no pragmatics-derived directives are present.
-        if let Some(ref mut d) = directives_opt {
-            if d.max_questions == 0 {
-                d.max_questions = 1;
-            }
-        } else {
-            directives_opt = Some(RealizerDirectivesV1 {
-                version: REALIZER_DIRECTIVES_V1_VERSION,
-                tone: ToneV1::Neutral,
-                style: StyleV1::Checklist,
-                format_flags: 0,
-                max_softeners: 0,
-                max_preface_sentences: 0,
-                max_hedges: 0,
-                max_questions: 1,
-                rationale_codes: Vec::new(),
+        // If the prompt looks like it contains constraint operators, but we could not
+        // compile a parseable constraint set, ask for a constraint restatement.
+        //
+        // This avoids a "no clarify" outcome when the user provided constraints in a
+        // format the v1 solver does not support.
+        if puzzle_clarify_opt.is_none() && puzzle_constraints_parse_failed {
+            let qid = derive_id64(
+                b"forecast_question_v1",
+                b"clarify:logic_puzzle:constraints_parse_failed",
+            );
+            let qtxt = "I could not parse the constraints. Could you provide each constraint on its own line using forms like A != B, A < B, all_different: A,B,C, or if A = 1 then B != 2? Plain text is fine.";
+            puzzle_clarify_opt = Some(fsa_lm::puzzle_sketch_v1::PuzzleClarifyV1 {
+                question_id: qid,
+                score: 10_000,
+                text: qtxt.to_string(),
+                kind: fsa_lm::puzzle_sketch_v1::PuzzleClarifyKindV1::NeedConstraints,
             });
         }
 
-        forecast.questions.retain(|q| q.question_id != pq.question_id);
-        forecast.questions.push(ForecastQuestionV1 {
-            question_id: pq.question_id,
-            score: pq.score as i64,
-            text: pq.text.clone(),
-            rationale_code: 0,
-        });
-        forecast.questions.sort_by(|a, b| match b.score.cmp(&a.score) {
-            core::cmp::Ordering::Equal => a.question_id.0.cmp(&b.question_id.0),
-            o => o,
-        });
-        if forecast.questions.len() > FORECAST_V1_MAX_QUESTIONS {
-            forecast.questions.truncate(FORECAST_V1_MAX_QUESTIONS);
-        }
+        if let Some(pq) = puzzle_clarify_opt.as_ref() {
+            planner_hints.flags |= PH_FLAG_PREFER_CLARIFY | PH_FLAG_PREFER_STEPS;
 
-        let iid = derive_id64(b"forecast_intent_v1", b"clarify:logic_puzzle");
-        forecast.intents.retain(|it| !(it.kind == ForecastIntentKindV1::Clarify && it.intent_id == iid));
-        forecast.intents.push(ForecastIntentV1::new(
-            ForecastIntentKindV1::Clarify,
-            iid,
-            10_000,
-            0,
-        ));
-        forecast.intents.sort_by(|a, b| match b.score.cmp(&a.score) {
-            core::cmp::Ordering::Equal => match (a.kind as u8).cmp(&(b.kind as u8)) {
-                core::cmp::Ordering::Equal => a.intent_id.0.cmp(&b.intent_id.0),
-                o => o,
-            },
-            o => o,
-        });
-        if forecast.intents.len() > FORECAST_V1_MAX_INTENTS {
-            forecast.intents.truncate(FORECAST_V1_MAX_INTENTS);
-        }
-    }
+            if puzzle_sketch_hash_opt.is_none() {
+                // Persist a pending puzzle sketch for cross-turn continuation.
+                if puzzle_sketch_opt.is_none() {
+                    let pscfg = fsa_lm::puzzle_sketch_v1::PuzzleSketchCfgV1::default();
+                    let sk =
+                        fsa_lm::puzzle_sketch_v1::build_puzzle_sketch_v1(&qtext, None, None, pscfg);
+                    puzzle_sketch_opt = Some(sk);
+                }
+                let src_hash = fsa_lm::puzzle_sketch_artifact::puzzle_sketch_source_hash_v1(&qtext);
+                let psa = match fsa_lm::puzzle_sketch_artifact::PuzzleSketchArtifactV1::from_sketch(
+                    prompt_hash,
+                    query_msg_ix as u32,
+                    puzzle_sketch_used_lexicon,
+                    false,
+                    true,
+                    src_hash,
+                    puzzle_sketch_opt.as_ref().expect("puzzle_sketch"),
+                ) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        eprintln!("puzzle sketch: encode failed: {}", e);
+                        return Err(1);
+                    }
+                };
+                let psh = match fsa_lm::puzzle_sketch_artifact_store::put_puzzle_sketch_artifact_v1(
+                    &store, &psa,
+                ) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        eprintln!("puzzle sketch: store failed: {}", e);
+                        return Err(1);
+                    }
+                };
+                puzzle_sketch_hash_opt = Some(psh);
+            }
 
+            // Ensure the clarifying-question append can emit one question even when
+            // no pragmatics-derived directives are present.
+            if let Some(ref mut d) = directives_opt {
+                if d.max_questions == 0 {
+                    d.max_questions = 1;
+                }
+            } else {
+                directives_opt = Some(RealizerDirectivesV1 {
+                    version: REALIZER_DIRECTIVES_V1_VERSION,
+                    tone: ToneV1::Neutral,
+                    style: StyleV1::Checklist,
+                    format_flags: 0,
+                    max_softeners: 0,
+                    max_preface_sentences: 0,
+                    max_hedges: 0,
+                    max_questions: 1,
+                    rationale_codes: Vec::new(),
+                });
+            }
+
+            forecast
+                .questions
+                .retain(|q| q.question_id != pq.question_id);
+            forecast.questions.push(ForecastQuestionV1 {
+                question_id: pq.question_id,
+                score: pq.score as i64,
+                text: pq.text.clone(),
+                rationale_code: 0,
+            });
+            forecast
+                .questions
+                .sort_by(|a, b| match b.score.cmp(&a.score) {
+                    core::cmp::Ordering::Equal => a.question_id.0.cmp(&b.question_id.0),
+                    o => o,
+                });
+            if forecast.questions.len() > FORECAST_V1_MAX_QUESTIONS {
+                forecast.questions.truncate(FORECAST_V1_MAX_QUESTIONS);
+            }
+
+            let iid = derive_id64(b"forecast_intent_v1", b"clarify:logic_puzzle");
+            forecast
+                .intents
+                .retain(|it| !(it.kind == ForecastIntentKindV1::Clarify && it.intent_id == iid));
+            forecast.intents.push(ForecastIntentV1::new(
+                ForecastIntentKindV1::Clarify,
+                iid,
+                10_000,
+                0,
+            ));
+            forecast
+                .intents
+                .sort_by(|a, b| match b.score.cmp(&a.score) {
+                    core::cmp::Ordering::Equal => match (a.kind as u8).cmp(&(b.kind as u8)) {
+                        core::cmp::Ordering::Equal => a.intent_id.0.cmp(&b.intent_id.0),
+                        o => o,
+                    },
+                    o => o,
+                });
+            if forecast.intents.len() > FORECAST_V1_MAX_INTENTS {
+                forecast.intents.truncate(FORECAST_V1_MAX_INTENTS);
+            }
+        }
     }
 
     let mut exemplar_advisory_opt: Option<ExemplarAdvisoryV1> = None;
@@ -12850,13 +13317,9 @@ fn answer_run_text_inner(
     // For wired surface-template sites, use the realizer-reported
     // surface-choice events as the source of truth (no re-parsing of rendered
     // text).
-    let mt_tokens: Vec<MarkovTokenV1> = build_markov_trace_tokens_v1(
-        &plan,
-        &qr.markov,
-        did_append_q,
-    );
+    let mt_tokens: Vec<MarkovTokenV1> =
+        build_markov_trace_tokens_v1(&plan, &qr.markov, did_append_q);
     let mt_tokens_ret: Vec<MarkovTokenV1> = mt_tokens.clone();
-
 
     let trace = MarkovTraceV1 {
         version: MARKOV_TRACE_V1_VERSION,
@@ -12871,7 +13334,6 @@ fn answer_run_text_inner(
             return Err(1);
         }
     };
-
 
     //: Build a minimal EvidenceSetV1 that binds the full answer text
     // to the rendered evidence rows (bounded by the realizer limit).
@@ -12952,7 +13414,8 @@ fn answer_run_text_inner(
         if let Some(lh) = context_anchors_lex_hash_opt.as_ref() {
             ins.push(*lh);
         }
-        log.steps.push(step_from_slices(STEP_CONTEXT_ANCHORS_V1, &ins, &[ch]));
+        log.steps
+            .push(step_from_slices(STEP_CONTEXT_ANCHORS_V1, &ins, &[ch]));
     }
 
     if let Some(sh) = puzzle_sketch_hash_opt {
@@ -12961,13 +13424,15 @@ fn answer_run_text_inner(
         if let Some(lh) = puzzle_sketch_lex_hash_opt.as_ref() {
             ins.push(*lh);
         }
-        log.steps.push(step_from_slices(STEP_PUZZLE_SKETCH_V1, &ins, &[sh]));
+        log.steps
+            .push(step_from_slices(STEP_PUZZLE_SKETCH_V1, &ins, &[sh]));
     }
 
     if let Some(ph) = proof_hash_opt.as_ref() {
         let ph = *ph;
         let ins: [Hash32; 1] = [prompt_hash];
-        log.steps.push(step_from_slices(STEP_PROOF_ARTIFACT_V1, &ins, &[ph]));
+        log.steps
+            .push(step_from_slices(STEP_PROOF_ARTIFACT_V1, &ins, &[ph]));
     }
 
     //: record MarkovHintsV1 derivation when enabled.
@@ -12990,7 +13455,8 @@ fn answer_run_text_inner(
             mh_inputs.push(dh);
         }
         mh_inputs.push(model_hash);
-        log.steps.push(step_from_slices(STEP_MARKOV_HINTS_V1, &mh_inputs, &[hh]));
+        log.steps
+            .push(step_from_slices(STEP_MARKOV_HINTS_V1, &mh_inputs, &[hh]));
     }
 
     //: Record planner guidance artifacts in stable steps.
@@ -13002,14 +13468,22 @@ fn answer_run_text_inner(
         ph_inputs.push(*h);
     }
     ph_inputs.push(ev_hash);
-    log.steps.push(step_from_slices(STEP_PLANNER_HINTS_V1, &ph_inputs, &[planner_hints_hash]));
+    log.steps.push(step_from_slices(
+        STEP_PLANNER_HINTS_V1,
+        &ph_inputs,
+        &[planner_hints_hash],
+    ));
 
     let mut fc_inputs: Vec<Hash32> = Vec::new();
     for h in control.pragmatics_frame_ids.iter() {
         fc_inputs.push(*h);
     }
     fc_inputs.push(planner_hints_hash);
-    log.steps.push(step_from_slices(STEP_FORECAST_V1, &fc_inputs, &[forecast_hash]));
+    log.steps.push(step_from_slices(
+        STEP_FORECAST_V1,
+        &fc_inputs,
+        &[forecast_hash],
+    ));
 
     let mut ins: Vec<Hash32> = Vec::new();
     ins.push(prompt_hash);
@@ -13055,7 +13529,11 @@ fn answer_run_text_inner(
         outputs: vec![answer_hash, set_hash],
     });
 
-    log.steps.push(step_from_slices(STEP_MARKOV_TRACE_V1, &mt_inputs, &[markov_trace_hash]));
+    log.steps.push(step_from_slices(
+        STEP_MARKOV_TRACE_V1,
+        &mt_inputs,
+        &[markov_trace_hash],
+    ));
 
     let replay_hash = match put_replay_log(&store, &log) {
         Ok(h) => h,
@@ -13068,14 +13546,12 @@ fn answer_run_text_inner(
     Ok((text, out_file, mt_tokens_ret, replay_hash))
 }
 
-
 fn answer_run_text(args: &[String]) -> Result<(String, Option<PathBuf>), i32> {
     match answer_run_text_inner(args, &[]) {
         Ok((t, of, _mt, _rh)) => Ok((t, of)),
         Err(code) => Err(code),
     }
 }
-
 
 fn cmd_answer(args: &[String]) -> i32 {
     let (text, out_file) = match answer_run_text(args) {
@@ -13097,8 +13573,6 @@ fn cmd_answer(args: &[String]) -> i32 {
 
     0
 }
-
-
 
 fn cmd_build_markov_model(args: &[String]) -> i32 {
     let mut out_file: Option<String> = None;
@@ -13274,7 +13748,11 @@ fn cmd_build_markov_model(args: &[String]) -> i32 {
         return 2;
     }
 
-    let cfg = MarkovTrainCfgV1 { order_n_max, max_next_per_state, max_states };
+    let cfg = MarkovTrainCfgV1 {
+        order_n_max,
+        max_next_per_state,
+        max_states,
+    };
     if let Err(e) = cfg.validate() {
         eprintln!("build-markov-model: invalid cfg: {}", e);
         return 2;
@@ -13315,8 +13793,10 @@ fn cmd_build_markov_model(args: &[String]) -> i32 {
         trace_hashes.truncate(max_traces as usize);
     }
 
-    let replay_summary = fsa_lm::scale_report::HashListSummaryV1::from_list("markov_replays_v1", &replay_hashes);
-    let trace_summary = fsa_lm::scale_report::HashListSummaryV1::from_list("markov_traces_v1", &trace_hashes);
+    let replay_summary =
+        fsa_lm::scale_report::HashListSummaryV1::from_list("markov_replays_v1", &replay_hashes);
+    let trace_summary =
+        fsa_lm::scale_report::HashListSummaryV1::from_list("markov_traces_v1", &trace_hashes);
 
     let corpus_hash = match markov_corpus_hash_v1(&cfg, &trace_hashes) {
         Ok(h) => h,
@@ -13402,7 +13882,6 @@ fn cmd_build_markov_model(args: &[String]) -> i32 {
     0
 }
 
-
 fn cmd_build_exemplar_memory(args: &[String]) -> i32 {
     let mut out_file: Option<String> = None;
     let mut root = default_root();
@@ -13428,8 +13907,12 @@ fn cmd_build_exemplar_memory(args: &[String]) -> i32 {
                 }
                 root = PathBuf::from(&args[i]);
             }
-            "--replay" | "--prompt" | "--golden-pack" | "--golden-pack-conversation"
-            | "--conversation-pack" | "--markov-trace" => {
+            "--replay"
+            | "--prompt"
+            | "--golden-pack"
+            | "--golden-pack-conversation"
+            | "--conversation-pack"
+            | "--markov-trace" => {
                 let flag = args[i].clone();
                 i += 1;
                 if i >= args.len() {
@@ -13827,7 +14310,9 @@ fn cmd_build_graph_relevance(args: &[String]) -> i32 {
             "--max-inputs-per-source-kind" => {
                 i += 1;
                 if i >= args.len() {
-                    eprintln!("build-graph-relevance: missing value for --max-inputs-per-source-kind");
+                    eprintln!(
+                        "build-graph-relevance: missing value for --max-inputs-per-source-kind"
+                    );
                     return 2;
                 }
                 cfg.max_inputs_per_source_kind = match parse_u32(&args[i]) {
@@ -13883,7 +14368,9 @@ fn cmd_build_graph_relevance(args: &[String]) -> i32 {
             "--max-entities-per-frame-row" => {
                 i += 1;
                 if i >= args.len() {
-                    eprintln!("build-graph-relevance: missing value for --max-entities-per-frame-row");
+                    eprintln!(
+                        "build-graph-relevance: missing value for --max-entities-per-frame-row"
+                    );
                     return 2;
                 }
                 cfg.max_entities_per_frame_row = match parse_u8(&args[i]) {
@@ -13928,7 +14415,10 @@ fn cmd_build_graph_relevance(args: &[String]) -> i32 {
                 let artifact = match get_frame_segment_v1(&store, &item.source_hash) {
                     Ok(Some(x)) => x,
                     Ok(None) => {
-                        eprintln!("build-graph-relevance: missing frame-segment {}", hex32(&item.source_hash));
+                        eprintln!(
+                            "build-graph-relevance: missing frame-segment {}",
+                            hex32(&item.source_hash)
+                        );
                         return 3;
                     }
                     Err(e) => {
@@ -13936,13 +14426,19 @@ fn cmd_build_graph_relevance(args: &[String]) -> i32 {
                         return 1;
                     }
                 };
-                loaded.push(LoadedGraphSourceV1::FrameSegment { source_hash: item.source_hash, artifact });
+                loaded.push(LoadedGraphSourceV1::FrameSegment {
+                    source_hash: item.source_hash,
+                    artifact,
+                });
             }
             GraphBuildSourceKindV1::ReplayLog => {
                 let artifact = match get_replay_log(&store, &item.source_hash) {
                     Ok(Some(x)) => x,
                     Ok(None) => {
-                        eprintln!("build-graph-relevance: missing replay {}", hex32(&item.source_hash));
+                        eprintln!(
+                            "build-graph-relevance: missing replay {}",
+                            hex32(&item.source_hash)
+                        );
                         return 3;
                     }
                     Err(e) => {
@@ -13950,13 +14446,19 @@ fn cmd_build_graph_relevance(args: &[String]) -> i32 {
                         return 1;
                     }
                 };
-                loaded.push(LoadedGraphSourceV1::ReplayLog { source_hash: item.source_hash, artifact });
+                loaded.push(LoadedGraphSourceV1::ReplayLog {
+                    source_hash: item.source_hash,
+                    artifact,
+                });
             }
             GraphBuildSourceKindV1::PromptPack => {
                 let artifact = match get_prompt_pack(&store, &item.source_hash) {
                     Ok(Some(x)) => x,
                     Ok(None) => {
-                        eprintln!("build-graph-relevance: missing prompt {}", hex32(&item.source_hash));
+                        eprintln!(
+                            "build-graph-relevance: missing prompt {}",
+                            hex32(&item.source_hash)
+                        );
                         return 3;
                     }
                     Err(e) => {
@@ -13964,26 +14466,41 @@ fn cmd_build_graph_relevance(args: &[String]) -> i32 {
                         return 1;
                     }
                 };
-                loaded.push(LoadedGraphSourceV1::PromptPack { source_hash: item.source_hash, artifact });
+                loaded.push(LoadedGraphSourceV1::PromptPack {
+                    source_hash: item.source_hash,
+                    artifact,
+                });
             }
             GraphBuildSourceKindV1::ConversationPack => {
                 let artifact = match get_conversation_pack(&store, &item.source_hash) {
                     Ok(Some(x)) => x,
                     Ok(None) => {
-                        eprintln!("build-graph-relevance: missing conversation-pack {}", hex32(&item.source_hash));
+                        eprintln!(
+                            "build-graph-relevance: missing conversation-pack {}",
+                            hex32(&item.source_hash)
+                        );
                         return 3;
                     }
                     Err(e) => {
-                        eprintln!("build-graph-relevance: load conversation-pack failed: {}", e);
+                        eprintln!(
+                            "build-graph-relevance: load conversation-pack failed: {}",
+                            e
+                        );
                         return 1;
                     }
                 };
-                loaded.push(LoadedGraphSourceV1::ConversationPack { source_hash: item.source_hash, artifact });
+                loaded.push(LoadedGraphSourceV1::ConversationPack {
+                    source_hash: item.source_hash,
+                    artifact,
+                });
             }
         }
     }
 
-    let borrowed: Vec<GraphSourceArtifactV1<'_>> = loaded.iter().map(LoadedGraphSourceV1::as_borrowed).collect();
+    let borrowed: Vec<GraphSourceArtifactV1<'_>> = loaded
+        .iter()
+        .map(LoadedGraphSourceV1::as_borrowed)
+        .collect();
     let rows = match mine_graph_rows_from_sources_v1(&plan, &borrowed) {
         Ok(x) => x,
         Err(e) => {
@@ -14241,7 +14758,11 @@ fn cmd_inspect_markov_model(args: &[String]) -> i32 {
             let (out_sum, idx) = sums[rank];
             let st = &model.states[idx];
             let ctx = fmt_ctx(&st.context);
-            let next_s = if nn > 0 { fmt_next(&st.next, nn) } else { "[]".to_string() };
+            let next_s = if nn > 0 {
+                fmt_next(&st.next, nn)
+            } else {
+                "[]".to_string()
+            };
             out.push_str(&format!(
                 "markov_model_state_v1 rank={} idx={} ctx_len={} out={} ctx={} next={}\n",
                 rank,
@@ -14552,7 +15073,6 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
         query_tokens as u16
     };
 
-
     let wcfg = WorkloadCfgV1 {
         version: WORKLOAD_GEN_V1_VERSION,
         seed,
@@ -14564,7 +15084,6 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
         query_tokens: query_tokens_u16,
         include_tie_pair: tie_pair,
     };
-
 
     let cfg = ScaleDemoCfgV1 {
         version: SCALE_DEMO_V1_VERSION,
@@ -14657,8 +15176,15 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
     let evidence_report_opt = if evidence == 0 {
         None
     } else {
-        let ix = index_report_opt.as_ref().expect("validated --evidence requires index");
-        match run_scale_demo_build_evidence_bundles_v1(&store, cfg, &ix.index_snapshot_hash, &ix.index_sig_map_hash) {
+        let ix = index_report_opt
+            .as_ref()
+            .expect("validated --evidence requires index");
+        match run_scale_demo_build_evidence_bundles_v1(
+            &store,
+            cfg,
+            &ix.index_snapshot_hash,
+            &ix.index_sig_map_hash,
+        ) {
             Ok(r) => Some(r),
             Err(e) => {
                 eprintln!("scale-demo evidence: {e}");
@@ -14670,7 +15196,9 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
     let answers_report_opt = if answer == 0 {
         None
     } else {
-        let ev = evidence_report_opt.as_ref().expect("validated --answer requires evidence");
+        let ev = evidence_report_opt
+            .as_ref()
+            .expect("validated --answer requires evidence");
         match run_scale_demo_build_answers_v1(&store, ev) {
             Ok(r) => Some(r),
             Err(e) => {
@@ -14679,7 +15207,6 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
             }
         }
     };
-
 
     let scale_rep = match build_scale_demo_scale_report_v1(
         &report,
@@ -14729,7 +15256,6 @@ fn cmd_scale_demo(args: &[String]) -> i32 {
         out.push_str(&ar.to_string());
         out.push('\n');
     }
-
 
     out.push_str("scale_demo_scale_report_v3 ");
     out.push_str("report=");
@@ -14930,8 +15456,7 @@ fn cmd_golden_pack_turn_pairs(args: &[String]) -> i32 {
     };
 
     let cfg = fsa_lm::golden_pack_turn_pairs_run::GoldenPackTurnPairsRunCfgV1::default_tiny_v1();
-    let out = match fsa_lm::golden_pack_turn_pairs_run::run_golden_pack_turn_pairs_v1(&store, cfg)
-    {
+    let out = match fsa_lm::golden_pack_turn_pairs_run::run_golden_pack_turn_pairs_v1(&store, cfg) {
         Ok(o) => o,
         Err(e) => {
             eprintln!("golden pack turn-pairs failed: {}", e);
@@ -14941,8 +15466,8 @@ fn cmd_golden_pack_turn_pairs(args: &[String]) -> i32 {
 
     let line = fsa_lm::golden_pack_turn_pairs_run::format_golden_pack_turn_pairs_run_line(&out);
 
-    let expect = expect_hex
-        .or_else(|| std::env::var("FSA_LM_GOLDEN_PACK_TURN_PAIRS_V1_REPORT_HEX").ok());
+    let expect =
+        expect_hex.or_else(|| std::env::var("FSA_LM_GOLDEN_PACK_TURN_PAIRS_V1_REPORT_HEX").ok());
     if let Some(hex) = expect {
         match parse_hash32_hex(&hex) {
             Ok(h) => {
@@ -15012,20 +15537,21 @@ fn cmd_golden_pack_conversation(args: &[String]) -> i32 {
         }
     };
 
-    let cfg = fsa_lm::golden_pack_conversation_run::GoldenPackConversationRunCfgV1::default_tiny_v1();
-    let out = match fsa_lm::golden_pack_conversation_run::run_golden_pack_conversation_v1(&store, cfg)
-    {
-        Ok(o) => o,
-        Err(e) => {
-            eprintln!("golden pack conversation failed: {}", e);
-            return 2;
-        }
-    };
+    let cfg =
+        fsa_lm::golden_pack_conversation_run::GoldenPackConversationRunCfgV1::default_tiny_v1();
+    let out =
+        match fsa_lm::golden_pack_conversation_run::run_golden_pack_conversation_v1(&store, cfg) {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("golden pack conversation failed: {}", e);
+                return 2;
+            }
+        };
 
     let line = fsa_lm::golden_pack_conversation_run::format_golden_pack_conversation_run_line(&out);
 
-    let expect = expect_hex
-        .or_else(|| std::env::var("FSA_LM_GOLDEN_PACK_CONVERSATION_V1_REPORT_HEX").ok());
+    let expect =
+        expect_hex.or_else(|| std::env::var("FSA_LM_GOLDEN_PACK_CONVERSATION_V1_REPORT_HEX").ok());
     if let Some(hex) = expect {
         match parse_hash32_hex(&hex) {
             Ok(h) => {
@@ -15173,19 +15699,26 @@ fn handle_client(mut stream: TcpStream, root: PathBuf) -> io::Result<()> {
 
         match req {
             net::Request::Put(bytes) => {
-                let h = store.put(&bytes).map_err(|_| io::Error::new(io::ErrorKind::Other, "put failed"))?;
-                let resp = net::encode_put_resp(&h).map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
+                let h = store
+                    .put(&bytes)
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "put failed"))?;
+                let resp = net::encode_put_resp(&h)
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
                 net::write_frame(&mut stream, &resp)?;
             }
             net::Request::Get(hash) => {
-                let got = store.get(&hash).map_err(|_| io::Error::new(io::ErrorKind::Other, "get failed"))?;
+                let got = store
+                    .get(&hash)
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "get failed"))?;
                 match got {
                     Some(bytes) => {
-                        let resp = net::encode_get_resp(true, &bytes).map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
+                        let resp = net::encode_get_resp(true, &bytes)
+                            .map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
                         net::write_frame(&mut stream, &resp)?;
                     }
                     None => {
-                        let resp = net::encode_get_resp(false, &[]).map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
+                        let resp = net::encode_get_resp(false, &[])
+                            .map_err(|_| io::Error::new(io::ErrorKind::Other, "encode failed"))?;
                         net::write_frame(&mut stream, &resp)?;
                     }
                 }
@@ -15429,7 +15962,8 @@ fn cmd_send_get(args: &[String]) -> i32 {
 }
 
 fn bytes_from_kb(v: u32) -> Result<u32, String> {
-    v.checked_mul(1024).ok_or_else(|| "kb too large".to_string())
+    v.checked_mul(1024)
+        .ok_or_else(|| "kb too large".to_string())
 }
 
 fn bytes_from_mb(v: u32) -> Result<u32, String> {
@@ -16190,7 +16724,7 @@ fn main() {
         "sync-reduce" => cmd_sync_reduce(rest),
         "sync-lexicon" => cmd_sync_lexicon(rest),
         "sync-reduce-batch" => cmd_sync_reduce_batch(rest),
-                "replay-new" => cmd_replay_new(rest),
+        "replay-new" => cmd_replay_new(rest),
         "frame-seg-demo" => cmd_frame_seg_demo(rest),
         "frame-seg-show" => cmd_frame_seg_show(rest),
         "ingest-wiki" => cmd_ingest_wiki(rest),
@@ -16221,7 +16755,7 @@ fn main() {
         "golden-pack-turn-pairs" => cmd_golden_pack_turn_pairs(rest),
         "golden-pack-conversation" => cmd_golden_pack_conversation(rest),
         "replay-add-prompt" => cmd_replay_add_prompt(rest),
-_ => {
+        _ => {
             eprintln!("unknown cmd: {}\n\n{}", cmd, usage());
             2
         }

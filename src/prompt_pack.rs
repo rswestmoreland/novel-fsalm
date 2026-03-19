@@ -14,7 +14,7 @@
 //! - Add basic tests for round-trip and canonical ordering
 
 use crate::codec::{ByteReader, ByteWriter, DecodeError, EncodeError};
-use crate::hash::{Hash32};
+use crate::hash::Hash32;
 
 /// PromptPack version (v1).
 pub const PROMPT_PACK_VERSION: u16 = 1;
@@ -98,7 +98,6 @@ pub struct PromptPack {
     pub messages: Vec<Message>,
     /// Additional constraints (canonical encoding sorts by key then value).
     pub constraints: Vec<ConstraintKV>,
-
 }
 
 /// Limits applied to a PromptPack to bound size deterministically.
@@ -180,7 +179,6 @@ fn clamp_u32_to_usize(v: u32) -> usize {
     }
 }
 
-
 impl PromptPack {
     /// Create a new PromptPack with default version.
     pub fn new(seed: u64, max_output_tokens: u32, ids: PromptIds) -> Self {
@@ -204,7 +202,6 @@ impl PromptPack {
             value: value.to_string(),
         });
     }
-
 
     /// Canonicalize the PromptPack in place under the given limits.
     ///
@@ -511,7 +508,11 @@ impl PromptPack {
             version,
             seed,
             max_output_tokens,
-            ids: PromptIds { snapshot_id, weights_id, tokenizer_id },
+            ids: PromptIds {
+                snapshot_id,
+                weights_id,
+                tokenizer_id,
+            },
             messages,
             constraints,
         })
@@ -536,9 +537,18 @@ mod tests {
         };
 
         let mut p = PromptPack::new(123, 256, ids);
-        p.messages.push(Message { role: Role::System, content: "system".to_string() });
-        p.messages.push(Message { role: Role::User, content: "hello".to_string() });
-        p.constraints.push(ConstraintKV { key: "format".to_string(), value: "plain".to_string() });
+        p.messages.push(Message {
+            role: Role::System,
+            content: "system".to_string(),
+        });
+        p.messages.push(Message {
+            role: Role::User,
+            content: "hello".to_string(),
+        });
+        p.constraints.push(ConstraintKV {
+            key: "format".to_string(),
+            value: "plain".to_string(),
+        });
 
         let enc = p.encode().unwrap();
         let dec = PromptPack::decode(&enc).unwrap();
@@ -554,15 +564,33 @@ mod tests {
         };
 
         let mut a = PromptPack::new(1, 64, ids.clone());
-        a.messages.push(Message { role: Role::User, content: "x".to_string() });
-        a.constraints.push(ConstraintKV { key: "b".to_string(), value: "2".to_string() });
-        a.constraints.push(ConstraintKV { key: "a".to_string(), value: "9".to_string() });
+        a.messages.push(Message {
+            role: Role::User,
+            content: "x".to_string(),
+        });
+        a.constraints.push(ConstraintKV {
+            key: "b".to_string(),
+            value: "2".to_string(),
+        });
+        a.constraints.push(ConstraintKV {
+            key: "a".to_string(),
+            value: "9".to_string(),
+        });
 
         let mut b = PromptPack::new(1, 64, ids);
-        b.messages.push(Message { role: Role::User, content: "x".to_string() });
+        b.messages.push(Message {
+            role: Role::User,
+            content: "x".to_string(),
+        });
         // Insert constraints in opposite order.
-        b.constraints.push(ConstraintKV { key: "a".to_string(), value: "9".to_string() });
-        b.constraints.push(ConstraintKV { key: "b".to_string(), value: "2".to_string() });
+        b.constraints.push(ConstraintKV {
+            key: "a".to_string(),
+            value: "9".to_string(),
+        });
+        b.constraints.push(ConstraintKV {
+            key: "b".to_string(),
+            value: "2".to_string(),
+        });
 
         let ea = a.encode().unwrap();
         let eb = b.encode().unwrap();
@@ -579,7 +607,10 @@ mod tests {
 
         // Build a pack with one message and then corrupt the role byte.
         let mut p = PromptPack::new(1, 64, ids);
-        p.messages.push(Message { role: Role::User, content: "hi".to_string() });
+        p.messages.push(Message {
+            role: Role::User,
+            content: "hi".to_string(),
+        });
 
         let mut enc = p.encode().unwrap();
 
@@ -605,11 +636,26 @@ mod tests {
         };
 
         let mut p = PromptPack::new(1, 64, ids);
-        p.messages.push(Message { role: Role::System, content: "SYS".to_string() });
-        p.messages.push(Message { role: Role::User, content: "u1".to_string() });
-        p.messages.push(Message { role: Role::Assistant, content: "a1".to_string() });
-        p.messages.push(Message { role: Role::User, content: "u2".to_string() });
-        p.messages.push(Message { role: Role::Assistant, content: "a2".to_string() });
+        p.messages.push(Message {
+            role: Role::System,
+            content: "SYS".to_string(),
+        });
+        p.messages.push(Message {
+            role: Role::User,
+            content: "u1".to_string(),
+        });
+        p.messages.push(Message {
+            role: Role::Assistant,
+            content: "a1".to_string(),
+        });
+        p.messages.push(Message {
+            role: Role::User,
+            content: "u2".to_string(),
+        });
+        p.messages.push(Message {
+            role: Role::Assistant,
+            content: "a2".to_string(),
+        });
 
         let limits = PromptLimits {
             max_messages: 3,
@@ -636,8 +682,14 @@ mod tests {
         };
 
         let mut p = PromptPack::new(1, 64, ids);
-        p.messages.push(Message { role: Role::User, content: "12345".to_string() });
-        p.messages.push(Message { role: Role::User, content: "67890".to_string() });
+        p.messages.push(Message {
+            role: Role::User,
+            content: "12345".to_string(),
+        });
+        p.messages.push(Message {
+            role: Role::User,
+            content: "67890".to_string(),
+        });
 
         let limits = PromptLimits {
             max_messages: 2,
@@ -664,9 +716,18 @@ mod tests {
         };
 
         let mut p = PromptPack::new(9, 7, ids);
-        p.messages.push(Message { role: Role::User, content: "hi".to_string() });
-        p.constraints.push(ConstraintKV { key: "b".to_string(), value: "2".to_string() });
-        p.constraints.push(ConstraintKV { key: "a".to_string(), value: "9".to_string() });
+        p.messages.push(Message {
+            role: Role::User,
+            content: "hi".to_string(),
+        });
+        p.constraints.push(ConstraintKV {
+            key: "b".to_string(),
+            value: "2".to_string(),
+        });
+        p.constraints.push(ConstraintKV {
+            key: "a".to_string(),
+            value: "9".to_string(),
+        });
 
         let limits = PromptLimits::default_v1();
         p.canonicalize_in_place(limits);
@@ -675,5 +736,4 @@ mod tests {
         let e2 = p.encode_assuming_canonical().unwrap();
         assert_eq!(e1, e2);
     }
-
 }

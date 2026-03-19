@@ -100,14 +100,16 @@ fn puzzle_free_text_triggers_conversational_clarify() {
 
     let (acode, aout, aerr) = run_cmd(
         bin,
-        &["ask", "--root", root.to_str().unwrap(), "--text", prompt],
+        &[
+            "ask",
+            "--root",
+            root.to_str().unwrap(),
+            "--text",
+            prompt,
+        ],
     );
     assert_eq!(acode, 0, "stderr={}", aerr);
-    assert!(aout.contains("Clarifying question:"), "stdout={}", aout);
+    assert!(aout.contains("Quick question:"), "stdout={}", aout);
     assert!(aout.contains("possible values"), "stdout={}", aout);
-    assert!(
-        !aout.contains("Please provide the puzzle using"),
-        "stdout={}",
-        aout
-    );
+    assert!(!aout.contains("Please provide the puzzle using"), "stdout={}", aout);
 }

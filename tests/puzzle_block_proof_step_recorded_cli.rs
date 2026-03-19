@@ -140,8 +140,7 @@ fn puzzle_block_records_proof_step_and_artifact() {
     assert_eq!(acode, 0, "stderr={}", aerr);
     assert!(aout.contains("Proof solution:"), "stdout={}", aout);
 
-    let conv_hex = parse_file_kv(&session_file, "conversation_pack")
-        .expect("conversation_pack in session file");
+    let conv_hex = parse_file_kv(&session_file, "conversation_pack").expect("conversation_pack in session file");
     let conv_hash = hex_to_hash32(&conv_hex);
 
     let store = FsArtifactStore::new(&root).unwrap();
@@ -168,10 +167,7 @@ fn puzzle_block_records_proof_step_and_artifact() {
     let proof_hash = proof_hash_opt.expect("proof-artifact-v1 step present");
 
     let proof = get_proof_artifact_v1(&store, &proof_hash).unwrap().unwrap();
-    assert_eq!(
-        proof.vars,
-        vec!["A".to_string(), "B".to_string(), "C".to_string()]
-    );
+    assert_eq!(proof.vars, vec!["A".to_string(), "B".to_string(), "C".to_string()]);
     assert_eq!(proof.domain, vec![1, 2, 3]);
     assert!(!proof.solutions.is_empty());
 }

@@ -30,9 +30,7 @@ use crate::lexicon_snapshot_builder::{
 };
 use crate::metaphone::{meta_code_id_from_token, MetaphoneCfg};
 use crate::wiki_xml::{parse_wiki_xml, WikiXmlCfg, WikiXmlError, WikiXmlSink};
-use crate::wiktionary_ingest::{
-    parse_wiktionary_page_text, WiktionaryPageExtract, WiktionaryParseCfg,
-};
+use crate::wiktionary_ingest::{parse_wiktionary_page_text, WiktionaryPageExtract, WiktionaryParseCfg};
 
 use std::io::BufRead;
 
@@ -110,10 +108,7 @@ fn map_snap_err(e: LexiconSnapshotBuildError) -> WiktionaryIngestError {
     WiktionaryIngestError::SnapshotBuild(e.to_string())
 }
 
-fn rel_rows_from_extract(
-    ex: &WiktionaryPageExtract,
-    lemma_id: crate::lexicon::LemmaId,
-) -> Vec<RelationEdgeRowV1> {
+fn rel_rows_from_extract(ex: &WiktionaryPageExtract, lemma_id: crate::lexicon::LemmaId) -> Vec<RelationEdgeRowV1> {
     let cap = ex.synonyms.len()
         + ex.antonyms.len()
         + ex.related_terms.len()
@@ -140,12 +135,7 @@ fn rel_rows_from_extract(
     out
 }
 
-fn push_rel_list(
-    out: &mut Vec<RelationEdgeRowV1>,
-    from: RelFromId,
-    rel: crate::lexicon::RelTypeId,
-    xs: &[String],
-) {
+fn push_rel_list(out: &mut Vec<RelationEdgeRowV1>, from: RelFromId, rel: crate::lexicon::RelTypeId, xs: &[String]) {
     // Dedup by derived lemma id for determinism.
     let mut seen: Vec<u64> = Vec::with_capacity(xs.len());
     for t in xs {
@@ -159,11 +149,7 @@ fn push_rel_list(
     }
 }
 
-fn prons_from_extract(
-    title: &str,
-    ex: &WiktionaryPageExtract,
-    lemma_id: crate::lexicon::LemmaId,
-) -> Vec<PronunciationRowV1> {
+fn prons_from_extract(title: &str, ex: &WiktionaryPageExtract, lemma_id: crate::lexicon::LemmaId) -> Vec<PronunciationRowV1> {
     let mut out: Vec<PronunciationRowV1> = Vec::with_capacity(ex.ipas.len());
 
     let meta_cfg = MetaphoneCfg::default();
@@ -233,15 +219,11 @@ struct WiktionaryPageSink {
 }
 
 impl WiktionaryPageSink {
-    fn new(
-        parse_cfg: WiktionaryParseCfg,
-        segment_count: usize,
-    ) -> Result<Self, WiktionaryIngestError> {
+    fn new(parse_cfg: WiktionaryParseCfg, segment_count: usize) -> Result<Self, WiktionaryIngestError> {
         if segment_count == 0 {
             return Err(WiktionaryIngestError::InvalidSegmentCount);
         }
-        let buckets: Vec<LexiconRowsV1> =
-            (0..segment_count).map(|_| LexiconRowsV1::empty()).collect();
+        let buckets: Vec<LexiconRowsV1> = (0..segment_count).map(|_| LexiconRowsV1::empty()).collect();
         Ok(WiktionaryPageSink {
             parse_cfg,
             segment_count,
@@ -263,8 +245,7 @@ impl WiktionaryPageSink {
             return Ok(());
         }
         let lemma_id = rows.lemmas[0].lemma_id;
-        let ix =
-            segment_index_for_lemma_id_v1(lemma_id, self.segment_count).map_err(map_seg_err)?;
+        let ix = segment_index_for_lemma_id_v1(lemma_id, self.segment_count).map_err(map_seg_err)?;
 
         self.lemmas_total = self.lemmas_total.wrapping_add(rows.lemmas.len() as u64);
         self.senses_total = self.senses_total.wrapping_add(rows.senses.len() as u64);
@@ -305,9 +286,7 @@ impl WikiXmlSink for WiktionaryPageSink {
     }
 
     fn on_page_end(&mut self) -> Result<(), WikiXmlError> {
-        if let Some(ex) =
-            parse_wiktionary_page_text(&self.cur_title, &self.cur_text, self.parse_cfg)
-        {
+        if let Some(ex) = parse_wiktionary_page_text(&self.cur_title, &self.cur_text, self.parse_cfg) {
             self.pages_kept = self.pages_kept.wrapping_add(1);
             let rows = rows_from_extract(ex);
             // Convert mapping/segmentation failures into XML errors to stop parsing.
@@ -362,8 +341,7 @@ pub fn ingest_wiktionary_xml_to_lexicon_snapshot_v1<R: BufRead, S: ArtifactStore
         return Err(WiktionaryIngestError::NoOutput);
     }
 
-    let (snap_hash, _snap) =
-        build_lexicon_snapshot_v1_from_segments(store, &seg_hashes).map_err(map_snap_err)?;
+    let (snap_hash, _snap) = build_lexicon_snapshot_v1_from_segments(store, &seg_hashes).map_err(map_snap_err)?;
 
     Ok(WiktionaryIngestReportV1 {
         segment_hashes: seg_hashes,
@@ -450,10 +428,9 @@ mod tests {
         assert!(!rep.segment_hashes.is_empty());
 
         // Snapshot should exist.
-        let snap =
-            crate::lexicon_snapshot_store::get_lexicon_snapshot_v1(&store, &rep.snapshot_hash)
-                .unwrap()
-                .unwrap();
+        let snap = crate::lexicon_snapshot_store::get_lexicon_snapshot_v1(&store, &rep.snapshot_hash)
+            .unwrap()
+            .unwrap();
         assert_eq!(snap.entries.len(), rep.segment_hashes.len());
     }
 }

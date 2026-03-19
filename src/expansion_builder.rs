@@ -8,13 +8,13 @@
 //! - [`ExpansionBudgetV1`](crate::expansion_budget::ExpansionBudgetV1)
 //! - [`ExpandedQfvV1`](crate::expanded_qfv::ExpandedQfvV1)
 //!
-//! is still not wired into retrieval. It is a pure builder:
+//! is used by bridge expansion for bounded retrieval enrichment. It remains a pure builder:
 //! - callers provide base anchors and candidate expansion items
 //! - the builder applies multipliers, dedup, stable ranking, and budget fill
 //! - the output is a canonical ExpandedQfvV1
 
-use crate::expanded_qfv::{ExpandedQfvItemV1, ExpandedQfvV1, EXPANDED_QFV_V1_VERSION};
 use crate::expansion_budget::{ExpansionBudgetV1, ExpansionKindBudgetV1, ExpansionKindV1};
+use crate::expanded_qfv::{ExpandedQfvItemV1, ExpandedQfvV1, EXPANDED_QFV_V1_VERSION};
 use crate::frame::Id64;
 
 /// Base feature key used to classify candidate origins.
@@ -67,11 +67,7 @@ fn kind_index(kind: ExpansionKindV1) -> Option<usize> {
 }
 
 fn clamp_u16_from_u32(x: u32) -> u16 {
-    if x > 65535 {
-        65535
-    } else {
-        x as u16
-    }
+    if x > 65535 { 65535 } else { x as u16 }
 }
 
 fn effective_weight(weight: u16, kb: &ExpansionKindBudgetV1) -> u16 {
@@ -104,10 +100,7 @@ fn cmp_rank(a: &ExpandedQfvItemV1, b: &ExpandedQfvItemV1) -> core::cmp::Ordering
     (a.id.0).cmp(&(b.id.0))
 }
 
-fn find_kind_budget<'a>(
-    budget: &'a ExpansionBudgetV1,
-    kind: ExpansionKindV1,
-) -> Option<&'a ExpansionKindBudgetV1> {
+fn find_kind_budget<'a>(budget: &'a ExpansionBudgetV1, kind: ExpansionKindV1) -> Option<&'a ExpansionKindBudgetV1> {
     // budget.kinds is canonical (sorted by kind asc)
     budget
         .kinds
@@ -127,14 +120,7 @@ fn base_counts_get_mut<'a>(xs: &'a mut Vec<BaseCountsV1>, key: (u8, u64)) -> &'a
     match xs.binary_search_by_key(&key, |bc| bc.key) {
         Ok(ix) => &mut xs[ix],
         Err(pos) => {
-            xs.insert(
-                pos,
-                BaseCountsV1 {
-                    key,
-                    total: 0,
-                    per_kind: [0, 0, 0, 0],
-                },
-            );
+            xs.insert(pos, BaseCountsV1 { key, total: 0, per_kind: [0, 0, 0, 0] });
             &mut xs[pos]
         }
     }
@@ -183,10 +169,7 @@ fn dedup_candidates(mut xs: Vec<ExpandedQfvItemV1>) -> Vec<ExpandedQfvItemV1> {
     out
 }
 
-fn apply_budget_filters(
-    candidates: Vec<ExpandedQfvItemV1>,
-    budget: &ExpansionBudgetV1,
-) -> Vec<ExpandedQfvItemV1> {
+fn apply_budget_filters(candidates: Vec<ExpandedQfvItemV1>, budget: &ExpansionBudgetV1) -> Vec<ExpandedQfvItemV1> {
     let mut out: Vec<ExpandedQfvItemV1> = Vec::new();
     for mut it in candidates {
         let kb = match find_kind_budget(budget, it.kind) {
@@ -294,10 +277,7 @@ pub fn build_expanded_qfv_v1(
         }
     }
 
-    let required_keys: Vec<(u8, u64)> = required_bases
-        .iter()
-        .map(|b| base_key_u72(b.kind, b.id))
-        .collect();
+    let required_keys: Vec<(u8, u64)> = required_bases.iter().map(|b| base_key_u72(b.kind, b.id)).collect();
 
     // Apply multipliers/floors and drop disabled kinds.
     let filtered = apply_budget_filters(candidates, budget);
@@ -408,66 +388,16 @@ mod tests {
         // Candidates include duplicates for (Lex, 100) with different weights.
         // Also include Meta candidates from same base; per-base per-kind cap for Meta is 1.
         let candidates = vec![
-            item(
-                ExpansionKindV1::Lex,
-                100,
-                30000,
-                ExpansionKindV1::Lex,
-                10,
-                1,
-            ),
-            item(
-                ExpansionKindV1::Lex,
-                100,
-                40000,
-                ExpansionKindV1::Lex,
-                10,
-                2,
-            ), // should win
-            item(
-                ExpansionKindV1::Lex,
-                101,
-                35000,
-                ExpansionKindV1::Lex,
-                10,
-                3,
-            ),
-            item(
-                ExpansionKindV1::Meta,
-                200,
-                20000,
-                ExpansionKindV1::Lex,
-                10,
-                4,
-            ),
-            item(
-                ExpansionKindV1::Meta,
-                201,
-                19000,
-                ExpansionKindV1::Lex,
-                10,
-                5,
-            ), // blocked by Meta per-base cap
-            item(
-                ExpansionKindV1::Lex,
-                102,
-                10000,
-                ExpansionKindV1::Lex,
-                20,
-                6,
-            ), // optional base
-            item(
-                ExpansionKindV1::Meta,
-                202,
-                25000,
-                ExpansionKindV1::Lex,
-                20,
-                7,
-            ),
+            item(ExpansionKindV1::Lex, 100, 30000, ExpansionKindV1::Lex, 10, 1),
+            item(ExpansionKindV1::Lex, 100, 40000, ExpansionKindV1::Lex, 10, 2), // should win
+            item(ExpansionKindV1::Lex, 101, 35000, ExpansionKindV1::Lex, 10, 3),
+            item(ExpansionKindV1::Meta, 200, 20000, ExpansionKindV1::Lex, 10, 4),
+            item(ExpansionKindV1::Meta, 201, 19000, ExpansionKindV1::Lex, 10, 5), // blocked by Meta per-base cap
+            item(ExpansionKindV1::Lex, 102, 10000, ExpansionKindV1::Lex, 20, 6), // optional base
+            item(ExpansionKindV1::Meta, 202, 25000, ExpansionKindV1::Lex, 20, 7),
         ];
 
-        let out =
-            build_expanded_qfv_v1(id(999), required_bases, optional_bases, candidates, &b).unwrap();
+        let out = build_expanded_qfv_v1(id(999), required_bases, optional_bases, candidates, &b).unwrap();
         assert_eq!(out.version, EXPANDED_QFV_V1_VERSION);
         assert_eq!(out.tie_control_id, id(999));
 
@@ -509,26 +439,11 @@ mod tests {
 
         // After multiplier: 40000 -> 20000 (kept), 20000 -> 10000 (dropped by floor)
         let candidates = vec![
-            item(
-                ExpansionKindV1::Meta,
-                10,
-                40000,
-                ExpansionKindV1::Meta,
-                1,
-                1,
-            ),
-            item(
-                ExpansionKindV1::Meta,
-                11,
-                20000,
-                ExpansionKindV1::Meta,
-                1,
-                2,
-            ),
+            item(ExpansionKindV1::Meta, 10, 40000, ExpansionKindV1::Meta, 1, 1),
+            item(ExpansionKindV1::Meta, 11, 20000, ExpansionKindV1::Meta, 1, 2),
         ];
 
-        let out =
-            build_expanded_qfv_v1(id(7), required_bases, optional_bases, candidates, &b).unwrap();
+        let out = build_expanded_qfv_v1(id(7), required_bases, optional_bases, candidates, &b).unwrap();
         assert_eq!(out.required.len(), 1);
         assert_eq!(out.required[0].id, id(10));
         assert_eq!(out.required[0].weight, 20000);

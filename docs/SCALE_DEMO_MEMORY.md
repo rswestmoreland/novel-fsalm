@@ -1,4 +1,4 @@
-# Scale Demo Memory Caps 
+# Scale demo memory caps
 
 This document describes memory-related knobs for the `scale-demo` pipeline.
 

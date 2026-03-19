@@ -39,6 +39,13 @@ pub struct WorkspaceV1 {
     pub default_expand: Option<bool>,
     /// Default metaphone expansion behavior for end-user commands.
     pub default_meta: Option<bool>,
+
+    /// Default MarkovModelV1 hash for bounded phrasing hints.
+    pub markov_model: Option<Hash32>,
+    /// Default ExemplarMemoryV1 hash for advisory shaping.
+    pub exemplar_memory: Option<Hash32>,
+    /// Default GraphRelevanceV1 hash for bounded graph expansion.
+    pub graph_relevance: Option<Hash32>,
 }
 
 impl WorkspaceV1 {
@@ -90,39 +97,24 @@ pub fn parse_workspace_v1_text(text: &str) -> Result<WorkspaceV1, String> {
         let (k, v) = match line.split_once('=') {
             Some((a, b)) => (a.trim(), b.trim()),
             None => {
-                return Err(format!(
-                    "workspace_v1: invalid line {} (missing '=')",
-                    idx + 1
-                ));
+                return Err(format!("workspace_v1: invalid line {} (missing '=')", idx + 1));
             }
         };
 
         match k {
             "merged_snapshot" => {
                 ws.merged_snapshot = Some(parse_hash32_hex(v).map_err(|e| {
-                    format!(
-                        "workspace_v1: merged_snapshot invalid on line {}: {}",
-                        idx + 1,
-                        e
-                    )
+                    format!("workspace_v1: merged_snapshot invalid on line {}: {}", idx + 1, e)
                 })?);
             }
             "merged_sig_map" => {
                 ws.merged_sig_map = Some(parse_hash32_hex(v).map_err(|e| {
-                    format!(
-                        "workspace_v1: merged_sig_map invalid on line {}: {}",
-                        idx + 1,
-                        e
-                    )
+                    format!("workspace_v1: merged_sig_map invalid on line {}: {}", idx + 1, e)
                 })?);
             }
             "lexicon_snapshot" => {
                 ws.lexicon_snapshot = Some(parse_hash32_hex(v).map_err(|e| {
-                    format!(
-                        "workspace_v1: lexicon_snapshot invalid on line {}: {}",
-                        idx + 1,
-                        e
-                    )
+                    format!("workspace_v1: lexicon_snapshot invalid on line {}: {}", idx + 1, e)
                 })?);
             }
             "default_k" => {
@@ -132,20 +124,27 @@ pub fn parse_workspace_v1_text(text: &str) -> Result<WorkspaceV1, String> {
             }
             "default_expand" => {
                 ws.default_expand = Some(parse_bool01(v).map_err(|e| {
-                    format!(
-                        "workspace_v1: default_expand invalid on line {}: {}",
-                        idx + 1,
-                        e
-                    )
+                    format!("workspace_v1: default_expand invalid on line {}: {}", idx + 1, e)
                 })?);
             }
             "default_meta" => {
                 ws.default_meta = Some(parse_bool01(v).map_err(|e| {
-                    format!(
-                        "workspace_v1: default_meta invalid on line {}: {}",
-                        idx + 1,
-                        e
-                    )
+                    format!("workspace_v1: default_meta invalid on line {}: {}", idx + 1, e)
+                })?);
+            }
+            "markov_model" => {
+                ws.markov_model = Some(parse_hash32_hex(v).map_err(|e| {
+                    format!("workspace_v1: markov_model invalid on line {}: {}", idx + 1, e)
+                })?);
+            }
+            "exemplar_memory" => {
+                ws.exemplar_memory = Some(parse_hash32_hex(v).map_err(|e| {
+                    format!("workspace_v1: exemplar_memory invalid on line {}: {}", idx + 1, e)
+                })?);
+            }
+            "graph_relevance" => {
+                ws.graph_relevance = Some(parse_hash32_hex(v).map_err(|e| {
+                    format!("workspace_v1: graph_relevance invalid on line {}: {}", idx + 1, e)
                 })?);
             }
             _ => {
@@ -183,8 +182,7 @@ pub fn read_workspace_v1(root: &Path) -> io::Result<Option<WorkspaceV1>> {
             ));
         }
     };
-    let ws =
-        parse_workspace_v1_text(s).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let ws = parse_workspace_v1_text(s).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     Ok(Some(ws))
 }
 
@@ -227,6 +225,16 @@ fn serialize_workspace_v1(ws: &WorkspaceV1) -> String {
         out.push_str(&format!("default_meta={}\n", if v { 1 } else { 0 }));
     }
 
+    if let Some(h) = ws.markov_model {
+        out.push_str(&format!("markov_model={}\n", crate::hash::hex32(&h)));
+    }
+    if let Some(h) = ws.exemplar_memory {
+        out.push_str(&format!("exemplar_memory={}\n", crate::hash::hex32(&h)));
+    }
+    if let Some(h) = ws.graph_relevance {
+        out.push_str(&format!("graph_relevance={}\n", crate::hash::hex32(&h)));
+    }
+
     out
 }
 
@@ -243,11 +251,7 @@ fn atomic_write_text(final_path: &Path, text: &str) -> io::Result<()> {
 
     let mut last_err: Option<io::Error> = None;
     for tmp in candidates.iter() {
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(tmp)
-        {
+        match fs::OpenOptions::new().write(true).create_new(true).open(tmp) {
             Ok(mut f) => {
                 if let Err(e) = f.write_all(text.as_bytes()) {
                     let _ = fs::remove_file(tmp);
@@ -288,10 +292,7 @@ fn atomic_write_text(final_path: &Path, text: &str) -> io::Result<()> {
     if let Some(e) = last_err {
         Err(e)
     } else {
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            "failed to create temp file",
-        ))
+        Err(io::Error::new(io::ErrorKind::Other, "failed to create temp file"))
     }
 }
 
@@ -316,33 +317,46 @@ mod tests {
             h('3')
         );
         let ws = parse_workspace_v1_text(&t).unwrap();
-        assert_eq!(
-            ws.merged_snapshot.unwrap(),
-            parse_hash32_hex(&h('2')).unwrap()
-        );
-        assert_eq!(
-            ws.merged_sig_map.unwrap(),
-            parse_hash32_hex(&h('3')).unwrap()
-        );
+        assert_eq!(ws.merged_snapshot.unwrap(), parse_hash32_hex(&h('2')).unwrap());
+        assert_eq!(ws.merged_sig_map.unwrap(), parse_hash32_hex(&h('3')).unwrap());
     }
 
     #[test]
     fn parse_trims_whitespace() {
         let t = format!(
-            " merged_snapshot = {} \n merged_sig_map = {} \n default_expand = 1 \n",
+            " merged_snapshot = {} \n merged_sig_map = {} \n default_expand = 1 \n markov_model = {} \n exemplar_memory = {} \n graph_relevance = {} \n",
             h('a'),
-            h('b')
+            h('b'),
+            h('c'),
+            h('d'),
+            h('e')
         );
         let ws = parse_workspace_v1_text(&t).unwrap();
-        assert_eq!(
-            ws.merged_snapshot.unwrap(),
-            parse_hash32_hex(&h('a')).unwrap()
-        );
-        assert_eq!(
-            ws.merged_sig_map.unwrap(),
-            parse_hash32_hex(&h('b')).unwrap()
-        );
+        assert_eq!(ws.merged_snapshot.unwrap(), parse_hash32_hex(&h('a')).unwrap());
+        assert_eq!(ws.merged_sig_map.unwrap(), parse_hash32_hex(&h('b')).unwrap());
         assert_eq!(ws.default_expand, Some(true));
+        assert_eq!(ws.markov_model.unwrap(), parse_hash32_hex(&h('c')).unwrap());
+        assert_eq!(ws.exemplar_memory.unwrap(), parse_hash32_hex(&h('d')).unwrap());
+        assert_eq!(ws.graph_relevance.unwrap(), parse_hash32_hex(&h('e')).unwrap());
+    }
+
+    #[test]
+    fn serialize_includes_advisory_artifact_defaults() {
+        let ws = WorkspaceV1 {
+            merged_snapshot: None,
+            merged_sig_map: None,
+            lexicon_snapshot: None,
+            default_k: None,
+            default_expand: None,
+            default_meta: None,
+            markov_model: Some(parse_hash32_hex(&h('7')).unwrap()),
+            exemplar_memory: Some(parse_hash32_hex(&h('8')).unwrap()),
+            graph_relevance: Some(parse_hash32_hex(&h('9')).unwrap()),
+        };
+        let s = serialize_workspace_v1(&ws);
+        assert!(s.contains(&format!("markov_model={}\n", h('7'))));
+        assert!(s.contains(&format!("exemplar_memory={}\n", h('8'))));
+        assert!(s.contains(&format!("graph_relevance={}\n", h('9'))));
     }
 
     #[test]

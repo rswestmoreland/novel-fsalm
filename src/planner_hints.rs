@@ -221,9 +221,7 @@ impl core::fmt::Display for PlannerHintsError {
             PlannerHintsError::TooManyHints => f.write_str("too many planner hints"),
             PlannerHintsError::TooManyFollowups => f.write_str("too many planner followups"),
             PlannerHintsError::HintsNotCanonical => f.write_str("planner hints not canonical"),
-            PlannerHintsError::FollowupsNotCanonical => {
-                f.write_str("planner followups not canonical")
-            }
+            PlannerHintsError::FollowupsNotCanonical => f.write_str("planner followups not canonical"),
             PlannerHintsError::FollowupTextTooLong => f.write_str("planner followup text too long"),
         }
     }
@@ -240,9 +238,7 @@ impl PlannerHintsV1 {
             }
         }
         for i in 1..self.followups.len() {
-            if cmp_followup_canon(&self.followups[i - 1], &self.followups[i])
-                != core::cmp::Ordering::Less
-            {
+            if cmp_followup_canon(&self.followups[i - 1], &self.followups[i]) != core::cmp::Ordering::Less {
                 return false;
             }
         }
@@ -402,12 +398,7 @@ impl PlannerHintsV1 {
                 return Err(DecodeError::new("planner followup text too long"));
             }
             let rationale_code = r.read_u16()?;
-            followups.push(PlannerFollowupV1::new(
-                followup_id,
-                score,
-                text,
-                rationale_code,
-            ));
+            followups.push(PlannerFollowupV1::new(followup_id, score, text, rationale_code));
         }
         if r.remaining() != 0 {
             return Err(DecodeError::new("trailing bytes"));
@@ -463,12 +454,7 @@ mod tests {
                 PlannerHintItemV1::new(PlannerHintKindV1::Steps, Id64(10), 100, 1),
                 PlannerHintItemV1::new(PlannerHintKindV1::SummaryFirst, Id64(11), 90, 2),
             ],
-            followups: vec![PlannerFollowupV1::new(
-                Id64(1),
-                50,
-                "Do you want A or B?".to_string(),
-                3,
-            )],
+            followups: vec![PlannerFollowupV1::new(Id64(1), 50, "Do you want A or B?".to_string(), 3)],
         }
     }
 

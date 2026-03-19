@@ -109,11 +109,7 @@ impl CompactionReportV1 {
         w.write_raw(&self.cfg_id);
         w.write_u64(self.cfg.target_bytes_per_out_segment);
         w.write_u32(self.cfg.max_out_segments);
-        w.write_u8(if self.cfg.used_even_pack_fallback {
-            1
-        } else {
-            0
-        });
+        w.write_u8(if self.cfg.used_even_pack_fallback { 1 } else { 0 });
         w.write_u8(if self.cfg.dry_run { 1 } else { 0 });
 
         if self.input_index_segments.len() > (u32::MAX as usize) {
@@ -324,7 +320,10 @@ impl CompactionReportV1 {
             if g.start_ix >= n_in {
                 return Err("group start out of range");
             }
-            let end = g.start_ix.checked_add(g.len).ok_or("group end overflow")?;
+            let end = g
+                .start_ix
+                .checked_add(g.len)
+                .ok_or("group end overflow")?;
             if end > n_in {
                 return Err("group end out of range");
             }

@@ -23,6 +23,16 @@ Novel borrows proven ideas from modern language systems and classical NLP, but i
 - Disk-first artifacts (content-addressed storage; replayable pipelines)
 - Minimal dependencies and no unsafe Rust
 
+## Default user experience
+
+Novel now defaults to a conversational user-facing surface in normal `ask`, `chat`, and `answer` flows.
+
+- `--presentation user` is the default. It hides raw operator diagnostics such as `Answer v1`, `query_id=...`, `routing_trace ...`, `graph_trace ...`, and `exemplar_match ...`.
+- `--presentation operator` keeps the inspect-friendly surface for debugging, evaluation, and workflow audits.
+- Workspace defaults are applied automatically when matching flags are omitted, including `default_k`, `default_expand`, and `default_meta`.
+- When the workspace configures `markov_model`, `exemplar_memory`, or `graph_relevance`, those bounded advisory artifacts are auto-used in normal runtime flow.
+- Resumed conversations restore sticky advisory artifact ids and the selected presentation mode so a saved user or operator workflow stays consistent across runs.
+
 ## HOW TO: load Wikipedia and Wiktionary, then run prompts
 
 This guide is the "just works" path: you load datasets once, then use `ask` or `chat` without managing artifact hashes.
@@ -98,11 +108,24 @@ Enable lexicon expansion (uses `lexicon_snapshot` from the workspace when presen
 ./target/release/fsa_lm ask --root ./store --expand "Tell me about bananas"
 ```
 
+Inspect the same answer in operator mode:
+
+```bash
+./target/release/fsa_lm ask --root ./store --presentation operator "What is Ada Lovelace known for?"
+```
+
 Helpful knobs:
 
 - `--k <n>` retrieval depth
 - `--meta` enables metaphone-based expansion of query terms
 - `--max_tokens <n>` caps realization length
+- `--presentation operator` shows the inspect-friendly surface without changing grounding
+
+Workspace default behavior:
+
+- `ask`, `chat`, and `answer` use workspace defaults for snapshot, sig map, and lexicon artifacts when matching flags are omitted.
+- `default_k`, `default_expand`, and `default_meta` are also applied from the workspace when their flags are omitted.
+- If the workspace sets `markov_model`, `exemplar_memory`, or `graph_relevance`, those advisory artifacts are auto-used when matching flags are omitted.
 
 ### 6) Chat (interactive)
 
@@ -118,34 +141,50 @@ With lexicon expansion:
 ./target/release/fsa_lm chat --root ./store --expand
 ```
 
+Inspect the same workflow in operator mode:
+
+```bash
+./target/release/fsa_lm chat --root ./store --presentation operator
+```
+
+If you save and resume a session, Novel restores sticky advisory ids and the selected presentation mode so resumed conversations keep the same runtime behavior.
+
 Chat commands:
 
 - `/help` show help
 - `/reset` clear history
 - `/exit` or `/quit` exit
 
-### Example chat session (simulated)
+### Example chat session (simulated surface shape)
 
-This is what an interactive session looks like. Novel keeps a bounded, deterministic history for as long as `chat` is running.
+This is an illustrative user-mode session. The exact wording, evidence ids, and source lines depend on the loaded artifacts, but the default surface is conversational rather than report-like. Compare, recommend, summarize, and explain prompts keep light structure when it helps. Troubleshooting and procedure-heavy prompts still keep explicit `Steps`. Clarifiers use a shorter `Quick question: ...` style when more information is required before answering.
 
 ```text
 $ ./target/release/fsa_lm chat --root ./store --expand
 > What is a banana?
-Answer v1:
-- Summary: Banana is a fruit produced by several kinds of large herbaceous flowering plants.
-- Evidence: ... (bundle references omitted)
-- Notes: ... (deterministic formatting)
+A banana is an edible fruit produced by several kinds of large herbaceous plants in the genus Musa.
+
+Sources
+[E0] ...
 
 > What about plantains?
-Answer v1:
-- Summary: Plantain commonly refers to cooking bananas and related cultivars.
-- Evidence: ... (bundle references omitted)
+Plantains are a type of banana that are usually starchier and are often cooked before eating.
+
+Sources
+[E0] ...
 
 > /exit
 $
 ```
 
-Tip: for a quick smoke test, see `examples/README.md` and the demo scripts under `examples/`.
+To compare the same prompt in default user mode and operator mode, run:
+
+```bash
+./target/release/fsa_lm ask --root ./store "What is a banana?"
+./target/release/fsa_lm ask --root ./store --presentation operator "What is a banana?"
+```
+
+Tip: for a quick smoke test, see `examples/README.md`, especially `demo_cmd_compare_presentation.(bat|sh)` and `demo_cmd_workflow_with_lexicon.(bat|sh)`.
 
 ## Operator workflow
 

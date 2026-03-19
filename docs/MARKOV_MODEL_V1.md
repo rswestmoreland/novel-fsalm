@@ -5,8 +5,9 @@ MarkovModelV1 is a replayable, deterministic Markov/PPM model artifact used to
 produce MarkovHintsV1. It stores bounded n-gram transition counts over
 surface-form tokens (choice kind + choice id).
 
-This stage defines the schema and canonical codec only. Training and
-pipeline wiring are handled in future updates.
+This document defines the artifact schema and canonical codec. The current
+runtime can build, store, inspect, and apply MarkovModelV1 artifacts, while
+this doc stays focused on the stable on-disk contract.
 
 Training rules and deterministic pruning are specified in
 docs/MARKOV_TRAINING_CONTRACT_V1.md.
@@ -23,8 +24,8 @@ Non-goals
 ---------
 
 - MarkovModelV1 does not grant permission to invent facts.
-- MarkovModelV1 does not define the training pipeline (ReplayLog ingestion,
- token stream extraction, etc.).
+- MarkovModelV1 does not define every training or runtime policy detail
+ (ReplayLog selection, token extraction budgets, or higher-level wiring).
 
 Schema
 ------

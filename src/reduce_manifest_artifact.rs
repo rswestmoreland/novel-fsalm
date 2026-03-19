@@ -114,14 +114,8 @@ mod tests {
             copied_index_segs: 0,
             copied_segment_sigs: 0,
             outputs: vec![
-                ReduceOutputV1 {
-                    tag: "index_sig_map_v1".to_string(),
-                    hash: h(2),
-                },
-                ReduceOutputV1 {
-                    tag: "index_snapshot_v1".to_string(),
-                    hash: h(1),
-                },
+                ReduceOutputV1 { tag: "index_sig_map_v1".to_string(), hash: h(2) },
+                ReduceOutputV1 { tag: "index_snapshot_v1".to_string(), hash: h(1) },
             ],
         };
 

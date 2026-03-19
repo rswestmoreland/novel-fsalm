@@ -12,8 +12,8 @@
 // - keep canonicalization rules explicit and deterministic
 
 use crate::artifact::ArtifactStore;
-use crate::codec::{DecodeError, EncodeError};
 use crate::hash::Hash32;
+use crate::codec::{DecodeError, EncodeError};
 use crate::prompt_pack::{PromptLimits, PromptPack};
 
 /// Store a PromptPack as an artifact.

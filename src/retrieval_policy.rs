@@ -14,11 +14,12 @@
 //!
 //! introduces the policy types () and an apply wrapper ().
 
+use crate::retrieval_gating::GateStatsV1;
 use crate::artifact::ArtifactStore;
+use crate::graph_relevance_artifact::get_graph_relevance_v1;
 use crate::hash::Hash32;
 use crate::index_query::{IndexQueryError, QueryTerm, SearchCfg, SearchHit};
 use crate::retrieval_control::RetrievalControlV1;
-use crate::retrieval_gating::GateStatsV1;
 
 fn canonicalize_query_terms_in_place(xs: &mut Vec<QueryTerm>) {
     xs.sort_by(|a, b| (a.term.0).0.cmp(&(b.term.0).0));
@@ -65,25 +66,13 @@ impl core::fmt::Display for RetrievalPolicyCfgError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             RetrievalPolicyCfgError::BadVersion => f.write_str("bad version"),
-            RetrievalPolicyCfgError::MaxQueryTermsZero => {
-                f.write_str("max_query_terms must be >= 1")
-            }
+            RetrievalPolicyCfgError::MaxQueryTermsZero => f.write_str("max_query_terms must be >= 1"),
             RetrievalPolicyCfgError::MaxHitsZero => f.write_str("max_hits must be >= 1"),
-            RetrievalPolicyCfgError::BadIncludeTiesFlag => {
-                f.write_str("include_ties_at_cutoff must be 0 or 1")
-            }
-            RetrievalPolicyCfgError::DenseRowThresholdZero => {
-                f.write_str("dense_row_threshold must be >= 1")
-            }
-            RetrievalPolicyCfgError::BadQueryExpansionFlag => {
-                f.write_str("enable_query_expansion must be 0 or 1")
-            }
-            RetrievalPolicyCfgError::BadMaxHitsPerFrameSeg => {
-                f.write_str("max_hits_per_frame_seg must be 0 or >= 1")
-            }
-            RetrievalPolicyCfgError::BadMaxHitsPerDoc => {
-                f.write_str("max_hits_per_doc must be 0 or >= 1")
-            }
+            RetrievalPolicyCfgError::BadIncludeTiesFlag => f.write_str("include_ties_at_cutoff must be 0 or 1"),
+            RetrievalPolicyCfgError::DenseRowThresholdZero => f.write_str("dense_row_threshold must be >= 1"),
+            RetrievalPolicyCfgError::BadQueryExpansionFlag => f.write_str("enable_query_expansion must be 0 or 1"),
+            RetrievalPolicyCfgError::BadMaxHitsPerFrameSeg => f.write_str("max_hits_per_frame_seg must be 0 or >= 1"),
+            RetrievalPolicyCfgError::BadMaxHitsPerDoc => f.write_str("max_hits_per_doc must be 0 or >= 1"),
             RetrievalPolicyCfgError::BadNoveltyMode => f.write_str("novelty_mode must be 0..=3"),
         }
     }
@@ -238,12 +227,16 @@ pub enum RetrievalPolicyApplyError {
     Query(IndexQueryError),
     /// Query expansion config was invalid.
     ExpandCfg(crate::query_expansion::QueryExpansionCfgError),
-    /// Query expansion was enabled but no lexicon snapshot hash was provided.
-    ExpandMissingLexiconSnapshot,
+    /// Query expansion was enabled but neither a lexicon snapshot nor a graph relevance artifact was provided.
+    ExpandMissingSource,
     /// Query expansion was enabled but the lexicon snapshot is missing from the store.
     ExpandLexiconSnapshotNotFound(Hash32),
     /// Lexicon expand-lookup load failed.
     ExpandLexiconLookup(String),
+    /// Query expansion was enabled and the graph relevance artifact is missing from the store.
+    ExpandGraphRelevanceNotFound(Hash32),
+    /// Graph relevance load failed.
+    ExpandGraphRelevanceLoad(String),
     /// Bridge expansion failed.
     ExpandBridge(String),
     /// Frame segment required for diversity caps was not found.
@@ -268,8 +261,8 @@ impl core::fmt::Display for RetrievalPolicyApplyError {
                 f.write_str("query expansion cfg invalid: ")?;
                 core::fmt::Display::fmt(e, f)
             }
-            RetrievalPolicyApplyError::ExpandMissingLexiconSnapshot => {
-                f.write_str("query expansion enabled but lexicon snapshot hash missing")
+            RetrievalPolicyApplyError::ExpandMissingSource => {
+                f.write_str("query expansion enabled but no lexicon snapshot or graph relevance artifact was provided")
             }
             RetrievalPolicyApplyError::ExpandLexiconSnapshotNotFound(h) => {
                 write!(f, "lexicon snapshot not found: {}", crate::hash::hex32(&h))
@@ -277,15 +270,17 @@ impl core::fmt::Display for RetrievalPolicyApplyError {
             RetrievalPolicyApplyError::ExpandLexiconLookup(msg) => {
                 write!(f, "lexicon expand-lookup load failed: {}", msg)
             }
+            RetrievalPolicyApplyError::ExpandGraphRelevanceNotFound(h) => {
+                write!(f, "graph relevance not found: {}", crate::hash::hex32(&h))
+            }
+            RetrievalPolicyApplyError::ExpandGraphRelevanceLoad(msg) => {
+                write!(f, "graph relevance load failed: {}", msg)
+            }
             RetrievalPolicyApplyError::ExpandBridge(msg) => {
                 write!(f, "bridge expansion failed: {}", msg)
             }
             RetrievalPolicyApplyError::RefineFrameSegmentNotFound(h) => {
-                write!(
-                    f,
-                    "frame segment not found during refine: {}",
-                    crate::hash::hex32(&h)
-                )
+                write!(f, "frame segment not found during refine: {}", crate::hash::hex32(&h))
             }
             RetrievalPolicyApplyError::RefineFrameSegmentDecode(msg) => {
                 write!(f, "frame segment decode failed during refine: {}", msg)
@@ -327,23 +322,13 @@ fn mix64(mut z: u64) -> u64 {
 
 fn tiebreak_key(seed: u64, frame_seg: &Hash32, row_ix: u32) -> u64 {
     let seg0 = u64::from_le_bytes([
-        frame_seg[0],
-        frame_seg[1],
-        frame_seg[2],
-        frame_seg[3],
-        frame_seg[4],
-        frame_seg[5],
-        frame_seg[6],
-        frame_seg[7],
+        frame_seg[0], frame_seg[1], frame_seg[2], frame_seg[3], frame_seg[4], frame_seg[5], frame_seg[6], frame_seg[7],
     ]);
     let x = seed ^ seg0 ^ (row_ix as u64).wrapping_mul(0x9E3779B97F4A7C15);
     mix64(x.wrapping_add(0x9E3779B97F4A7C15))
 }
 
-fn frame_segment_doc_id(
-    seg: &crate::frame_segment::FrameSegmentV1,
-    row_ix: u32,
-) -> Option<crate::frame::DocId> {
+fn frame_segment_doc_id(seg: &crate::frame_segment::FrameSegmentV1, row_ix: u32) -> Option<crate::frame::DocId> {
     let cr = seg.chunk_rows;
     if cr == 0 {
         return None;
@@ -493,27 +478,29 @@ fn rerank_hits_novelty_v1<S: ArtifactStore>(
         keyed.push((hit.clone(), novelty, tk));
     }
 
-    keyed.sort_by(|a, b| match b.0.score.cmp(&a.0.score) {
-        core::cmp::Ordering::Equal => match b.1.cmp(&a.1) {
-            core::cmp::Ordering::Equal => {
-                if tie_seed.is_some() {
-                    match a.2.cmp(&b.2) {
-                        core::cmp::Ordering::Equal => match a.0.frame_seg.cmp(&b.0.frame_seg) {
+    keyed.sort_by(|a, b| {
+        match b.0.score.cmp(&a.0.score) {
+            core::cmp::Ordering::Equal => match b.1.cmp(&a.1) {
+                core::cmp::Ordering::Equal => {
+                    if tie_seed.is_some() {
+                        match a.2.cmp(&b.2) {
+                            core::cmp::Ordering::Equal => match a.0.frame_seg.cmp(&b.0.frame_seg) {
+                                core::cmp::Ordering::Equal => a.0.row_ix.cmp(&b.0.row_ix),
+                                other => other,
+                            },
+                            other => other,
+                        }
+                    } else {
+                        match a.0.frame_seg.cmp(&b.0.frame_seg) {
                             core::cmp::Ordering::Equal => a.0.row_ix.cmp(&b.0.row_ix),
                             other => other,
-                        },
-                        other => other,
-                    }
-                } else {
-                    match a.0.frame_seg.cmp(&b.0.frame_seg) {
-                        core::cmp::Ordering::Equal => a.0.row_ix.cmp(&b.0.row_ix),
-                        other => other,
+                        }
                     }
                 }
-            }
+                other => other,
+            },
             other => other,
-        },
-        other => other,
+        }
     });
 
     hits.clear();
@@ -694,11 +681,7 @@ pub fn apply_retrieval_policy_v1<S: ArtifactStore>(
     stats.query_terms_original = stats.query_terms_total;
 
     let cap = policy.max_query_terms as usize;
-    let used_terms: &[QueryTerm] = if query_terms.len() > cap {
-        &query_terms[..cap]
-    } else {
-        query_terms
-    };
+    let used_terms: &[QueryTerm] = if query_terms.len() > cap { &query_terms[..cap] } else { query_terms };
     stats.query_terms_used = used_terms.len() as u32;
 
     let include_ties = policy.include_ties_at_cutoff != 0;
@@ -762,13 +745,7 @@ pub fn apply_retrieval_policy_v1<S: ArtifactStore>(
 
     // Apply diversity caps (dedupe + per-segment/per-doc caps) if configured.
     let hits2 = if caps_enabled {
-        refine_hits_diversity_caps_v1(
-            store,
-            &hits1,
-            policy.max_hits as usize,
-            include_ties,
-            policy,
-        )?
+        refine_hits_diversity_caps_v1(store, &hits1, policy.max_hits as usize, include_ties, policy)?
     } else {
         // No caps: if novelty is enabled, we may have oversampled and must truncate.
         if novelty_enabled && !include_ties {
@@ -791,6 +768,7 @@ pub fn apply_retrieval_policy_v1<S: ArtifactStore>(
     Ok((hits2, stats))
 }
 
+
 /// Apply a retrieval policy directly from query text.
 ///
 /// This wrapper:
@@ -799,7 +777,8 @@ pub fn apply_retrieval_policy_v1<S: ArtifactStore>(
 /// - applies the retrieval policy and returns hits + stats
 ///
 /// Note: query expansion is controlled by `policy_cfg.enable_query_expansion`.
-/// When enabled, callers must provide `lexicon_snapshot_hash_opt`.
+/// When enabled, callers must provide at least one expansion source:
+/// `lexicon_snapshot_hash_opt` and/or `graph_relevance_hash_opt`.
 pub fn apply_retrieval_policy_from_text_v1<S: ArtifactStore>(
     store: &S,
     snapshot_hash: &Hash32,
@@ -809,35 +788,46 @@ pub fn apply_retrieval_policy_from_text_v1<S: ArtifactStore>(
     policy_cfg: &RetrievalPolicyCfgV1,
     control_opt: Option<&RetrievalControlV1>,
     lexicon_snapshot_hash_opt: Option<&Hash32>,
+    graph_relevance_hash_opt: Option<&Hash32>,
     expand_cfg_opt: Option<&crate::query_expansion::QueryExpansionCfgV1>,
 ) -> Result<(Vec<SearchHit>, RetrievalPolicyStatsV1), RetrievalPolicyApplyError> {
     // Base terms from the tokenizer.
     let mut qterms = crate::index_query::query_terms_from_text(query_text, qcfg);
     let base_count: u32 = qterms.len() as u32;
 
-    // Optional lexicon expansion.
+    // Optional query expansion from lexicon and/or graph relevance.
     let mut new_unique: u32 = 0;
     if policy_cfg.enable_query_expansion == 1 {
-        let lex_hash = match lexicon_snapshot_hash_opt {
-            Some(h) => h,
-            None => return Err(RetrievalPolicyApplyError::ExpandMissingLexiconSnapshot),
+        if lexicon_snapshot_hash_opt.is_none() && graph_relevance_hash_opt.is_none() {
+            return Err(RetrievalPolicyApplyError::ExpandMissingSource);
+        }
+
+        let lex = if let Some(lex_hash) = lexicon_snapshot_hash_opt {
+            let lex_opt = crate::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(store, lex_hash)
+                .map_err(|e| RetrievalPolicyApplyError::ExpandLexiconLookup(e.to_string()))?;
+            match lex_opt {
+                Some(v) => Some(v),
+                None => return Err(RetrievalPolicyApplyError::ExpandLexiconSnapshotNotFound(*lex_hash)),
+            }
+        } else {
+            None
         };
 
-        let lex_opt = crate::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(store, lex_hash)
-            .map_err(|e| RetrievalPolicyApplyError::ExpandLexiconLookup(e.to_string()))?;
-        let lex = match lex_opt {
-            Some(v) => v,
-            None => {
-                return Err(RetrievalPolicyApplyError::ExpandLexiconSnapshotNotFound(
-                    *lex_hash,
-                ))
+        let graph = if let Some(graph_hash) = graph_relevance_hash_opt {
+            match get_graph_relevance_v1(store, graph_hash) {
+                Ok(Some(v)) => Some(v),
+                Ok(None) => return Err(RetrievalPolicyApplyError::ExpandGraphRelevanceNotFound(*graph_hash)),
+                Err(e) => return Err(RetrievalPolicyApplyError::ExpandGraphRelevanceLoad(e.to_string())),
             }
+        } else {
+            None
         };
 
         let (qterms2, nu) = match crate::bridge_expansion::bridge_expand_query_terms_v1(
             query_text,
             qcfg,
-            Some(&lex),
+            lex.as_ref(),
+            graph.as_ref(),
             control_opt,
             expand_cfg_opt,
         ) {
@@ -868,6 +858,7 @@ pub fn apply_retrieval_policy_from_text_v1<S: ArtifactStore>(
     Ok((hits, stats))
 }
 
+
 /// Apply a retrieval policy from query text with optional low-weight context anchors.
 ///
 /// This wrapper is intended for conversational follow-ups. When `anchor_terms` is
@@ -884,6 +875,7 @@ pub fn apply_retrieval_policy_from_text_v1_with_anchors<S: ArtifactStore>(
     policy_cfg: &RetrievalPolicyCfgV1,
     control_opt: Option<&RetrievalControlV1>,
     lexicon_snapshot_hash_opt: Option<&Hash32>,
+    graph_relevance_hash_opt: Option<&Hash32>,
     expand_cfg_opt: Option<&crate::query_expansion::QueryExpansionCfgV1>,
     anchor_terms: Option<&[QueryTerm]>,
 ) -> Result<(Vec<SearchHit>, RetrievalPolicyStatsV1), RetrievalPolicyApplyError> {
@@ -891,29 +883,39 @@ pub fn apply_retrieval_policy_from_text_v1_with_anchors<S: ArtifactStore>(
     let mut qterms = crate::index_query::query_terms_from_text(query_text, qcfg);
     let base_count: u32 = qterms.len() as u32;
 
-    // Optional lexicon expansion.
+    // Optional query expansion from lexicon and/or graph relevance.
     let mut new_unique: u32 = 0;
     if policy_cfg.enable_query_expansion == 1 {
-        let lex_hash = match lexicon_snapshot_hash_opt {
-            Some(h) => h,
-            None => return Err(RetrievalPolicyApplyError::ExpandMissingLexiconSnapshot),
+        if lexicon_snapshot_hash_opt.is_none() && graph_relevance_hash_opt.is_none() {
+            return Err(RetrievalPolicyApplyError::ExpandMissingSource);
+        }
+
+        let lex = if let Some(lex_hash) = lexicon_snapshot_hash_opt {
+            let lex_opt = crate::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(store, lex_hash)
+                .map_err(|e| RetrievalPolicyApplyError::ExpandLexiconLookup(e.to_string()))?;
+            match lex_opt {
+                Some(v) => Some(v),
+                None => return Err(RetrievalPolicyApplyError::ExpandLexiconSnapshotNotFound(*lex_hash)),
+            }
+        } else {
+            None
         };
 
-        let lex_opt = crate::lexicon_expand_lookup::load_lexicon_expand_lookup_v1(store, lex_hash)
-            .map_err(|e| RetrievalPolicyApplyError::ExpandLexiconLookup(e.to_string()))?;
-        let lex = match lex_opt {
-            Some(v) => v,
-            None => {
-                return Err(RetrievalPolicyApplyError::ExpandLexiconSnapshotNotFound(
-                    *lex_hash,
-                ))
+        let graph = if let Some(graph_hash) = graph_relevance_hash_opt {
+            match get_graph_relevance_v1(store, graph_hash) {
+                Ok(Some(v)) => Some(v),
+                Ok(None) => return Err(RetrievalPolicyApplyError::ExpandGraphRelevanceNotFound(*graph_hash)),
+                Err(e) => return Err(RetrievalPolicyApplyError::ExpandGraphRelevanceLoad(e.to_string())),
             }
+        } else {
+            None
         };
 
         let (qterms2, nu) = match crate::bridge_expansion::bridge_expand_query_terms_v1(
             query_text,
             qcfg,
-            Some(&lex),
+            lex.as_ref(),
+            graph.as_ref(),
             control_opt,
             expand_cfg_opt,
         ) {
@@ -950,10 +952,7 @@ pub fn apply_retrieval_policy_from_text_v1_with_anchors<S: ArtifactStore>(
                     if seen.binary_search(&u).is_ok() {
                         continue;
                     }
-                    qterms.push(QueryTerm {
-                        term: qt.term,
-                        qtf: qt.qtf,
-                    });
+                    qterms.push(QueryTerm { term: qt.term, qtf: qt.qtf });
                     // Keep seen sorted.
                     let pos = match seen.binary_search(&u) {
                         Ok(_) => 0,
@@ -983,11 +982,14 @@ pub fn apply_retrieval_policy_from_text_v1_with_anchors<S: ArtifactStore>(
     Ok((hits, stats))
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::frame::{DocId, FrameRowV1, Id64, SourceId, TermId};
+    use crate::frame::{DocId, FrameRowV1, SourceId, TermId, Id64};
+    use crate::graph_relevance::{GraphNodeKindV1, GraphRelevanceEdgeV1, GraphRelevanceRowV1, GraphRelevanceV1, GR_FLAG_HAS_TERM_ROWS};
+    use crate::graph_relevance_artifact::put_graph_relevance_v1;
     use crate::frame_segment::FrameSegmentV1;
     use crate::hash::blake3_hash;
     use crate::index_segment::IndexSegmentV1;
@@ -1003,9 +1005,7 @@ mod tests {
 
     impl MemStore {
         fn new() -> MemStore {
-            MemStore {
-                m: std::cell::RefCell::new(BTreeMap::new()),
-            }
+            MemStore { m: std::cell::RefCell::new(BTreeMap::new()) }
         }
     }
 
@@ -1030,9 +1030,7 @@ mod tests {
         let doc = DocId(Id64(doc_u64));
         let src = SourceId(Id64(source_u64));
         let mut r = FrameRowV1::new(doc, src);
-        let tcfg = TokenizerCfg {
-            max_token_bytes: 32,
-        };
+        let tcfg = TokenizerCfg { max_token_bytes: 32 };
         r.terms = term_freqs_from_text(text, tcfg);
         r.recompute_doc_len();
         r
@@ -1066,6 +1064,29 @@ mod tests {
         let snap_bytes = snap.encode().unwrap();
         let snap_hash = store.put(&snap_bytes).unwrap();
         (snap_hash, seg_hash)
+    }
+
+    fn build_graph_precedence_snapshot(store: &MemStore) -> Hash32 {
+        let rows = vec![
+            make_row(1, 7, "banana"),
+            make_row(2, 7, "carrot"),
+        ];
+        let seg = FrameSegmentV1::from_rows(&rows, 4).unwrap();
+        let seg_hash = store.put(&seg.encode().unwrap()).unwrap();
+        let idx = IndexSegmentV1::build_from_segment(seg_hash, &seg).unwrap();
+        let idx_hash = store.put(&idx.encode().unwrap()).unwrap();
+        let snap = IndexSnapshotV1 {
+            version: 1,
+            source_id: idx.source_id,
+            entries: vec![IndexSnapshotEntryV1 {
+                frame_seg: seg_hash,
+                index_seg: idx_hash,
+                row_count: rows.len() as u32,
+                term_count: idx.terms.len() as u32,
+                postings_bytes: idx.postings.len() as u32,
+            }],
+        };
+        store.put(&snap.encode().unwrap()).unwrap()
     }
 
     fn build_two_segment_snapshot(store: &MemStore) -> Hash32 {
@@ -1287,10 +1308,7 @@ mod tests {
 
         let mut q: Vec<QueryTerm> = Vec::new();
         for i in 0..5u64 {
-            q.push(QueryTerm {
-                term: TermId(Id64(100 + i)),
-                qtf: 1,
-            });
+            q.push(QueryTerm { term: TermId(Id64(100 + i)), qtf: 1 });
         }
 
         let mut p = RetrievalPolicyCfgV1::new();
@@ -1299,8 +1317,7 @@ mod tests {
         p.include_ties_at_cutoff = 0;
         p.validate().unwrap();
 
-        let (_hits, stats) =
-            apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
+        let (_hits, stats) = apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
         assert_eq!(stats.query_terms_total, 5);
         assert_eq!(stats.query_terms_used, 2);
     }
@@ -1320,8 +1337,7 @@ mod tests {
         p.max_hits_per_doc = 1;
         p.validate().unwrap();
 
-        let (hits, _stats) =
-            apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
+        let (hits, _stats) = apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
 
         // With max_hits_per_doc=1 and docs {1,2,3}, we can return at most 3 hits.
         assert!(hits.len() <= 3);
@@ -1359,15 +1375,11 @@ mod tests {
         p.max_hits_per_doc = 1;
         p.validate().unwrap();
 
-        let (hits, stats) =
-            apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
+        let (hits, stats) = apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
 
         // All hits have the same score; include_ties should allow returning more than max_hits.
         assert!(hits.len() >= 1);
-        assert_eq!(
-            stats.hits_included_ties,
-            (hits.len() as u32).saturating_sub(1)
-        );
+        assert_eq!(stats.hits_included_ties, (hits.len() as u32).saturating_sub(1));
     }
 
     #[test]
@@ -1384,8 +1396,7 @@ mod tests {
         p.novelty_mode = 1; // doc
         p.validate().unwrap();
 
-        let (hits, _stats) =
-            apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
+        let (hits, _stats) = apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
         assert_eq!(hits.len(), 2);
 
         let mut docs: Vec<u64> = Vec::new();
@@ -1414,8 +1425,7 @@ mod tests {
         p.novelty_mode = 2; // frame segment
         p.validate().unwrap();
 
-        let (hits, _stats) =
-            apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
+        let (hits, _stats) = apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, None).unwrap();
         assert_eq!(hits.len(), 1);
 
         // Segment frequencies are derived from candidate hits. Identify the rare
@@ -1461,9 +1471,15 @@ mod tests {
 
         let (h_ungated, s_ungated) =
             apply_retrieval_policy_v1(&store, &snap_hash, None, &q, &p, Some(&ctrl)).unwrap();
-        let (h_gated, s_gated) =
-            apply_retrieval_policy_v1(&store, &snap_hash, Some(&sig_map_hash), &q, &p, Some(&ctrl))
-                .unwrap();
+        let (h_gated, s_gated) = apply_retrieval_policy_v1(
+            &store,
+            &snap_hash,
+            Some(&sig_map_hash),
+            &q,
+            &p,
+            Some(&ctrl),
+        )
+        .unwrap();
 
         assert_eq!(h_ungated, h_gated);
         assert_eq!(s_ungated.hits_returned, s_gated.hits_returned);
@@ -1532,6 +1548,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .expect("apply");
         assert_eq!(hits0.len(), 0);
@@ -1549,14 +1566,110 @@ mod tests {
             None,
             Some(&lex_snap),
             None,
+            None,
         )
         .expect("apply");
         assert!(hits1.len() >= 1);
         assert!(stats1.query_terms_expanded_new >= 1);
     }
 
+
     #[test]
-    fn apply_from_text_with_expansion_requires_lexicon_snapshot_hash() {
+    fn apply_from_text_with_graph_expansion_recovers_related_term() {
+        let store = MemStore::new();
+        let (snapshot_hash, _seg_hash) = build_small_snapshot(&store);
+        let qcfg = crate::index_query::QueryTermsCfg::new();
+        let banana = crate::tokenizer::term_id_from_token("banana", crate::tokenizer::TokenizerCfg::default());
+        let carrot = crate::tokenizer::term_id_from_token("carrot", crate::tokenizer::TokenizerCfg::default());
+        let graph = GraphRelevanceV1 {
+            version: crate::graph_relevance::GRAPH_RELEVANCE_V1_VERSION,
+            build_id: blake3_hash(b"graph-retrieval"),
+            flags: GR_FLAG_HAS_TERM_ROWS,
+            rows: vec![GraphRelevanceRowV1 {
+                seed_kind: GraphNodeKindV1::Term,
+                seed_id: banana.0,
+                edges: vec![GraphRelevanceEdgeV1::new(
+                    GraphNodeKindV1::Term,
+                    carrot.0,
+                    20_000,
+                    1,
+                    crate::graph_relevance::GREDGE_FLAG_SYMMETRIC,
+                )],
+            }],
+        };
+        let graph_hash = put_graph_relevance_v1(&store, &graph).expect("put graph");
+
+        let mut pcfg = RetrievalPolicyCfgV1::new();
+        pcfg.max_hits = 10;
+        pcfg.max_query_terms = 32;
+        pcfg.include_ties_at_cutoff = 0;
+        pcfg.enable_query_expansion = 1;
+
+        let (hits, stats) = apply_retrieval_policy_from_text_v1(
+            &store,
+            &snapshot_hash,
+            None,
+            "banana",
+            &qcfg,
+            &pcfg,
+            None,
+            None,
+            Some(&graph_hash),
+            None,
+        ).expect("apply");
+        assert!(hits.len() >= 2);
+        assert!(stats.query_terms_expanded_new >= 1);
+    }
+
+
+    #[test]
+    fn graph_expansion_keeps_lexical_hit_first() {
+        let store = MemStore::new();
+        let snapshot_hash = build_graph_precedence_snapshot(&store);
+        let qcfg = crate::index_query::QueryTermsCfg::new();
+        let banana = crate::tokenizer::term_id_from_token("banana", crate::tokenizer::TokenizerCfg::default());
+        let carrot = crate::tokenizer::term_id_from_token("carrot", crate::tokenizer::TokenizerCfg::default());
+        let graph = GraphRelevanceV1 {
+            version: crate::graph_relevance::GRAPH_RELEVANCE_V1_VERSION,
+            build_id: blake3_hash(b"graph-precedence"),
+            flags: GR_FLAG_HAS_TERM_ROWS,
+            rows: vec![GraphRelevanceRowV1 {
+                seed_kind: GraphNodeKindV1::Term,
+                seed_id: banana.0,
+                edges: vec![GraphRelevanceEdgeV1::new(
+                    GraphNodeKindV1::Term,
+                    carrot.0,
+                    20_000,
+                    1,
+                    crate::graph_relevance::GREDGE_FLAG_SYMMETRIC,
+                )],
+            }],
+        };
+        let graph_hash = put_graph_relevance_v1(&store, &graph).expect("put graph");
+
+        let mut pcfg = RetrievalPolicyCfgV1::new();
+        pcfg.max_hits = 10;
+        pcfg.include_ties_at_cutoff = 0;
+        pcfg.enable_query_expansion = 1;
+
+        let (hits, _stats) = apply_retrieval_policy_from_text_v1(
+            &store,
+            &snapshot_hash,
+            None,
+            "banana",
+            &qcfg,
+            &pcfg,
+            None,
+            None,
+            Some(&graph_hash),
+            None,
+        ).expect("apply");
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].row_ix, 0);
+    }
+
+    #[test]
+    fn apply_from_text_with_expansion_requires_source() {
         let store = MemStore::new();
         let (snapshot_hash, _seg_hash) = build_small_snapshot(&store);
         let qcfg = crate::index_query::QueryTermsCfg::new();
@@ -1574,10 +1687,12 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .err()
         .expect("err");
 
-        assert_eq!(err, RetrievalPolicyApplyError::ExpandMissingLexiconSnapshot);
+        assert_eq!(err, RetrievalPolicyApplyError::ExpandMissingSource);
     }
+
 }

@@ -24,8 +24,8 @@
 //! - search uses fixed ordering and strict caps
 
 use crate::proof_artifact::{
-    ConstraintV1, ProofArtifactFlagsV1, ProofArtifactV1, ProofSolveStatsV1, PA_FLAG_EXPECT_UNIQUE,
-    PA_FLAG_NO_SOLUTION, PA_FLAG_TRUNCATED, PA_FLAG_UNIQUE, PROOF_ARTIFACT_V1_VERSION,
+    ConstraintV1, ProofArtifactFlagsV1, ProofArtifactV1, ProofSolveStatsV1, PROOF_ARTIFACT_V1_VERSION,
+    PA_FLAG_EXPECT_UNIQUE, PA_FLAG_NO_SOLUTION, PA_FLAG_TRUNCATED, PA_FLAG_UNIQUE,
 };
 use std::collections::BTreeMap;
 
@@ -120,12 +120,7 @@ fn line_might_be_constraint(line: &str) -> bool {
     if low.starts_with("if ") {
         return true;
     }
-    t.contains("!=")
-        || t.contains("<=")
-        || t.contains(">=")
-        || t.contains('=')
-        || t.contains('<')
-        || t.contains('>')
+    t.contains("!=") || t.contains("<=") || t.contains(">=") || t.contains('=') || t.contains('<') || t.contains('>')
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -206,8 +201,7 @@ fn lex_inline_simple_v1(line: &str) -> Result<Vec<InlineTokV1>, String> {
                 if (b'a' <= c && c <= b'z')
                     || (b'A' <= c && c <= b'Z')
                     || (b'0' <= c && c <= b'9')
-                    || c == b'_'
-                {
+                    || c == b'_' {
                     i += 1;
                 } else {
                     break;
@@ -229,10 +223,7 @@ fn lex_inline_simple_v1(line: &str) -> Result<Vec<InlineTokV1>, String> {
     Ok(out)
 }
 
-fn parse_inline_simple_constraints_v1(
-    line: &str,
-    max_constraints: usize,
-) -> Result<Vec<ConstraintLineV1>, String> {
+fn parse_inline_simple_constraints_v1(line: &str, max_constraints: usize) -> Result<Vec<ConstraintLineV1>, String> {
     let toks = lex_inline_simple_v1(line)?;
     if toks.is_empty() {
         return Ok(Vec::new());
@@ -263,11 +254,7 @@ fn parse_inline_simple_constraints_v1(
                 out.push(ConstraintLineV1::RelVarVal { var, op, val: *v });
             }
             Some(InlineTokV1::Ident(s)) => {
-                out.push(ConstraintLineV1::RelVarVar {
-                    a: var,
-                    op,
-                    b: s.clone(),
-                });
+                out.push(ConstraintLineV1::RelVarVar { a: var, op, b: s.clone() });
             }
             _ => return Err("bad inline constraint".to_string()),
         }
@@ -277,16 +264,14 @@ fn parse_inline_simple_constraints_v1(
     Ok(out)
 }
 
+
 /// Parse constraint lines from free text (v1).
 ///
 /// The scanner considers each non-empty line, strips a leading bullet marker
 /// ('-' or '*') when present, and parses lines that look like constraints.
 ///
 /// Returns a stable vector preserving input order.
-pub fn parse_constraints_from_text_v1(
-    text: &str,
-    max_constraints: usize,
-) -> Result<Vec<ConstraintLineV1>, String> {
+pub fn parse_constraints_from_text_v1(text: &str, max_constraints: usize) -> Result<Vec<ConstraintLineV1>, String> {
     let mut out: Vec<ConstraintLineV1> = Vec::new();
 
     for raw in text.lines() {
@@ -345,6 +330,7 @@ pub fn parse_constraints_from_text_v1(
 
     Ok(out)
 }
+
 
 /// Extract simple equality constraints for known variables from free text (v1).
 ///
@@ -529,10 +515,7 @@ fn parse_ident_list(s: &str) -> Result<Vec<String>, String> {
         if t.is_empty() {
             continue;
         }
-        if !t
-            .bytes()
-            .all(|b| matches!(b, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_'))
-        {
+        if !t.bytes().all(|b| matches!(b, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_')) {
             return Err("invalid identifier".to_string());
         }
         out.push(t.to_string());
@@ -546,14 +529,8 @@ fn parse_ident_list(s: &str) -> Result<Vec<String>, String> {
 fn parse_domain(s: &str) -> Result<Vec<i64>, String> {
     let t = s.trim();
     if let Some(pos) = t.find("..") {
-        let a = t[..pos]
-            .trim()
-            .parse::<i64>()
-            .map_err(|_| "bad domain".to_string())?;
-        let b = t[pos + 2..]
-            .trim()
-            .parse::<i64>()
-            .map_err(|_| "bad domain".to_string())?;
+        let a = t[..pos].trim().parse::<i64>().map_err(|_| "bad domain".to_string())?;
+        let b = t[pos + 2..].trim().parse::<i64>().map_err(|_| "bad domain".to_string())?;
         if b < a {
             return Err("bad domain range".to_string());
         }
@@ -572,10 +549,7 @@ fn parse_domain(s: &str) -> Result<Vec<i64>, String> {
         let inner = &t[1..t.len() - 1];
         let mut out: Vec<i64> = Vec::new();
         for part in inner.split(',') {
-            let v = part
-                .trim()
-                .parse::<i64>()
-                .map_err(|_| "bad domain".to_string())?;
+            let v = part.trim().parse::<i64>().map_err(|_| "bad domain".to_string())?;
             out.push(v);
         }
         out.sort();
@@ -626,9 +600,7 @@ fn parse_constraint_line(line: &str) -> Result<Option<ConstraintLineV1>, String>
     }
     if t.to_ascii_lowercase().starts_with("if ") {
         let low = t.to_ascii_lowercase();
-        let then_pos = low
-            .find(" then ")
-            .ok_or_else(|| "bad if-then".to_string())?;
+        let then_pos = low.find(" then ").ok_or_else(|| "bad if-then".to_string())?;
         let cond = t[3..then_pos].trim();
         let cons = t[then_pos + 6..].trim();
         let (lhs, op, rhs) = split_rel(cond).ok_or_else(|| "bad if condition".to_string())?;
@@ -636,20 +608,14 @@ fn parse_constraint_line(line: &str) -> Result<Option<ConstraintLineV1>, String>
             return Err("if condition must be =".to_string());
         }
         let cond_var = lhs.trim().to_string();
-        let cond_val = rhs
-            .trim()
-            .parse::<i64>()
-            .map_err(|_| "bad if condition".to_string())?;
+        let cond_val = rhs.trim().parse::<i64>().map_err(|_| "bad if condition".to_string())?;
         let (lh2, op2, rh2) = split_rel(cons).ok_or_else(|| "bad then clause".to_string())?;
         let rop = RelOpV1::from_str(op2).ok_or_else(|| "bad then op".to_string())?;
         if rop != RelOpV1::Eq && rop != RelOpV1::Neq {
             return Err("then must be = or !=".to_string());
         }
         let var = lh2.trim().to_string();
-        let val = rh2
-            .trim()
-            .parse::<i64>()
-            .map_err(|_| "bad then value".to_string())?;
+        let val = rh2.trim().parse::<i64>().map_err(|_| "bad then value".to_string())?;
         return Ok(Some(ConstraintLineV1::IfThenVarVal {
             cond_var,
             cond_val,
@@ -738,15 +704,10 @@ fn build_var_index(vars: &[String]) -> (Vec<String>, BTreeMap<String, u16>) {
 }
 
 fn map_var(map: &BTreeMap<String, u16>, name: &str) -> Result<u16, String> {
-    map.get(name)
-        .copied()
-        .ok_or_else(|| "unknown var".to_string())
+    map.get(name).copied().ok_or_else(|| "unknown var".to_string())
 }
 
-fn compile_constraints(
-    spec: &PuzzleSpecV1,
-    map: &BTreeMap<String, u16>,
-) -> Result<Vec<ConstraintV1>, String> {
+fn compile_constraints(spec: &PuzzleSpecV1, map: &BTreeMap<String, u16>) -> Result<Vec<ConstraintV1>, String> {
     let mut out: Vec<ConstraintV1> = Vec::with_capacity(spec.constraints.len());
     for c in spec.constraints.iter() {
         match c {
@@ -785,13 +746,7 @@ fn compile_constraints(
                 }
                 out.push(ConstraintV1::AllDifferent { vars: vix });
             }
-            ConstraintLineV1::IfThenVarVal {
-                cond_var,
-                cond_val,
-                var,
-                op,
-                val,
-            } => {
+            ConstraintLineV1::IfThenVarVal { cond_var, cond_val, var, op, val } => {
                 let ic = map_var(map, cond_var)?;
                 let iv = map_var(map, var)?;
                 match op {
@@ -867,24 +822,14 @@ fn check_constraint(c: &ConstraintV1, asn: &[Option<i64>]) -> bool {
             }
             true
         }
-        ConstraintV1::ImpEqVarVal {
-            cond_var,
-            cond_val,
-            var,
-            val,
-        } => match asn[*cond_var as usize] {
+        ConstraintV1::ImpEqVarVal { cond_var, cond_val, var, val } => match asn[*cond_var as usize] {
             Some(v) if v == *cond_val => match asn[*var as usize] {
                 Some(x) => x == *val,
                 None => true,
             },
             _ => true,
         },
-        ConstraintV1::ImpNeqVarVal {
-            cond_var,
-            cond_val,
-            var,
-            val,
-        } => match asn[*cond_var as usize] {
+        ConstraintV1::ImpNeqVarVal { cond_var, cond_val, var, val } => match asn[*cond_var as usize] {
             Some(v) if v == *cond_val => match asn[*var as usize] {
                 Some(x) => x != *val,
                 None => true,
@@ -913,10 +858,7 @@ fn pick_next_var(asn: &[Option<i64>]) -> Option<usize> {
 }
 
 /// Solve a parsed puzzle spec.
-pub fn solve_puzzle_v1(
-    spec: &PuzzleSpecV1,
-    cfg: LogicSolveCfgV1,
-) -> Result<ProofArtifactV1, String> {
+pub fn solve_puzzle_v1(spec: &PuzzleSpecV1, cfg: LogicSolveCfgV1) -> Result<ProofArtifactV1, String> {
     let (vars_sorted, map) = build_var_index(&spec.vars);
     let mut domain = spec.domain.clone();
     domain.sort();
@@ -972,16 +914,7 @@ pub fn solve_puzzle_v1(
             }
             asn[next] = Some(val);
             if check_all(constraints, asn) {
-                dfs(
-                    asn,
-                    domain,
-                    constraints,
-                    cfg,
-                    nodes,
-                    backtracks,
-                    truncated,
-                    solutions,
-                );
+                dfs(asn, domain, constraints, cfg, nodes, backtracks, truncated, solutions);
                 if *truncated || solutions.len() >= 2 {
                     asn[next] = None;
                     return;

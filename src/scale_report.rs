@@ -189,9 +189,7 @@ impl ScaleDemoScaleReportV1 {
                 || self.index_sig_map_hash != [0u8; 32]
                 || self.index_segments_total != 0
             {
-                return Err(DecodeError::new(
-                    "index fields must be zero when has_index=0",
-                ));
+                return Err(DecodeError::new("index fields must be zero when has_index=0"));
             }
         }
 
@@ -200,9 +198,7 @@ impl ScaleDemoScaleReportV1 {
         }
         if self.has_prompts == 0 {
             if self.prompts_max_output_tokens != 0 || self.prompts != HashListSummaryV1::empty() {
-                return Err(DecodeError::new(
-                    "prompts fields must be zero when has_prompts=0",
-                ));
+                return Err(DecodeError::new("prompts fields must be zero when has_prompts=0"));
             }
         }
         self.prompts.validate_canonical()?;
@@ -211,13 +207,8 @@ impl ScaleDemoScaleReportV1 {
             return Err(DecodeError::new("has_evidence must be 0 or 1"));
         }
         if self.has_evidence == 0 {
-            if self.evidence_k != 0
-                || self.evidence_max_bytes != 0
-                || self.evidence != HashListSummaryV1::empty()
-            {
-                return Err(DecodeError::new(
-                    "evidence fields must be zero when has_evidence=0",
-                ));
+            if self.evidence_k != 0 || self.evidence_max_bytes != 0 || self.evidence != HashListSummaryV1::empty() {
+                return Err(DecodeError::new("evidence fields must be zero when has_evidence=0"));
             }
         }
         self.evidence.validate_canonical()?;
@@ -235,9 +226,7 @@ impl ScaleDemoScaleReportV1 {
                 || self.forecasts != HashListSummaryV1::empty()
                 || self.markov_traces != HashListSummaryV1::empty()
             {
-                return Err(DecodeError::new(
-                    "answer fields must be zero when has_answers=0",
-                ));
+                return Err(DecodeError::new("answer fields must be zero when has_answers=0"));
             }
         }
         if self.realizer_load_frame_rows > 1 {
@@ -250,17 +239,13 @@ impl ScaleDemoScaleReportV1 {
 
         if self.has_answers != 0 {
             if self.planner_hints.count != self.answers.count {
-                return Err(DecodeError::new(
-                    "planner_hints count must match answers count",
-                ));
+                return Err(DecodeError::new("planner_hints count must match answers count"));
             }
             if self.forecasts.count != self.answers.count {
                 return Err(DecodeError::new("forecasts count must match answers count"));
             }
             if self.markov_traces.count != self.answers.count {
-                return Err(DecodeError::new(
-                    "markov_traces count must match answers count",
-                ));
+                return Err(DecodeError::new("markov_traces count must match answers count"));
             }
         }
 

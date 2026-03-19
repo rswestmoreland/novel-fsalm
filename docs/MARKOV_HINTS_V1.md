@@ -5,8 +5,8 @@ MarkovHintsV1 is a replayable, deterministic advisory record used to guide
 surface-form selection (openers/transitions/closers) without changing Novel's
 evidence-first guarantees.
 
-This stage defines the schema and canonical codec only. Training and
-pipeline wiring are handled in future updates.
+This stage defines the schema and canonical codec. The current quality
+path wires a bounded subset of approved opener, transition, closer, and clarifier-intro template ids.
 
 Design goals
 ------------

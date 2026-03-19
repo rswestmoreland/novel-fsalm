@@ -15,10 +15,10 @@
 //! No extra crates.
 
 use crate::artifact::ArtifactStore;
-use crate::cache::Cache2Q;
 use crate::codec::{DecodeError, EncodeError};
 use crate::frame_segment::FrameSegmentV1;
 use crate::hash::Hash32;
+use crate::cache::Cache2Q;
 use std::sync::Arc;
 
 /// Store a FrameSegmentV1 as an artifact.

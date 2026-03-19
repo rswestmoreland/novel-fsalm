@@ -41,8 +41,7 @@ pub const CA_FLAG_USED_LEXICON: ContextAnchorsFlagsV1 = 1u32 << 0;
 pub const CA_FLAG_INCLUDED_ASSISTANT: ContextAnchorsFlagsV1 = 1u32 << 1;
 
 /// Mask of all known v1 flags.
-pub const CA_FLAGS_V1_ALL: ContextAnchorsFlagsV1 =
-    CA_FLAG_USED_LEXICON | CA_FLAG_INCLUDED_ASSISTANT;
+pub const CA_FLAGS_V1_ALL: ContextAnchorsFlagsV1 = CA_FLAG_USED_LEXICON | CA_FLAG_INCLUDED_ASSISTANT;
 
 /// One context anchor term (v1).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -223,11 +222,7 @@ fn role_tag_u8(r: Role) -> u8 {
     }
 }
 
-fn lexicon_accept_token(
-    lex: &LexiconExpandLookupV1,
-    tok_lc: &str,
-    lemma_buf: &mut Vec<crate::lexicon::LemmaId>,
-) -> bool {
+fn lexicon_accept_token(lex: &LexiconExpandLookupV1, tok_lc: &str, lemma_buf: &mut Vec<crate::lexicon::LemmaId>) -> bool {
     let key = derive_lemma_key_id(tok_lc);
     lex.lemma_ids_for_key_into(key, 4, lemma_buf);
     if lemma_buf.is_empty() {
@@ -364,9 +359,7 @@ pub fn build_context_anchors_v1(
     // Deterministic scoring:
     // - More recent messages get a larger multiplier.
     // - Ties are broken by term id asc.
-    let tok_cfg = TokenizerCfg {
-        max_token_bytes: qcfg.tok_cfg.max_token_bytes,
-    };
+    let tok_cfg = TokenizerCfg { max_token_bytes: qcfg.tok_cfg.max_token_bytes };
 
     let mut lemma_buf: Vec<crate::lexicon::LemmaId> = Vec::new();
     let mut scores: std::collections::BTreeMap<u64, u32> = std::collections::BTreeMap::new();
@@ -408,9 +401,11 @@ pub fn build_context_anchors_v1(
 
     // Select top terms by score desc, then term id asc.
     let mut ranked: Vec<(u64, u32)> = scores.into_iter().collect();
-    ranked.sort_by(|a, b| match b.1.cmp(&a.1) {
-        core::cmp::Ordering::Equal => a.0.cmp(&b.0),
-        o => o,
+    ranked.sort_by(|a, b| {
+        match b.1.cmp(&a.1) {
+            core::cmp::Ordering::Equal => a.0.cmp(&b.0),
+            o => o,
+        }
     });
 
     if ranked.len() > max_terms {
@@ -420,10 +415,7 @@ pub fn build_context_anchors_v1(
     // Canonicalize terms by term id asc in the stored artifact.
     let mut terms: Vec<ContextAnchorTermV1> = Vec::with_capacity(ranked.len());
     for (term_u64, _score) in ranked {
-        terms.push(ContextAnchorTermV1 {
-            term_id: Id64(term_u64),
-            qtf: 1,
-        });
+        terms.push(ContextAnchorTermV1 { term_id: Id64(term_u64), qtf: 1 });
     }
     terms.sort_by(|a, b| a.term_id.0.cmp(&b.term_id.0));
     terms.dedup_by(|a, b| a.term_id.0 == b.term_id.0);
@@ -452,16 +444,10 @@ pub fn build_context_anchors_v1(
     // Query terms form.
     let mut qterms: Vec<QueryTerm> = Vec::with_capacity(terms.len());
     for t in &terms {
-        qterms.push(QueryTerm {
-            term: TermId(t.term_id),
-            qtf: t.qtf as u32,
-        });
+        qterms.push(QueryTerm { term: TermId(t.term_id), qtf: t.qtf as u32 });
     }
 
-    Some(ContextAnchorsBuildV1 {
-        anchors,
-        query_terms: qterms,
-    })
+    Some(ContextAnchorsBuildV1 { anchors, query_terms: qterms })
 }
 
 #[cfg(test)]
@@ -493,14 +479,8 @@ mod tests {
             flags: CA_FLAG_INCLUDED_ASSISTANT,
             source_hash: [4u8; 32],
             terms: vec![
-                ContextAnchorTermV1 {
-                    term_id: Id64(10),
-                    qtf: 1,
-                },
-                ContextAnchorTermV1 {
-                    term_id: Id64(20),
-                    qtf: 2,
-                },
+                ContextAnchorTermV1 { term_id: Id64(10), qtf: 1 },
+                ContextAnchorTermV1 { term_id: Id64(20), qtf: 2 },
             ],
         };
         let bytes = a.encode().unwrap();
@@ -511,18 +491,9 @@ mod tests {
     #[test]
     fn builder_is_deterministic_for_same_inputs() {
         let msgs = vec![
-            Message {
-                role: Role::User,
-                content: "banana banana".to_string(),
-            },
-            Message {
-                role: Role::Assistant,
-                content: "ok".to_string(),
-            },
-            Message {
-                role: Role::User,
-                content: "why?".to_string(),
-            },
+            Message { role: Role::User, content: "banana banana".to_string() },
+            Message { role: Role::Assistant, content: "ok".to_string() },
+            Message { role: Role::User, content: "why?".to_string() },
         ];
         let qcfg = QueryTermsCfg::new();
         let cfg = ContextAnchorsCfgV1::default_v1();

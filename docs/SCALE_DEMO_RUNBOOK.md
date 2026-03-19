@@ -1,4 +1,4 @@
-# Scale Demo Runbook 
+# Scale demo runbook
 
 This runbook documents how to use the `scale-demo` command to exercise the end-to-end Novel pipeline on a deterministic synthetic workload.
 

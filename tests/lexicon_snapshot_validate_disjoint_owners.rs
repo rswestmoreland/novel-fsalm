@@ -81,4 +81,5 @@ fn lexicon_snapshot_validate_detects_overlap() {
         }
         other => panic!("unexpected error: {}", other),
     }
+
 }

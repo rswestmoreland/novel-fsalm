@@ -41,9 +41,7 @@ pub fn put_context_anchors_v1<S: ArtifactStore>(
     ca: &ContextAnchorsV1,
 ) -> Result<Hash32, ContextAnchorsArtifactError> {
     let bytes = ca.encode().map_err(ContextAnchorsArtifactError::Encode)?;
-    store
-        .put(&bytes)
-        .map_err(ContextAnchorsArtifactError::Store)
+    store.put(&bytes).map_err(ContextAnchorsArtifactError::Store)
 }
 
 /// Load a `ContextAnchorsV1` artifact by its content hash.
@@ -89,10 +87,7 @@ mod tests {
             query_msg_ix: 2,
             flags: 0,
             source_hash: [9u8; 32],
-            terms: vec![ContextAnchorTermV1 {
-                term_id: Id64(7),
-                qtf: 1,
-            }],
+            terms: vec![ContextAnchorTermV1 { term_id: Id64(7), qtf: 1 }],
         };
 
         let id = put_context_anchors_v1(&store, &ca).expect("put");

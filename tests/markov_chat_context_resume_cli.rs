@@ -3,18 +3,16 @@
 
 use fsa_lm::artifact::FsArtifactStore;
 use fsa_lm::hash::Hash32;
-use fsa_lm::markov_hints::MH_FLAG_HAS_HISTORY;
+use fsa_lm::markov_hints::{MH_FLAG_HAS_HISTORY};
 use fsa_lm::markov_hints_artifact::get_markov_hints_v1;
-use fsa_lm::markov_model::{
-    MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1, MARKOV_MODEL_V1_VERSION,
-};
+use fsa_lm::markov_model::{MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1, MARKOV_MODEL_V1_VERSION};
 use fsa_lm::markov_model_artifact::put_markov_model_v1;
 use fsa_lm::markov_trace_artifact::get_markov_trace_v1;
-use fsa_lm::pragmatics_frame::{PragmaticsFrameV1, RhetoricModeV1, PRAGMATICS_FRAME_V1_VERSION};
+use fsa_lm::pragmatics_frame::{PragmaticsFrameV1, PRAGMATICS_FRAME_V1_VERSION, RhetoricModeV1};
 use fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1;
-use fsa_lm::realizer_directives::ToneV1;
 use fsa_lm::replay_artifact::get_replay_log;
 use fsa_lm::replay_steps::{STEP_MARKOV_HINTS_V1, STEP_MARKOV_TRACE_V1};
+use fsa_lm::realizer_directives::ToneV1;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -87,10 +85,7 @@ fn parse_file_kv(path: &Path, key: &str) -> Option<String> {
 }
 
 fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str) {
-    let s = format!(
-        "merged_snapshot={}\nmerged_sig_map={}\n",
-        merged_snapshot, merged_sig_map
-    );
+    let s = format!("merged_snapshot={}\nmerged_sig_map={}\n", merged_snapshot, merged_sig_map);
     std::fs::write(root.join("workspace_v1.txt"), s.as_bytes()).unwrap();
 }
 
@@ -124,12 +119,7 @@ fn sample_markov_model_all_tones() -> MarkovModelV1 {
 
     let mut next: Vec<MarkovNextV1> = Vec::new();
     let mut c: u32 = 100;
-    for t in [
-        ToneV1::Supportive,
-        ToneV1::Neutral,
-        ToneV1::Direct,
-        ToneV1::Cautious,
-    ] {
+    for t in [ToneV1::Supportive, ToneV1::Neutral, ToneV1::Direct, ToneV1::Cautious] {
         for v in [0u8, 1u8] {
             next.push(MarkovNextV1 {
                 token: MarkovTokenV1::new(MarkovChoiceKindV1::Opener, preface_id(t, v)),
@@ -140,16 +130,14 @@ fn sample_markov_model_all_tones() -> MarkovModelV1 {
     }
 
     // Canonical: count desc, token asc for ties.
-    next.sort_by(|a, b| match b.count.cmp(&a.count) {
-        core::cmp::Ordering::Equal => a.token.cmp(&b.token),
-        o => o,
+    next.sort_by(|a, b| {
+        match b.count.cmp(&a.count) {
+            core::cmp::Ordering::Equal => a.token.cmp(&b.token),
+            o => o,
+        }
     });
 
-    let s0 = MarkovStateV1 {
-        context: Vec::new(),
-        escape_count: 0,
-        next,
-    };
+    let s0 = MarkovStateV1 { context: Vec::new(), escape_count: 0, next };
     MarkovModelV1 {
         version: MARKOV_MODEL_V1_VERSION,
         order_n_max: 3,
@@ -255,19 +243,11 @@ fn chat_resume_rebuilds_markov_context_from_saved_replay_ids() {
         stdin.write_all(b"banana\n/exit\n").unwrap();
     }
     let out = child.wait_with_output().unwrap();
-    assert_eq!(
-        out.status.code().unwrap_or(-1),
-        0,
-        "stderr={}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
 
-    let conv1_hex = parse_file_kv(&session_path, "conversation_pack")
-        .expect("conversation_pack= in session file");
+    let conv1_hex = parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= in session file");
     let conv1 = hex_to_hash32(&conv1_hex);
-    let pack1 = fsa_lm::conversation_pack_artifact::get_conversation_pack(&store, &conv1)
-        .unwrap()
-        .unwrap();
+    let pack1 = fsa_lm::conversation_pack_artifact::get_conversation_pack(&store, &conv1).unwrap().unwrap();
     let replay1 = pack1
         .messages
         .iter()
@@ -289,10 +269,7 @@ fn chat_resume_rebuilds_markov_context_from_saved_replay_ids() {
     }
     let mt1 = mt1.expect("markov trace output");
     let trace1 = get_markov_trace_v1(&store, &mt1).unwrap().unwrap();
-    assert!(
-        !trace1.tokens.is_empty(),
-        "expected non-empty MarkovTrace tokens"
-    );
+    assert!(!trace1.tokens.is_empty(), "expected non-empty MarkovTrace tokens");
 
     // Second run: resume via session file, enable markov hints. The resume path should
     // rebuild markov context tail from prior assistant replay ids, setting HAS_HISTORY.
@@ -323,19 +300,11 @@ fn chat_resume_rebuilds_markov_context_from_saved_replay_ids() {
         stdin.write_all(b"night\n/exit\n").unwrap();
     }
     let out2 = child2.wait_with_output().unwrap();
-    assert_eq!(
-        out2.status.code().unwrap_or(-1),
-        0,
-        "stderr={}",
-        String::from_utf8_lossy(&out2.stderr)
-    );
+    assert_eq!(out2.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out2.stderr));
 
-    let conv2_hex =
-        parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= after resume");
+    let conv2_hex = parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= after resume");
     let conv2 = hex_to_hash32(&conv2_hex);
-    let pack2 = fsa_lm::conversation_pack_artifact::get_conversation_pack(&store, &conv2)
-        .unwrap()
-        .unwrap();
+    let pack2 = fsa_lm::conversation_pack_artifact::get_conversation_pack(&store, &conv2).unwrap().unwrap();
     let replay2 = pack2
         .messages
         .iter()
@@ -356,9 +325,5 @@ fn chat_resume_rebuilds_markov_context_from_saved_replay_ids() {
     }
     let mh_hash = mh_hash_opt.expect("markov-hints-v1 output");
     let hints = get_markov_hints_v1(&store, &mh_hash).unwrap().unwrap();
-    assert_ne!(
-        hints.flags & MH_FLAG_HAS_HISTORY,
-        0,
-        "expected HAS_HISTORY flag"
-    );
+    assert_ne!(hints.flags & MH_FLAG_HAS_HISTORY, 0, "expected HAS_HISTORY flag");
 }

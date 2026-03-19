@@ -19,10 +19,11 @@
 //! are mapped into a small integer `qtf` range so weights influence ranking
 //! without exploding scores.
 
-use crate::expanded_qfv::ExpandedQfvItemV1;
 use crate::expansion_budget::{ExpansionBudgetV1, ExpansionKindV1};
 use crate::expansion_builder::{build_expanded_qfv_v1, BaseFeatureV1, ExpansionBuildError};
+use crate::expanded_qfv::ExpandedQfvItemV1;
 use crate::frame::{Id64, TermId};
+use crate::graph_relevance::{GraphNodeKindV1, GraphRelevanceV1};
 use crate::hash::blake3_hash;
 use crate::index_query::{QueryTerm, QueryTermsCfg};
 use crate::lexicon::derive_lemma_key_id;
@@ -45,9 +46,7 @@ impl core::fmt::Display for BridgeExpansionError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             BridgeExpansionError::BadCfg(e) => write!(f, "bad bridge expansion config: {}", e),
-            BridgeExpansionError::BuildFailed(e) => {
-                write!(f, "bridge expansion build failed: {}", e)
-            }
+            BridgeExpansionError::BuildFailed(e) => write!(f, "bridge expansion build failed: {}", e),
         }
     }
 }
@@ -110,12 +109,13 @@ fn lexicon_has_lemma(lex: &LexiconExpandLookupV1, s: &str) -> bool {
     !lex.lemma_ids_for_key(key, 1).is_empty()
 }
 
-fn make_budget_from_cfg(base_count: usize, cfg: &QueryExpansionCfgV1) -> ExpansionBudgetV1 {
+fn make_budget_from_cfg(base_count: usize, cfg: &QueryExpansionCfgV1, enable_graph: bool) -> ExpansionBudgetV1 {
     // Start from the canonical default.
     let mut b = ExpansionBudgetV1::default_v1();
 
     // Preserve existing knobs by mapping QueryExpansionCfgV1 caps into the
-    // bridge budget. In v1, we only generate lexical morphology candidates.
+    // bridge budget. In v1, we generate lexical morphology candidates and,
+    // when a graph artifact is present, bounded term-to-term graph candidates.
     let total_cap = cfg.max_total_terms as usize;
     let mut allowed_new: usize = cfg.max_new_terms as usize;
     if total_cap <= base_count {
@@ -139,9 +139,10 @@ fn make_budget_from_cfg(base_count: usize, cfg: &QueryExpansionCfgV1) -> Expansi
         b.max_required_total = b.max_expansions_total;
     }
 
-    // Tighten per-kind caps (we only emit Lex candidates in v1).
+    // Tighten per-kind caps. Graph candidates are only enabled when a graph
+    // artifact is present.
     for kb in &mut b.kinds {
-        if kb.kind == ExpansionKindV1::Lex {
+        if kb.kind == ExpansionKindV1::Lex || (enable_graph && kb.kind == ExpansionKindV1::Graph) {
             if kb.max_total > b.max_expansions_total {
                 kb.max_total = b.max_expansions_total;
             }
@@ -316,36 +317,91 @@ fn lex_morphology_candidates(
     out
 }
 
+
+fn graph_candidate_weight_u16(edge_weight_q16: u16, hop_count: u8) -> u16 {
+    // Graph candidates stay intentionally weak so lexical hits remain primary.
+    let mut w = (edge_weight_q16 as u32) / 64;
+    if hop_count > 1 {
+        w = (w.saturating_mul(3)) / 4;
+    }
+    if w == 0 {
+        w = 1;
+    }
+    if w > 2_047 {
+        2_047
+    } else {
+        w as u16
+    }
+}
+
+fn graph_rule_id_v1(hop_count: u8, flags: u8) -> u16 {
+    match (hop_count > 1, (flags & crate::graph_relevance::GREDGE_FLAG_SYMMETRIC) != 0) {
+        (false, false) => 1,
+        (false, true) => 2,
+        (true, false) => 3,
+        (true, true) => 4,
+    }
+}
+
+fn find_graph_term_row<'a>(graph: &'a GraphRelevanceV1, term_id: Id64) -> Option<&'a crate::graph_relevance::GraphRelevanceRowV1> {
+    let key = (GraphNodeKindV1::Term as u8, term_id.0);
+    match graph.rows.binary_search_by(|row| ((row.seed_kind as u8), row.seed_id.0).cmp(&key)) {
+        Ok(ix) => Some(&graph.rows[ix]),
+        Err(_) => None,
+    }
+}
+
+fn graph_term_candidates(
+    bases: &[BaseFeatureV1],
+    graph: &GraphRelevanceV1,
+) -> Vec<ExpandedQfvItemV1> {
+    let mut out: Vec<ExpandedQfvItemV1> = Vec::new();
+    for base in bases {
+        if base.kind != ExpansionKindV1::Lex {
+            continue;
+        }
+        let row = match find_graph_term_row(graph, base.id) {
+            Some(v) => v,
+            None => continue,
+        };
+        for edge in &row.edges {
+            if edge.target_kind != GraphNodeKindV1::Term {
+                continue;
+            }
+            if edge.target_id.0 == base.id.0 {
+                continue;
+            }
+            let weight = graph_candidate_weight_u16(edge.weight_q16, edge.hop_count);
+            out.push(ExpandedQfvItemV1::new(
+                ExpansionKindV1::Graph,
+                edge.target_id,
+                weight,
+                base.kind,
+                base.id,
+                graph_rule_id_v1(edge.hop_count, edge.flags),
+            ));
+        }
+    }
+    out
+}
+
 fn base_terms_and_bases(text: &str, qcfg: &QueryTermsCfg) -> (Vec<QueryTerm>, Vec<BaseFeatureV1>) {
-    let tok_cfg = TokenizerCfg {
-        max_token_bytes: qcfg.tok_cfg.max_token_bytes,
-    };
+    let tok_cfg = TokenizerCfg { max_token_bytes: qcfg.tok_cfg.max_token_bytes };
     let mut tmp: Vec<(QueryTerm, ExpansionKindV1, Id64)> = Vec::new();
     for tf in term_freqs_from_text(text, tok_cfg) {
         tmp.push((
-            QueryTerm {
-                term: tf.term,
-                qtf: tf.tf,
-            },
+            QueryTerm { term: tf.term, qtf: tf.tf },
             ExpansionKindV1::Lex,
             Id64((tf.term.0).0),
         ));
     }
 
     if qcfg.include_metaphone {
-        let tok_cfg2 = TokenizerCfg {
-            max_token_bytes: qcfg.tok_cfg.max_token_bytes,
-        };
-        let meta_cfg = MetaphoneCfg {
-            max_token_bytes: qcfg.meta_cfg.max_token_bytes,
-            max_code_len: qcfg.meta_cfg.max_code_len,
-        };
+        let tok_cfg2 = TokenizerCfg { max_token_bytes: qcfg.tok_cfg.max_token_bytes };
+        let meta_cfg = MetaphoneCfg { max_token_bytes: qcfg.meta_cfg.max_token_bytes, max_code_len: qcfg.meta_cfg.max_code_len };
         for mf in meta_freqs_from_text(text, tok_cfg2, meta_cfg) {
             tmp.push((
-                QueryTerm {
-                    term: TermId(mf.meta.0),
-                    qtf: mf.tf,
-                },
+                QueryTerm { term: TermId(mf.meta.0), qtf: mf.tf },
                 ExpansionKindV1::Meta,
                 mf.meta.0,
             ));
@@ -384,15 +440,14 @@ pub fn bridge_expand_query_terms_v1(
     text: &str,
     qcfg: &QueryTermsCfg,
     lex: Option<&LexiconExpandLookupV1>,
+    graph: Option<&GraphRelevanceV1>,
     control: Option<&RetrievalControlV1>,
     expand_cfg_opt: Option<&QueryExpansionCfgV1>,
 ) -> Result<(Vec<QueryTerm>, u32), BridgeExpansionError> {
     let (mut base_terms, bases) = base_terms_and_bases(text, qcfg);
     let base_count = base_terms.len();
 
-    let cfg = expand_cfg_opt
-        .copied()
-        .unwrap_or_else(QueryExpansionCfgV1::default);
+    let cfg = expand_cfg_opt.copied().unwrap_or_else(QueryExpansionCfgV1::default);
     if let Err(e) = cfg.validate() {
         return Err(BridgeExpansionError::BadCfg(e));
     }
@@ -401,22 +456,26 @@ pub fn bridge_expand_query_terms_v1(
         return Ok((base_terms, 0));
     }
 
-    let lex = match lex {
-        Some(l) => l,
-        None => return Ok((base_terms, 0)),
-    };
+    let enable_graph = graph.is_some();
+    if lex.is_none() && !enable_graph {
+        return Ok((base_terms, 0));
+    }
 
     // If no new terms are allowed under legacy caps, skip.
-    let budget = make_budget_from_cfg(base_count, &cfg);
+    let budget = make_budget_from_cfg(base_count, &cfg, enable_graph);
     if budget.max_expansions_total == 0 {
         return Ok((base_terms, 0));
     }
 
     // Generate candidates and build expanded qfv.
-    let tok_cfg = TokenizerCfg {
-        max_token_bytes: qcfg.tok_cfg.max_token_bytes,
-    };
-    let candidates = lex_morphology_candidates(text, tok_cfg, lex);
+    let tok_cfg = TokenizerCfg { max_token_bytes: qcfg.tok_cfg.max_token_bytes };
+    let mut candidates: Vec<ExpandedQfvItemV1> = Vec::new();
+    if let Some(lex2) = lex {
+        candidates.extend(lex_morphology_candidates(text, tok_cfg, lex2));
+    }
+    if let Some(graph2) = graph {
+        candidates.extend(graph_term_candidates(&bases, graph2));
+    }
     if candidates.is_empty() {
         return Ok((base_terms, 0));
     }
@@ -438,10 +497,7 @@ pub fn bridge_expand_query_terms_v1(
         // In v1, we only emit Lex candidates. Future kinds may need domain adapters.
         let term_u64 = it.id.0;
         let qtf = qtf_from_weight_u16(it.weight);
-        base_terms.push(QueryTerm {
-            term: TermId(Id64(term_u64)),
-            qtf,
-        });
+        base_terms.push(QueryTerm { term: TermId(Id64(term_u64)), qtf });
         if seen.binary_search(&term_u64).is_err() {
             let pos = match seen.binary_search(&term_u64) {
                 Ok(_) => 0,
@@ -460,8 +516,9 @@ pub fn bridge_expand_query_terms_v1(
 mod tests {
     use super::*;
     use crate::artifact::ArtifactStore;
-    use crate::hash::blake3_hash;
+    use crate::graph_relevance::{GraphNodeKindV1, GraphRelevanceEdgeV1, GraphRelevanceRowV1, GraphRelevanceV1, GR_FLAG_HAS_TERM_ROWS};
     use crate::hash::Hash32;
+    use crate::hash::blake3_hash;
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
@@ -472,9 +529,7 @@ mod tests {
 
     impl MemStore {
         fn new() -> MemStore {
-            MemStore {
-                m: std::cell::RefCell::new(BTreeMap::new()),
-            }
+            MemStore { m: std::cell::RefCell::new(BTreeMap::new()) }
         }
     }
 
@@ -543,13 +598,48 @@ mod tests {
         let qcfg = QueryTermsCfg::new();
         let cfg = QueryExpansionCfgV1::default();
 
-        let (t0, n0) = bridge_expand_query_terms_v1("bananas", &qcfg, Some(&lex), None, Some(&cfg))
-            .expect("ok");
-        let (t1, n1) = bridge_expand_query_terms_v1("bananas", &qcfg, Some(&lex), None, Some(&cfg))
-            .expect("ok");
+        let (t0, n0) =
+            bridge_expand_query_terms_v1("bananas", &qcfg, Some(&lex), None, None, Some(&cfg)).expect("ok");
+        let (t1, n1) =
+            bridge_expand_query_terms_v1("bananas", &qcfg, Some(&lex), None, None, Some(&cfg)).expect("ok");
 
         assert_eq!(t0, t1);
         assert_eq!(n0, n1);
         assert!(n0 >= 1);
+    }
+
+    #[test]
+    fn bridge_expand_with_graph_adds_related_term() {
+        let qcfg = QueryTermsCfg::new();
+        let banana = term_id_from_token("banana", TokenizerCfg::default());
+        let split = term_id_from_token("split", TokenizerCfg::default());
+        let graph = GraphRelevanceV1 {
+            version: crate::graph_relevance::GRAPH_RELEVANCE_V1_VERSION,
+            build_id: blake3_hash(b"graph-bridge"),
+            flags: GR_FLAG_HAS_TERM_ROWS,
+            rows: vec![GraphRelevanceRowV1 {
+                seed_kind: GraphNodeKindV1::Term,
+                seed_id: banana.0,
+                edges: vec![GraphRelevanceEdgeV1::new(
+                    GraphNodeKindV1::Term,
+                    split.0,
+                    20_000,
+                    1,
+                    crate::graph_relevance::GREDGE_FLAG_SYMMETRIC,
+                )],
+            }],
+        };
+
+        let (terms, added) = bridge_expand_query_terms_v1(
+            "banana",
+            &qcfg,
+            None,
+            Some(&graph),
+            None,
+            Some(&QueryExpansionCfgV1::default()),
+        ).expect("ok");
+
+        assert!(added >= 1);
+        assert!(terms.iter().any(|qt| (qt.term.0).0 == (split.0).0));
     }
 }

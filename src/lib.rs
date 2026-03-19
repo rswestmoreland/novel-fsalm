@@ -66,10 +66,10 @@ pub mod index_store;
 /// IndexSnapshot manifest linking FrameSegment hashes to IndexSegment hashes.
 pub mod index_snapshot;
 
-/// Query-time index lookup and scoring.
-pub mod index_query;
 /// IndexSnapshot persistence helpers.
 pub mod index_snapshot_store;
+/// Query-time index lookup and scoring.
+pub mod index_query;
 
 /// Canonical retrieval hit list artifact.
 pub mod hit_list;
@@ -151,8 +151,8 @@ pub mod planner_hints;
 
 /// Forecast schema.
 pub mod forecast;
-pub mod forecast_artifact;
 pub mod planner_hints_artifact;
+pub mod forecast_artifact;
 
 /// Context anchor terms derived from conversation history.
 pub mod context_anchors;
@@ -205,6 +205,27 @@ pub mod markov_train;
 /// Runtime Markov hint derivation helpers.
 pub mod markov_runtime;
 
+/// Exemplar memory schema.
+pub mod exemplar_memory;
+
+/// Exemplar memory artifact helpers.
+pub mod exemplar_memory_artifact;
+
+/// Offline exemplar builder helpers.
+pub mod exemplar_build;
+
+/// Runtime exemplar advisory helpers.
+pub mod exemplar_runtime;
+
+/// Graph relevance schema.
+pub mod graph_relevance;
+
+/// Graph relevance artifact helpers.
+pub mod graph_relevance_artifact;
+
+/// Offline graph relevance builder helpers.
+pub mod graph_build;
+
 /// Quality gate consolidation helpers.
 pub mod quality_gate_v1;
 
@@ -232,10 +253,10 @@ pub mod index_compaction;
 /// Segment signatures used for query-time gating.
 pub mod segment_sig;
 
-/// SegmentSig persistence helpers.
-pub mod segment_sig_store;
 /// Root-local workspace defaults (v1).
 pub mod workspace;
+/// SegmentSig persistence helpers.
+pub mod segment_sig_store;
 
 /// Debug bundle exporter.
 pub mod debug_bundle;
@@ -262,6 +283,7 @@ pub mod evidence_set_artifact;
 /// EvidenceSet verifiers.
 pub mod evidence_set_verify;
 
+
 /// Evidence builder.
 pub mod evidence_builder;
 
@@ -271,9 +293,9 @@ pub mod tokenizer;
 /// Metaphonetic preprocessor.
 pub mod metaphone;
 
-pub mod pragmatics_extract;
 /// Pragmatics control-signal schema.
 pub mod pragmatics_frame;
+pub mod pragmatics_extract;
 /// PragmaticsFrame persistence helpers.
 pub mod pragmatics_frame_store;
 
@@ -326,6 +348,6 @@ pub mod wiki_ingest;
 /// Wiktionary wikitext scanning helpers.
 pub mod wiktionary_ingest;
 
-mod wiki_xml;
 /// Wiktionary XML ingest to lexicon segments and snapshots.
 pub mod wiktionary_build;
+mod wiki_xml;

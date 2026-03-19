@@ -3,10 +3,11 @@ Artifacts (Content-Addressed Storage)
 
 Overview
 --------
-An "artifact" is a canonical byte blob (PromptPack, EvidencePack, ToolResult, TokenStream,
-VerifyReport, etc.). Artifacts are addressed by their content hash (Hash32).
+An artifact is a canonical byte blob such as a PromptPack, ReplayLog,
+EvidenceBundleV1, ConversationPackV1, or other schema-defined record.
+Artifacts are addressed by their content hash (Hash32).
 
- provides a filesystem-based artifact store:
+Novel provides a filesystem-based artifact store:
 - put(bytes) returns hash = blake3(bytes)
 - get(hash) returns the stored bytes
 
@@ -60,6 +61,12 @@ Known artifact formats
 - MarkovHints v1: docs/MARKOV_HINTS_V1.md (src/markov_hints.rs)
 - MarkovModel v1: docs/MARKOV_MODEL_V1.md (src/markov_model.rs)
 - MarkovTrace v1: docs/MARKOV_TRACE_V1.md (src/markov_trace.rs)
+- ExemplarMemory v1: docs/EXEMPLAR_MEMORY_V1.md (src/exemplar_memory.rs)
+  - Offline builder helpers live in src/exemplar_build.rs and currently mine bounded rows from PromptPack, ConversationPack, and MarkovTrace.
+  - CLI builder command: `build-exemplar-memory`
+- GraphRelevance v1: docs/GRAPH_RELEVANCE_V1.md (src/graph_relevance.rs)
+  - CLI builder command: `build-graph-relevance`
+  - Offline builder helpers live in src/graph_build.rs and currently mine conservative 1-hop rows from FrameSegmentV1.
 - GoldenPackReport v1: docs/GOLDEN_PACK_V1.md (src/golden_pack_report.rs)
 - ScaleDemoAnswersReport v1 (schema version 2): src/scale_demo.rs
 - ScaleDemoScaleReport v1 (schema version 2): docs/SCALE_REPORT_V1.md (src/scale_report.rs)

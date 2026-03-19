@@ -119,12 +119,7 @@ fn hex_to_hash32(s: &str) -> Hash32 {
     fsa_lm::hash::parse_hash32_hex(s).unwrap()
 }
 
-fn write_workspace(
-    root: &Path,
-    merged_snapshot: &str,
-    merged_sig_map: &str,
-    lexicon_snapshot: &str,
-) {
+fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str, lexicon_snapshot: &str) {
     let mut s = String::new();
     s.push_str(&format!("merged_snapshot={}\n", merged_snapshot));
     s.push_str(&format!("merged_sig_map={}\n", merged_sig_map));
@@ -220,8 +215,7 @@ fn context_anchors_are_recorded_in_ask_sessions() {
     );
     assert_eq!(a2, 0, "stderr={}", err2);
 
-    let conv_hex = parse_file_kv(&session_file, "conversation_pack")
-        .expect("conversation_pack in session file");
+    let conv_hex = parse_file_kv(&session_file, "conversation_pack").expect("conversation_pack in session file");
     let conv_hash = hex_to_hash32(&conv_hex);
 
     let store = FsArtifactStore::new(&root).unwrap();
@@ -250,18 +244,11 @@ fn context_anchors_are_recorded_in_ask_sessions() {
     }
     let anchors_hash = anchors_hash_opt.expect("context-anchors-v1 step");
 
-    let ca = get_context_anchors_v1(&store, &anchors_hash)
-        .unwrap()
-        .unwrap();
+    let ca = get_context_anchors_v1(&store, &anchors_hash).unwrap().unwrap();
     assert_eq!(ca.version, CONTEXT_ANCHORS_V1_VERSION);
-    assert!(
-        (ca.flags & CA_FLAG_USED_LEXICON) != 0,
-        "expected lexicon usage flag"
-    );
+    assert!((ca.flags & CA_FLAG_USED_LEXICON) != 0, "expected lexicon usage flag");
 
-    let tok_cfg = TokenizerCfg {
-        max_token_bytes: 32,
-    };
+    let tok_cfg = TokenizerCfg { max_token_bytes: 32 };
     let banana_tid = term_id_from_token("banana", tok_cfg);
     let banana_u64 = (banana_tid.0).0;
 

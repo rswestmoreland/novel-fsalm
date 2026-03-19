@@ -36,9 +36,7 @@ impl core::fmt::Display for LexiconExpandLookupError {
         match self {
             LexiconExpandLookupError::Snapshot(e) => write!(f, "snapshot: {}", e),
             LexiconExpandLookupError::Segment(e) => write!(f, "segment: {}", e),
-            LexiconExpandLookupError::MissingSegment(h) => {
-                write!(f, "missing lexicon segment: {}", crate::hash::hex32(h))
-            }
+            LexiconExpandLookupError::MissingSegment(h) => write!(f, "missing lexicon segment: {}", crate::hash::hex32(h)),
         }
     }
 }
@@ -130,13 +128,9 @@ impl LexiconExpandLookupV1 {
         }
     }
 
+
     /// Collect related lemma ids from a lemma-origin edge list.
-    pub fn related_lemmas_from_lemma(
-        &self,
-        from: LemmaId,
-        rel_type: RelTypeId,
-        cap: usize,
-    ) -> Vec<LemmaId> {
+    pub fn related_lemmas_from_lemma(&self, from: LemmaId, rel_type: RelTypeId, cap: usize) -> Vec<LemmaId> {
         if cap == 0 {
             return Vec::new();
         }
@@ -146,12 +140,7 @@ impl LexiconExpandLookupV1 {
     }
 
     /// Collect related lemma ids from a sense-origin edge list.
-    pub fn related_lemmas_from_sense(
-        &self,
-        from: SenseId,
-        rel_type: RelTypeId,
-        cap: usize,
-    ) -> Vec<LemmaId> {
+    pub fn related_lemmas_from_sense(&self, from: SenseId, rel_type: RelTypeId, cap: usize) -> Vec<LemmaId> {
         if cap == 0 {
             return Vec::new();
         }
@@ -160,13 +149,7 @@ impl LexiconExpandLookupV1 {
         self.collect_related(from_tag, from_id, rel_type, cap)
     }
 
-    fn collect_related(
-        &self,
-        from_tag: u8,
-        from_id: u64,
-        rel_type: RelTypeId,
-        cap: usize,
-    ) -> Vec<LemmaId> {
+    fn collect_related(&self, from_tag: u8, from_id: u64, rel_type: RelTypeId, cap: usize) -> Vec<LemmaId> {
         let raw_cap = cap.saturating_mul(8).max(cap);
         let mut tmp: Vec<LemmaId> = Vec::new();
 
@@ -174,14 +157,7 @@ impl LexiconExpandLookupV1 {
             if tmp.len() >= raw_cap {
                 break;
             }
-            collect_rel_to_lemmas(
-                &s.seg,
-                from_tag,
-                from_id,
-                rel_type,
-                raw_cap - tmp.len(),
-                &mut tmp,
-            );
+            collect_rel_to_lemmas(&s.seg, from_tag, from_id, rel_type, raw_cap - tmp.len(), &mut tmp);
         }
 
         tmp.sort_by(|a, b| ((a.0).0).cmp(&((b.0).0)));
@@ -267,19 +243,17 @@ pub fn load_lexicon_expand_lookup_v1<S: ArtifactStore>(
     let mut lemma_key_pairs: Vec<(LemmaKeyId, LemmaId)> = Vec::new();
 
     for e in &snap.entries {
-        let seg_opt =
-            get_lexicon_segment_v1(store, &e.lex_seg).map_err(LexiconExpandLookupError::Segment)?;
+        let seg_opt = get_lexicon_segment_v1(store, &e.lex_seg)
+            .map_err(LexiconExpandLookupError::Segment)?;
         let seg = match seg_opt {
             Some(s) => s,
             None => return Err(LexiconExpandLookupError::MissingSegment(e.lex_seg)),
         };
         if seg.lemma_id.len() != seg.lemma_key_id.len() {
             // This should be impossible if decode succeeded.
-            return Err(LexiconExpandLookupError::Segment(
-                LexiconSegmentStoreError::Decode(crate::codec::DecodeError::new(
-                    "lemma column length mismatch",
-                )),
-            ));
+            return Err(LexiconExpandLookupError::Segment(LexiconSegmentStoreError::Decode(
+                crate::codec::DecodeError::new("lemma column length mismatch"),
+            )));
         }
         for i in 0..seg.lemma_id.len() {
             lemma_key_pairs.push((seg.lemma_key_id[i], seg.lemma_id[i]));
@@ -309,7 +283,7 @@ mod tests {
     use crate::artifact::FsArtifactStore;
     use crate::frame::Id64;
     use crate::lexicon::{
-        LemmaId, LemmaKeyId, LemmaRowV1, RelFromId, RelTypeId, RelationEdgeRowV1, SenseId,
+        LemmaId, LemmaKeyId, LemmaRowV1, RelFromId, RelationEdgeRowV1, RelTypeId, SenseId,
         SenseRowV1, TextId, LEXICON_SCHEMA_V1, REL_RELATED, REL_SYNONYM,
     };
     use crate::lexicon_segment::LexiconSegmentV1;
@@ -406,9 +380,7 @@ mod tests {
         });
         let snap_h = put_lexicon_snapshot_v1(&store, &snap).unwrap();
 
-        let view = load_lexicon_expand_lookup_v1(&store, &snap_h)
-            .unwrap()
-            .unwrap();
+        let view = load_lexicon_expand_lookup_v1(&store, &snap_h).unwrap().unwrap();
 
         let got = view.lemma_ids_for_key(LemmaKeyId(Id64(101)), 10);
         assert_eq!(got, vec![LemmaId(Id64(11)), LemmaId(Id64(12))]);
@@ -435,9 +407,7 @@ mod tests {
         });
         let snap_h = put_lexicon_snapshot_v1(&store, &snap).unwrap();
 
-        let view = load_lexicon_expand_lookup_v1(&store, &snap_h)
-            .unwrap()
-            .unwrap();
+        let view = load_lexicon_expand_lookup_v1(&store, &snap_h).unwrap().unwrap();
 
         let got = view.related_lemmas_from_lemma(LemmaId(Id64(10)), REL_SYNONYM, 10);
         assert_eq!(got, vec![LemmaId(Id64(11)), LemmaId(Id64(12))]);

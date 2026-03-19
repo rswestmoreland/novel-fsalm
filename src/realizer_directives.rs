@@ -18,9 +18,16 @@
 use crate::codec::{ByteReader, ByteWriter, DecodeError, EncodeError};
 
 use crate::pragmatics_frame::{
-    PragmaticsFrameV1, RhetoricModeV1, INTENT_FLAG_HAS_CODE, INTENT_FLAG_HAS_CONSTRAINTS,
-    INTENT_FLAG_HAS_MATH, INTENT_FLAG_HAS_QUESTION, INTENT_FLAG_HAS_REQUEST,
-    INTENT_FLAG_IS_LOGIC_PUZZLE, INTENT_FLAG_IS_PROBLEM_SOLVE, INTENT_FLAG_SAFETY_SENSITIVE,
+    PragmaticsFrameV1,
+    RhetoricModeV1,
+    INTENT_FLAG_HAS_CODE,
+    INTENT_FLAG_HAS_CONSTRAINTS,
+    INTENT_FLAG_HAS_MATH,
+    INTENT_FLAG_HAS_QUESTION,
+    INTENT_FLAG_HAS_REQUEST,
+    INTENT_FLAG_IS_LOGIC_PUZZLE,
+    INTENT_FLAG_IS_PROBLEM_SOLVE,
+    INTENT_FLAG_SAFETY_SENSITIVE,
 };
 
 /// RealizerDirectivesV1 schema version.
@@ -161,6 +168,12 @@ pub const RD_RATIONALE_LONG_INPUT: u16 = 15;
 pub const RD_RATIONALE_LOW_POLITENESS: u16 = 16;
 /// Pragmatics indicates high arousal/urgency; prefer concise structure.
 pub const RD_RATIONALE_HIGH_AROUSAL: u16 = 17;
+/// Pragmatics indicates troubleshooting or generalized problem solving.
+pub const RD_RATIONALE_PROBLEM_SOLVE: u16 = 18;
+/// Pragmatics indicates a logic puzzle; prefer explicit procedural structure.
+pub const RD_RATIONALE_LOGIC_PUZZLE: u16 = 19;
+/// Exemplar advisory shaped runtime presentation.
+pub const RD_RATIONALE_EXEMPLAR_ADVISORY: u16 = 20;
 
 /// Validation errors for [`RealizerDirectivesV1`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -179,15 +192,11 @@ impl core::fmt::Display for RealizerDirectivesError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             RealizerDirectivesError::BadVersion => f.write_str("bad realizer directives version"),
-            RealizerDirectivesError::UnknownFormatFlags => {
-                f.write_str("unknown realizer directives format flags")
-            }
+            RealizerDirectivesError::UnknownFormatFlags => f.write_str("unknown realizer directives format flags"),
             RealizerDirectivesError::TooManyRationaleCodes => {
                 f.write_str("too many realizer directives rationale codes")
             }
-            RealizerDirectivesError::RationaleNotCanonical => {
-                f.write_str("rationale codes not canonical")
-            }
+            RealizerDirectivesError::RationaleNotCanonical => f.write_str("rationale codes not canonical"),
         }
     }
 }
@@ -355,6 +364,12 @@ pub fn derive_realizer_directives_v1(p: &PragmaticsFrameV1) -> RealizerDirective
     }
     if p.arousal >= 650 {
         push_rationale(&mut rationale, RD_RATIONALE_HIGH_AROUSAL);
+    }
+    if is_problem_solve {
+        push_rationale(&mut rationale, RD_RATIONALE_PROBLEM_SOLVE);
+    }
+    if is_logic_puzzle {
+        push_rationale(&mut rationale, RD_RATIONALE_LOGIC_PUZZLE);
     }
 
     // Tone selection (priority order).
@@ -595,6 +610,28 @@ mod tests {
         assert_eq!(d.tone, ToneV1::Supportive);
         assert_eq!(d.max_preface_sentences, 1);
         assert!(d.rationale_codes.contains(&RD_RATIONALE_EMPATHY_HIGH));
+        assert!(is_strictly_increasing(&d.rationale_codes));
+    }
+
+    #[test]
+    fn derive_problem_solve_records_rationale() {
+        let mut p = mk_prag_base();
+        p.flags = INTENT_FLAG_IS_PROBLEM_SOLVE;
+        p.validate().unwrap();
+
+        let d = derive_realizer_directives_v1(&p);
+        assert!(d.rationale_codes.contains(&RD_RATIONALE_PROBLEM_SOLVE));
+        assert!(is_strictly_increasing(&d.rationale_codes));
+    }
+
+    #[test]
+    fn derive_logic_puzzle_records_rationale() {
+        let mut p = mk_prag_base();
+        p.flags = INTENT_FLAG_IS_LOGIC_PUZZLE;
+        p.validate().unwrap();
+
+        let d = derive_realizer_directives_v1(&p);
+        assert!(d.rationale_codes.contains(&RD_RATIONALE_LOGIC_PUZZLE));
         assert!(is_strictly_increasing(&d.rationale_codes));
     }
 }

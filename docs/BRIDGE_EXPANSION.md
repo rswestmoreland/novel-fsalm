@@ -68,7 +68,7 @@ ENT (identity):
 - alias/abbreviation/canonical identity edges only
 - No "related entity" expansion in v1
 
-GRAPH (adjacency, future coprocessor):
+GRAPH (adjacency from GraphRelevanceV1, bounded offline artifact):
 - 1-hop and 2-hop neighbors on entity/verb graph
 - Strictly advisory and bounded
 

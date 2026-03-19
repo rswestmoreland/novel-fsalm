@@ -101,10 +101,7 @@ fn apply_var_mapping(c: &mut ConstraintLineV1, cf_opt: Option<&BTreeMap<String, 
     }
 }
 
-fn validate_constraints_vars(
-    vars_set: &BTreeSet<String>,
-    cs: &[ConstraintLineV1],
-) -> Result<(), PuzzleCompileErrV1> {
+fn validate_constraints_vars(vars_set: &BTreeSet<String>, cs: &[ConstraintLineV1]) -> Result<(), PuzzleCompileErrV1> {
     for c in cs.iter() {
         match c {
             ConstraintLineV1::RelVarVal { var, .. } => {
@@ -275,9 +272,7 @@ mod tests {
             has_constraints: true,
             shape: PuzzleShapeHintV1::Ordering,
         };
-        let spec = try_compile_puzzle_spec_from_sketch_v1(&sk, "A = 1\nB != A\n", 32)
-            .unwrap()
-            .unwrap();
+        let spec = try_compile_puzzle_spec_from_sketch_v1(&sk, "A = 1\nB != A\n", 32).unwrap().unwrap();
         assert_eq!(spec.vars, vec!["A".to_string(), "B".to_string()]);
         assert_eq!(spec.domain, vec![1, 2]);
         assert_eq!(spec.constraints.len(), 2);

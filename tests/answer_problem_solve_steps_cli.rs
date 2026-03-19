@@ -86,12 +86,7 @@ fn parse_hash_line(stdout: &str, key: &str) -> Option<String> {
     None
 }
 
-fn write_workspace(
-    root: &Path,
-    merged_snapshot: &str,
-    merged_sig_map: &str,
-    lexicon_snapshot: Option<&str>,
-) {
+fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str, lexicon_snapshot: Option<&str>) {
     let mut s = String::new();
     s.push_str(&format!("merged_snapshot={}\n", merged_snapshot));
     s.push_str(&format!("merged_sig_map={}\n", merged_sig_map));
@@ -159,14 +154,7 @@ fn answer_problem_solve_prefers_steps_when_lexicon_pragmatics_present() {
     let prompt_text = "Please help me troubleshoot why the banana query returns no results.";
     let (pcode, pout, perr) = run_cmd(
         bin,
-        &[
-            "prompt",
-            "--root",
-            root.to_str().unwrap(),
-            "--role",
-            "user",
-            prompt_text,
-        ],
+        &["prompt", "--root", root.to_str().unwrap(), "--role", "user", prompt_text],
     );
     assert_eq!(pcode, 0, "stderr={}", perr);
     let prompt_hash = parse_first_hex(&pout).expect("prompt hash on stdout");
@@ -211,14 +199,27 @@ fn answer_problem_solve_prefers_steps_when_lexicon_pragmatics_present() {
     );
     assert_eq!(acode, 0, "stderr={}", aerr);
 
-    let s = std::fs::read_to_string(&out_path)
-        .unwrap()
-        .replace("\r\n", "\n");
-    assert!(s.contains("Answer v1\n"));
-    assert!(s.contains("\nPlan\n"));
+    let s = std::fs::read_to_string(&out_path).unwrap().replace("\r\n", "\n");
+    assert!(!s.contains("Answer v1\n"));
+    assert!(!s.contains("query_id="));
     assert!(
-        s.contains("\nSteps\n"),
-        "expected Steps section, got: {}",
+        s.contains("Steps:") || s.contains("\nSteps\n"),
+        "output={}",
+        s
+    );
+    assert!(
+        s.contains("Steps:") || s.contains("\nSteps\n"),
+        "expected step-oriented output, got: {}",
+        s
+    );
+    assert!(
+        s.contains("\nSources\n") || s.contains("\nEvidence\n"),
+        "expected sources or evidence section, got: {}",
+        s
+    );
+    assert!(
+        s.contains("Quick question:") || !s.contains("Clarifying question:"),
+        "expected user-facing clarifier phrasing when clarification is present, got: {}",
         s
     );
 }

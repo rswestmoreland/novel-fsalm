@@ -109,11 +109,7 @@ mod tests {
             query_id: q,
             snapshot_id: s,
             tie_control_id: None,
-            hits: vec![crate::hit_list::HitV1 {
-                frame_seg: a,
-                row_ix: 1,
-                score: 7,
-            }],
+            hits: vec![crate::hit_list::HitV1 { frame_seg: a, row_ix: 1, score: 7 }],
         };
 
         let hash = put_hit_list_v1(&store, &list).unwrap();

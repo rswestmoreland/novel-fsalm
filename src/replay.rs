@@ -40,10 +40,7 @@ pub struct ReplayLog {
 impl ReplayLog {
     /// Create an empty replay log.
     pub fn new() -> Self {
-        Self {
-            version: REPLAY_LOG_VERSION,
-            steps: Vec::new(),
-        }
+        Self { version: REPLAY_LOG_VERSION, steps: Vec::new() }
     }
 
     /// Encode to canonical bytes.
@@ -126,11 +123,7 @@ impl ReplayLog {
                 outputs.push(h);
             }
 
-            steps.push(ReplayStep {
-                name,
-                inputs,
-                outputs,
-            });
+            steps.push(ReplayStep { name, inputs, outputs });
         }
 
         if r.remaining() != 0 {

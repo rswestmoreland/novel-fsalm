@@ -182,11 +182,7 @@ pub fn parse_wiktionary_page_text(
                 collect_relation_targets(line, &mut out.derived_terms, cfg.max_relations_per_type);
             }
             Mode::CoordinateTerms => {
-                collect_relation_targets(
-                    line,
-                    &mut out.coordinate_terms,
-                    cfg.max_relations_per_type,
-                );
+                collect_relation_targets(line, &mut out.coordinate_terms, cfg.max_relations_per_type);
             }
             Mode::Holonyms => {
                 collect_relation_targets(line, &mut out.holonyms, cfg.max_relations_per_type);
@@ -195,12 +191,7 @@ pub fn parse_wiktionary_page_text(
                 collect_relation_targets(line, &mut out.meronyms, cfg.max_relations_per_type);
             }
             Mode::Pronunciation => {
-                collect_ipa_templates(
-                    line,
-                    &mut out.ipas,
-                    cfg.max_pronunciations_per_lemma,
-                    cfg.max_ipa_bytes,
-                );
+                collect_ipa_templates(line, &mut out.ipas, cfg.max_pronunciations_per_lemma, cfg.max_ipa_bytes);
             }
             Mode::Other => {}
         }
@@ -490,6 +481,7 @@ mod tests {
         assert_eq!(got.ipas, vec!["/test/".to_string()]);
     }
 
+
     #[test]
     fn parse_sense_strips_leading_lb_template() {
         let cfg = WiktionaryParseCfg::default_v1();
@@ -592,9 +584,6 @@ mod tests {
     fn parse_heading_with_spaces() {
         assert_eq!(parse_heading("== English =="), Some((2, "English")));
         assert_eq!(parse_heading("===Proper noun==="), Some((3, "Proper noun")));
-        assert_eq!(
-            parse_heading("====Related terms===="),
-            Some((4, "Related terms"))
-        );
+        assert_eq!(parse_heading("====Related terms===="), Some((4, "Related terms")));
     }
 }

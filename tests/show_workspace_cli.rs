@@ -49,29 +49,38 @@ fn show_workspace_prints_resolved_values_and_last_wins() {
 
     let ws_path = root.join("workspace_v1.txt");
     let txt = format!(
-        "# comment\nunknown=abc\nmerged_snapshot={}\nmerged_snapshot={}\nmerged_sig_map={}\nlexicon_snapshot={}\ndefault_k=20\ndefault_expand=1\ndefault_meta=0\n",
+        "# comment\nunknown=abc\nmerged_snapshot={}\nmerged_snapshot={}\nmerged_sig_map={}\nlexicon_snapshot={}\ndefault_k=20\ndefault_expand=1\ndefault_meta=0\nmarkov_model={}\nexemplar_memory={}\ngraph_relevance={}\n",
         h('1'),
         h('2'),
         h('3'),
-        h('4')
+        h('4'),
+        h('5'),
+        h('6'),
+        h('7')
     );
     std::fs::write(&ws_path, txt.as_bytes()).unwrap();
 
     let bin = env!("CARGO_BIN_EXE_fsa_lm");
-    let (code, stdout, stderr) =
-        run_cmd(bin, &["show-workspace", "--root", root.to_str().unwrap()]);
+    let (code, stdout, stderr) = run_cmd(
+        bin,
+        &[
+            "show-workspace",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+    );
     assert_eq!(code, 0, "stderr={}", stderr);
 
     assert_eq!(find_line_value(&stdout, "workspace_present").unwrap(), "1");
     assert_eq!(find_line_value(&stdout, "merged_snapshot").unwrap(), h('2'));
     assert_eq!(find_line_value(&stdout, "merged_sig_map").unwrap(), h('3'));
-    assert_eq!(
-        find_line_value(&stdout, "lexicon_snapshot").unwrap(),
-        h('4')
-    );
+    assert_eq!(find_line_value(&stdout, "lexicon_snapshot").unwrap(), h('4'));
     assert_eq!(find_line_value(&stdout, "default_k").unwrap(), "20");
     assert_eq!(find_line_value(&stdout, "default_expand").unwrap(), "1");
     assert_eq!(find_line_value(&stdout, "default_meta").unwrap(), "0");
+    assert_eq!(find_line_value(&stdout, "markov_model").unwrap(), h('5'));
+    assert_eq!(find_line_value(&stdout, "exemplar_memory").unwrap(), h('6'));
+    assert_eq!(find_line_value(&stdout, "graph_relevance").unwrap(), h('7'));
     assert_eq!(find_line_value(&stdout, "workspace_pair_ok").unwrap(), "1");
     assert_eq!(find_line_value(&stdout, "workspace_ready").unwrap(), "1");
 }
@@ -87,8 +96,14 @@ fn show_workspace_marks_pair_inconsistent() {
     std::fs::write(&ws_path, txt.as_bytes()).unwrap();
 
     let bin = env!("CARGO_BIN_EXE_fsa_lm");
-    let (code, stdout, stderr) =
-        run_cmd(bin, &["show-workspace", "--root", root.to_str().unwrap()]);
+    let (code, stdout, stderr) = run_cmd(
+        bin,
+        &[
+            "show-workspace",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+    );
     assert_eq!(code, 0, "stderr={}", stderr);
     assert_eq!(find_line_value(&stdout, "workspace_pair_ok").unwrap(), "0");
     assert_eq!(find_line_value(&stdout, "workspace_ready").unwrap(), "0");

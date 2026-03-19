@@ -226,9 +226,7 @@ impl LexiconSegmentV1 {
             match ta.cmp(&tb) {
                 core::cmp::Ordering::Equal => match fa.cmp(&fb) {
                     core::cmp::Ordering::Equal => match a.rel_type_id.0.cmp(&b.rel_type_id.0) {
-                        core::cmp::Ordering::Equal => {
-                            ((a.to_lemma_id.0).0).cmp(&((b.to_lemma_id.0).0))
-                        }
+                        core::cmp::Ordering::Equal => ((a.to_lemma_id.0).0).cmp(&((b.to_lemma_id.0).0)),
                         other => other,
                     },
                     other => other,
@@ -251,9 +249,7 @@ impl LexiconSegmentV1 {
             let la = (a.lemma_id.0).0;
             let lb = (b.lemma_id.0).0;
             match la.cmp(&lb) {
-                core::cmp::Ordering::Equal => match ((a.ipa_text_id.0).0)
-                    .cmp(&((b.ipa_text_id.0).0))
-                {
+                core::cmp::Ordering::Equal => match ((a.ipa_text_id.0).0).cmp(&((b.ipa_text_id.0).0)) {
                     core::cmp::Ordering::Equal => match a.flags.cmp(&b.flags) {
                         core::cmp::Ordering::Equal => cmp_meta_list(&a.meta_codes, &b.meta_codes),
                         other => other,
@@ -369,8 +365,7 @@ impl LexiconSegmentV1 {
         };
 
         // Validate internal canonical invariants to ensure build always yields encodable segments.
-        seg.validate_canonical_encode()
-            .map_err(|_| LexiconBuildError::NonCanonicalMetaCodes)?;
+        seg.validate_canonical_encode().map_err(|_| LexiconBuildError::NonCanonicalMetaCodes)?;
         Ok(seg)
     }
 
@@ -614,30 +609,20 @@ impl LexiconSegmentV1 {
     }
 
     fn validate_canonical_encode(&self) -> Result<(), EncodeError> {
-        self.validate_counts()
-            .map_err(|_| EncodeError::new("column length mismatch"))?;
-        self.validate_lemmas()
-            .map_err(|_| EncodeError::new("lemmas not canonical"))?;
-        self.validate_senses()
-            .map_err(|_| EncodeError::new("senses not canonical"))?;
-        self.validate_relations()
-            .map_err(|_| EncodeError::new("relations not canonical"))?;
-        self.validate_prons()
-            .map_err(|_| EncodeError::new("pronunciations not canonical"))?;
+        self.validate_counts().map_err(|_| EncodeError::new("column length mismatch"))?;
+        self.validate_lemmas().map_err(|_| EncodeError::new("lemmas not canonical"))?;
+        self.validate_senses().map_err(|_| EncodeError::new("senses not canonical"))?;
+        self.validate_relations().map_err(|_| EncodeError::new("relations not canonical"))?;
+        self.validate_prons().map_err(|_| EncodeError::new("pronunciations not canonical"))?;
         Ok(())
     }
 
     fn validate_canonical_decode(&self) -> Result<(), DecodeError> {
-        self.validate_counts()
-            .map_err(|_| DecodeError::new("column length mismatch"))?;
-        self.validate_lemmas()
-            .map_err(|_| DecodeError::new("lemmas not canonical"))?;
-        self.validate_senses()
-            .map_err(|_| DecodeError::new("senses not canonical"))?;
-        self.validate_relations()
-            .map_err(|_| DecodeError::new("relations not canonical"))?;
-        self.validate_prons()
-            .map_err(|_| DecodeError::new("pronunciations not canonical"))?;
+        self.validate_counts().map_err(|_| DecodeError::new("column length mismatch"))?;
+        self.validate_lemmas().map_err(|_| DecodeError::new("lemmas not canonical"))?;
+        self.validate_senses().map_err(|_| DecodeError::new("senses not canonical"))?;
+        self.validate_relations().map_err(|_| DecodeError::new("relations not canonical"))?;
+        self.validate_prons().map_err(|_| DecodeError::new("pronunciations not canonical"))?;
         Ok(())
     }
 
@@ -661,10 +646,7 @@ impl LexiconSegmentV1 {
         }
 
         let rc = self.rel_from_tag.len();
-        if self.rel_from_id.len() != rc
-            || self.rel_type_id.len() != rc
-            || self.rel_to_lemma_id.len() != rc
-        {
+        if self.rel_from_id.len() != rc || self.rel_type_id.len() != rc || self.rel_to_lemma_id.len() != rc {
             return Err(());
         }
 
@@ -833,20 +815,10 @@ mod tests {
         let l2 = LemmaRowV1::new("day", POS_NOUN, 0);
         let s1 = SenseRowV1::new(l1.lemma_id, 0, "The time of darkness.", 0);
         let s2 = SenseRowV1::new(l2.lemma_id, 0, "The period of light.", 0);
-        let r1 = RelationEdgeRowV1::new(
-            RelFromId::Lemma(l1.lemma_id),
-            REL_SYNONYM,
-            derive_lemma_id("evening"),
-        );
+        let r1 = RelationEdgeRowV1::new(RelFromId::Lemma(l1.lemma_id), REL_SYNONYM, derive_lemma_id("evening"));
         let p1 = PronunciationRowV1::new(l1.lemma_id, "nait", vec![mc(2), mc(1), mc(2)], 7);
 
-        let seg = LexiconSegmentV1::build_from_rows(
-            &[l1.clone(), l2.clone()],
-            &[s1.clone(), s2.clone()],
-            &[r1.clone()],
-            &[p1.clone()],
-        )
-        .unwrap();
+        let seg = LexiconSegmentV1::build_from_rows(&[l1.clone(), l2.clone()], &[s1.clone(), s2.clone()], &[r1.clone()], &[p1.clone()]).unwrap();
         let bytes = seg.encode().unwrap();
         let seg2 = LexiconSegmentV1::decode(&bytes).unwrap();
         assert_eq!(seg, seg2);
@@ -858,28 +830,12 @@ mod tests {
         let l2 = LemmaRowV1::new("day", POS_NOUN, 0);
         let s1 = SenseRowV1::new(l1.lemma_id, 0, "The time of darkness.", 0);
         let s2 = SenseRowV1::new(l2.lemma_id, 0, "The period of light.", 0);
-        let r1 = RelationEdgeRowV1::new(
-            RelFromId::Lemma(l1.lemma_id),
-            REL_SYNONYM,
-            derive_lemma_id("evening"),
-        );
+        let r1 = RelationEdgeRowV1::new(RelFromId::Lemma(l1.lemma_id), REL_SYNONYM, derive_lemma_id("evening"));
         let p1 = PronunciationRowV1::new(l1.lemma_id, "nait", vec![mc(1), mc(3)], 0);
         let p2 = PronunciationRowV1::new(l1.lemma_id, "nait", vec![mc(1), mc(2)], 0);
 
-        let a = LexiconSegmentV1::build_from_rows(
-            &[l1.clone(), l2.clone()],
-            &[s1.clone(), s2.clone()],
-            &[r1.clone()],
-            &[p1.clone(), p2.clone()],
-        )
-        .unwrap();
-        let b = LexiconSegmentV1::build_from_rows(
-            &[l2.clone(), l1.clone()],
-            &[s2.clone(), s1.clone()],
-            &[r1.clone()],
-            &[p2.clone(), p1.clone()],
-        )
-        .unwrap();
+        let a = LexiconSegmentV1::build_from_rows(&[l1.clone(), l2.clone()], &[s1.clone(), s2.clone()], &[r1.clone()], &[p1.clone(), p2.clone()]).unwrap();
+        let b = LexiconSegmentV1::build_from_rows(&[l2.clone(), l1.clone()], &[s2.clone(), s1.clone()], &[r1.clone()], &[p2.clone(), p1.clone()]).unwrap();
         assert_eq!(a.encode().unwrap(), b.encode().unwrap());
     }
 

@@ -6,11 +6,10 @@ Overview
 EvidenceSetV1 is a compact, canonical artifact schema that maps claims (or output
 spans) to evidence row references.
 
-The intent is to make answers auditable and to enable future evaluation and
-training stages by recording which evidence rows support which claims.
-
- introduces the schema and codec only. Wiring into the answer pipeline
-and ReplayLog happens in future updates.
+The intent is to make answers auditable by recording which evidence rows
+support which claims or output spans. The current answer path can emit and
+verify EvidenceSetV1 artifacts, while this document stays focused on the
+artifact schema and canonical codec.
 
 Binary format (v1)
 ------------------
@@ -56,7 +55,8 @@ Verifiers
 The EvidenceSet codec enforces canonical ordering, but it does not verify
 artifact existence or referential integrity.
 
- adds small, deterministic verifiers in `src/evidence_set_verify.rs`:
+The current runtime also includes small, deterministic verifiers in
+`src/evidence_set_verify.rs`:
 - items must be non-empty
 - each item must have at least one evidence ref
 - the referenced EvidenceBundle artifact must exist

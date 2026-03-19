@@ -64,12 +64,7 @@ impl SegmentSigV1 {
     ///
     /// `bloom_bytes` controls the bitset size. `bloom_k` controls the number
     /// of probes per term.
-    pub fn build(
-        index_seg: Hash32,
-        terms: &[TermId],
-        bloom_bytes: usize,
-        bloom_k: u8,
-    ) -> Result<Self, SegmentSigBuildError> {
+    pub fn build(index_seg: Hash32, terms: &[TermId], bloom_bytes: usize, bloom_k: u8) -> Result<Self, SegmentSigBuildError> {
         if bloom_bytes == 0 {
             return Err(SegmentSigBuildError::EmptyBloom);
         }
@@ -215,12 +210,7 @@ impl SegmentSigV1 {
             return Err(DecodeError::new("trailing bytes"));
         }
 
-        Ok(SegmentSigV1 {
-            index_seg,
-            bloom_k,
-            bloom_bits,
-            sketch,
-        })
+        Ok(SegmentSigV1 { index_seg, bloom_k, bloom_bits, sketch })
     }
 }
 
@@ -281,12 +271,7 @@ mod tests {
     #[test]
     fn sig_is_deterministic_under_term_order() {
         let idx = h(9);
-        let a = [
-            TermId(Id64(10)),
-            TermId(Id64(11)),
-            TermId(Id64(12)),
-            TermId(Id64(13)),
-        ];
+        let a = [TermId(Id64(10)), TermId(Id64(11)), TermId(Id64(12)), TermId(Id64(13))];
         let b = [a[3], a[1], a[0], a[2]];
         let sa = SegmentSigV1::build(idx, &a, 256, 9).unwrap();
         let sb = SegmentSigV1::build(idx, &b, 256, 9).unwrap();

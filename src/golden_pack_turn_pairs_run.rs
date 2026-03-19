@@ -13,7 +13,6 @@
 //! (variant 0 vs 1) in a regression-friendly pack.
 
 use crate::artifact::ArtifactStore;
-use crate::evidence_artifact::EvidenceArtifactError;
 use crate::golden_pack_turn_pairs::{
     GoldenPackTurnPairsReportV1, GOLDEN_PACK_TURN_PAIRS_REPORT_V1_VERSION,
 };
@@ -21,24 +20,30 @@ use crate::golden_pack_turn_pairs_artifact::{
     put_golden_pack_turn_pairs_report_v1, GoldenPackTurnPairsArtifactError,
 };
 use crate::hash::{hex32, Hash32};
-use crate::markov_hints::{MarkovChoiceKindV1, MarkovHintsFlagsV1, MH_FLAG_HAS_PRAGMATICS};
-use crate::markov_hints_artifact::MarkovHintsArtifactError;
+use crate::markov_hints::{
+    MarkovChoiceKindV1, MarkovHintsFlagsV1, MH_FLAG_HAS_PRAGMATICS,
+};
 use crate::markov_model::{MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1};
 use crate::markov_model_artifact::{put_markov_model_v1, MarkovModelArtifactError};
 use crate::markov_runtime::derive_markov_hints_opener_preface_v1;
 use crate::markov_trace::MarkovTraceV1;
 use crate::markov_trace_artifact::{put_markov_trace_v1, MarkovTraceArtifactError};
-use crate::planner_v1::{plan_from_evidence_bundle_v1_with_guidance, PlannerCfgV1, PlannerV1Error};
+use crate::markov_hints_artifact::MarkovHintsArtifactError;
+use crate::evidence_artifact::EvidenceArtifactError;
+use crate::planner_v1::{
+    plan_from_evidence_bundle_v1_with_guidance, PlannerCfgV1, PlannerV1Error,
+};
 use crate::realizer_directives::{
-    RealizerDirectivesV1, StyleV1, ToneV1, FORMAT_FLAG_INCLUDE_SUMMARY,
-    REALIZER_DIRECTIVES_V1_VERSION,
+    RealizerDirectivesV1, REALIZER_DIRECTIVES_V1_VERSION, StyleV1, ToneV1,
+    FORMAT_FLAG_INCLUDE_SUMMARY,
 };
 use crate::realizer_directives_artifact::{
     put_realizer_directives_v1, RealizerDirectivesArtifactError,
 };
+use crate::quality_gate_v1::build_markov_trace_tokens_v1;
 use crate::realizer_v1::{
-    append_clarifying_question_v1, realize_answer_plan_v1_with_directives_and_markov_events,
-    RealizerCfgV1, RealizerV1Error,
+    append_clarifying_question_v1_with_markov_events,
+    realize_answer_plan_v1_with_directives_and_markov_events, RealizerCfgV1, RealizerV1Error,
 };
 use crate::scale_demo::{
     run_scale_demo_build_evidence_bundles_v1, run_scale_demo_build_index_from_manifest_v1,
@@ -272,44 +277,19 @@ fn build_preface_variant1_model_v1() -> MarkovModelV1 {
     m
 }
 
-fn plan_item_token(
-    it: crate::answer_plan::AnswerPlanItemKindV1,
-) -> (MarkovChoiceKindV1, &'static [u8]) {
-    match it {
-        crate::answer_plan::AnswerPlanItemKindV1::Summary => {
-            (MarkovChoiceKindV1::Opener, b"plan_item:summary")
-        }
-        crate::answer_plan::AnswerPlanItemKindV1::Bullet => {
-            (MarkovChoiceKindV1::Transition, b"plan_item:bullet")
-        }
-        crate::answer_plan::AnswerPlanItemKindV1::Step => {
-            (MarkovChoiceKindV1::Transition, b"plan_item:step")
-        }
-        crate::answer_plan::AnswerPlanItemKindV1::Caveat => {
-            (MarkovChoiceKindV1::Closer, b"plan_item:caveat")
-        }
-    }
-}
-
 /// Run the v1 turn-pairs golden pack in-process, store artifacts, and return the output.
 pub fn run_golden_pack_turn_pairs_v1<S: ArtifactStore>(
     store: &S,
     cfg: GoldenPackTurnPairsRunCfgV1,
 ) -> Result<GoldenPackTurnPairsRunOutputV1, GoldenPackTurnPairsRunError> {
     if cfg.version != GOLDEN_PACK_TURN_PAIRS_RUN_CFG_V1_VERSION {
-        return Err(GoldenPackTurnPairsRunError::Cfg(
-            "unsupported turn-pairs cfg version",
-        ));
+        return Err(GoldenPackTurnPairsRunError::Cfg("unsupported turn-pairs cfg version"));
     }
     if cfg.workload.version != WORKLOAD_GEN_V1_VERSION {
-        return Err(GoldenPackTurnPairsRunError::Cfg(
-            "unsupported workload version",
-        ));
+        return Err(GoldenPackTurnPairsRunError::Cfg("unsupported workload version"));
     }
     if cfg.workload.query_count != 2 {
-        return Err(GoldenPackTurnPairsRunError::Cfg(
-            "workload.query_count must be 2",
-        ));
+        return Err(GoldenPackTurnPairsRunError::Cfg("workload.query_count must be 2"));
     }
 
     // Build a deterministic store of docs, index, and evidence bundles.
@@ -318,10 +298,8 @@ pub fn run_golden_pack_turn_pairs_v1<S: ArtifactStore>(
         workload: cfg.workload.clone(),
     };
 
-    let (_gen_report, frames_report) =
-        run_scale_demo_generate_and_ingest_frames_v1(store, scale_cfg.clone())?;
-    let index_report =
-        run_scale_demo_build_index_from_manifest_v1(store, &frames_report.frame_manifest_hash)?;
+    let (_gen_report, frames_report) = run_scale_demo_generate_and_ingest_frames_v1(store, scale_cfg.clone())?;
+    let index_report = run_scale_demo_build_index_from_manifest_v1(store, &frames_report.frame_manifest_hash)?;
     let evidence_report = run_scale_demo_build_evidence_bundles_v1(
         store,
         scale_cfg.clone(),
@@ -389,30 +367,25 @@ pub fn run_golden_pack_turn_pairs_v1<S: ArtifactStore>(
         )?;
 
         let mut text = ro.text;
-        let did_append_q = append_clarifying_question_v1(
+        let mut markov_events = ro.markov;
+        let did_append_q = append_clarifying_question_v1_with_markov_events(
             &mut text,
             &planner_hints,
             &forecast,
             directives.max_questions,
+            markov_hints_opt.as_ref(),
+            &mut markov_events,
         );
 
         let ah = store.put(text.as_bytes())?;
         answer_hashes.push(ah);
 
         // Build Markov trace tokens.
-        let mut mt_tokens: Vec<MarkovTokenV1> = Vec::with_capacity(plan.items.len() + 2);
-        if let Some(cid) = ro.markov.opener_preface_choice {
-            mt_tokens.push(MarkovTokenV1::new(MarkovChoiceKindV1::Opener, cid));
-        }
-        for it in plan.items.iter() {
-            let (k, lbl) = plan_item_token(it.kind);
-            let cid = crate::frame::derive_id64(b"markov_choice_v1", lbl);
-            mt_tokens.push(MarkovTokenV1::new(k, cid));
-        }
-        if did_append_q {
-            let cid = crate::frame::derive_id64(b"markov_choice_v1", b"append:clarify_question");
-            mt_tokens.push(MarkovTokenV1::new(MarkovChoiceKindV1::Closer, cid));
-        }
+        let mt_tokens: Vec<MarkovTokenV1> = build_markov_trace_tokens_v1(
+            &plan,
+            &markov_events,
+            did_append_q,
+        );
 
         let trace = MarkovTraceV1 {
             version: crate::markov_trace::MARKOV_TRACE_V1_VERSION,
@@ -507,12 +480,8 @@ mod tests {
         let s = FsArtifactStore::new(&d).unwrap();
         let o = run_golden_pack_turn_pairs_v1(&s, cfg).unwrap();
 
-        let t0 = get_markov_trace_v1(&s, &o.trace_hashes[0])
-            .unwrap()
-            .unwrap();
-        let t1 = get_markov_trace_v1(&s, &o.trace_hashes[1])
-            .unwrap()
-            .unwrap();
+        let t0 = get_markov_trace_v1(&s, &o.trace_hashes[0]).unwrap().unwrap();
+        let t1 = get_markov_trace_v1(&s, &o.trace_hashes[1]).unwrap().unwrap();
 
         assert!(!t0.tokens.is_empty());
         assert!(!t1.tokens.is_empty());

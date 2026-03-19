@@ -1,5 +1,5 @@
-Retrieval pipeline design (D + C/B hybrid)
-=========================================
+Retrieval pipeline
+==================
 
 Purpose
 -------
@@ -8,26 +8,24 @@ small, structured evidence for reasoning and synthesis. The system avoids copyin
 large text spans. Evidence is represented as compact typed rows (frames + lexicon),
 referenced by stable ids and hashes.
 
-This document captures the current retrieval design decisions:
+This document captures the current retrieval design:
 
-- D: segment/chunk gating (Bloom + sketch/fingerprint)
-- C: postings in a columnar format (row ids separate from tfs)
-- B (later): BlockMax / WAND-style top-k skipping, still deterministic
-- MRS: integer-only memory relevance scoring
-- Deterministic query planning and tie-breaking
-- Evidence and synthesis contracts (anti-plagiarism guardrails)
+- deterministic IndexSegmentV1 lookup over columnar postings
+- optional SegmentSigV1 gating via IndexSigMapV1
+- integer-only memory relevance scoring
+- deterministic query planning and tie-breaking
+- EvidenceBundleV1 assembly and evidence-first synthesis contracts
 
 Implementation status note
 --------------------------
-The current codebase implements Stage 2 style exact lookup for IndexSegmentV1
-postings (query-index) and EvidenceBundleV1 assembly. Stage 1 segment/chunk
-gating and skip strategies are available when the caller provides an
-IndexSigMapV1 hash (for example via the CLI flag --sig-map). When enabled,
-the query path consults SegmentSigV1 before loading index artifacts and can
-skip unrelated artifacts deterministically.
+The current codebase implements exact IndexSegmentV1 lookup for `query-index`,
+optional deterministic SegmentSigV1 gating when the caller provides an
+`IndexSigMapV1` hash (for example via `--sig-map`), and EvidenceBundleV1
+assembly for the answer path. Block-level top-k skipping remains a reserved
+extension.
 
- note
------------------
+Control note
+------------
 RetrievalControlV1 is an optional control record derived from the pragmatics track.
 When the caller provides a control record to the query path:
 - Equal-score hit ordering uses a control-derived tie-break key (deterministic).

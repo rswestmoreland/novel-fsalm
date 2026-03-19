@@ -61,7 +61,7 @@ mod tests {
     use super::*;
     use crate::artifact::FsArtifactStore;
     use crate::proof_artifact::{
-        ConstraintV1, ProofSolveStatsV1, PA_FLAG_EXPECT_UNIQUE, PROOF_ARTIFACT_V1_VERSION,
+        ConstraintV1, ProofSolveStatsV1, PROOF_ARTIFACT_V1_VERSION, PA_FLAG_EXPECT_UNIQUE,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -91,10 +91,7 @@ mod tests {
             domain: vec![1, 2, 3],
             constraints: vec![ConstraintV1::NeqVarVar { a: 0, b: 1 }],
             solutions: Vec::new(),
-            stats: ProofSolveStatsV1 {
-                nodes: 0,
-                backtracks: 0,
-            },
+            stats: ProofSolveStatsV1 { nodes: 0, backtracks: 0 },
         };
 
         let hid = put_proof_artifact_v1(&store, &p).unwrap();

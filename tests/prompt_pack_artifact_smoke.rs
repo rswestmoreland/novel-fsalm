@@ -26,18 +26,9 @@ fn prompt_pack_artifact_round_trip() {
     };
 
     let mut p = PromptPack::new(7, 55, ids);
-    p.messages.push(Message {
-        role: Role::System,
-        content: "SYS".to_string(),
-    });
-    p.messages.push(Message {
-        role: Role::User,
-        content: "hello".to_string(),
-    });
-    p.messages.push(Message {
-        role: Role::Assistant,
-        content: "world".to_string(),
-    });
+    p.messages.push(Message { role: Role::System, content: "SYS".to_string() });
+    p.messages.push(Message { role: Role::User, content: "hello".to_string() });
+    p.messages.push(Message { role: Role::Assistant, content: "world".to_string() });
 
     let limits = PromptLimits::default_v1();
     let h = put_prompt_pack(&store, &mut p, limits).unwrap();
@@ -61,18 +52,12 @@ fn prompt_pack_artifact_hash_is_stable_for_same_canonical_bytes() {
 
     // Same logical content, different constraint insertion order.
     let mut p1 = PromptPack::new(1, 10, ids);
-    p1.messages.push(Message {
-        role: Role::User,
-        content: "x".to_string(),
-    });
+    p1.messages.push(Message { role: Role::User, content: "x".to_string() });
     p1.add_constraint("b", "2");
     p1.add_constraint("a", "1");
 
     let mut p2 = PromptPack::new(1, 10, ids);
-    p2.messages.push(Message {
-        role: Role::User,
-        content: "x".to_string(),
-    });
+    p2.messages.push(Message { role: Role::User, content: "x".to_string() });
     p2.add_constraint("a", "1");
     p2.add_constraint("b", "2");
 

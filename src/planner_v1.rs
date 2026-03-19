@@ -148,9 +148,13 @@ use crate::planner_hints::{
     PH_FLAG_PREFER_CAVEATS, PH_FLAG_PREFER_CLARIFY, PH_FLAG_PREFER_DIRECT, PH_FLAG_PREFER_STEPS,
 };
 use crate::pragmatics_frame::{
-    PragmaticsFrameV1, INTENT_FLAG_HAS_CODE, INTENT_FLAG_HAS_CONSTRAINTS, INTENT_FLAG_HAS_MATH,
-    INTENT_FLAG_HAS_QUESTION, INTENT_FLAG_HAS_REQUEST, INTENT_FLAG_IS_FOLLOW_UP,
-    INTENT_FLAG_IS_LOGIC_PUZZLE, INTENT_FLAG_IS_PROBLEM_SOLVE, INTENT_FLAG_SAFETY_SENSITIVE,
+    PragmaticsFrameV1, INTENT_FLAG_HAS_CODE, INTENT_FLAG_HAS_COMPARE_TARGETS,
+    INTENT_FLAG_HAS_CONSTRAINTS, INTENT_FLAG_HAS_FOCUS_EXAMPLE, INTENT_FLAG_HAS_FOCUS_STEPS,
+    INTENT_FLAG_HAS_FOCUS_SUMMARY, INTENT_FLAG_HAS_MATH, INTENT_FLAG_HAS_QUESTION,
+    INTENT_FLAG_HAS_REQUEST, INTENT_FLAG_IS_COMPARE_REQUEST, INTENT_FLAG_IS_EXPLAIN_REQUEST,
+    INTENT_FLAG_IS_FOLLOW_UP, INTENT_FLAG_IS_LOGIC_PUZZLE, INTENT_FLAG_IS_PROBLEM_SOLVE,
+    INTENT_FLAG_IS_RECOMMEND_REQUEST, INTENT_FLAG_IS_SUMMARIZE_REQUEST,
+    INTENT_FLAG_SAFETY_SENSITIVE,
 };
 
 // Internal stable ids for planner hints.
@@ -175,6 +179,12 @@ const FOLLOWUP_ID_ENV: u64 = 107;
 // Logic puzzle followups.
 const FOLLOWUP_ID_PUZZLE_VARS: u64 = 108;
 const FOLLOWUP_ID_PUZZLE_UNIQUE: u64 = 109;
+const FOLLOWUP_ID_RECOMMEND_PRIORITIES: u64 = 110;
+const FOLLOWUP_ID_SUMMARIZE_FOCUS: u64 = 111;
+const FOLLOWUP_ID_EXPLAIN_FOCUS: u64 = 112;
+const FOLLOWUP_ID_COMPARE_CRITERIA: u64 = 113;
+const FOLLOWUP_ID_SUMMARY_DEPTH: u64 = 114;
+const FOLLOWUP_ID_EXPLAIN_STYLE: u64 = 115;
 
 // Internal stable ids for forecast intents.
 const FC_INTENT_ID_CLARIFY: u64 = 1;
@@ -199,6 +209,14 @@ const FC_QUESTION_ID_WHAT_CHANGED: u64 = 206;
 const FC_QUESTION_ID_ENV: u64 = 207;
 const FC_QUESTION_ID_PUZZLE_VARS: u64 = 208;
 const FC_QUESTION_ID_PUZZLE_UNIQUE: u64 = 209;
+const FC_QUESTION_ID_RECOMMEND_PRIORITIES: u64 = 210;
+const FC_QUESTION_ID_SUMMARIZE_FOCUS: u64 = 211;
+const FC_QUESTION_ID_EXPLAIN_FOCUS: u64 = 212;
+const FC_QUESTION_ID_COMPARE_CRITERIA: u64 = 213;
+const FC_QUESTION_ID_SUMMARY_DEPTH: u64 = 214;
+const FC_QUESTION_ID_SUMMARY_EXAMPLE: u64 = 215;
+const FC_QUESTION_ID_EXPLAIN_SUMMARY: u64 = 216;
+const FC_QUESTION_ID_EXPLAIN_EXAMPLE: u64 = 217;
 
 /// Planner output bundle including guidance artifacts.
 ///
@@ -286,6 +304,14 @@ fn build_planner_hints_v1(
     let mut is_follow_up = false;
     let mut is_problem_solve = false;
     let mut is_logic_puzzle = false;
+    let mut is_compare_request = false;
+    let mut is_recommend_request = false;
+    let mut is_summarize_request = false;
+    let mut is_explain_request = false;
+    let mut has_compare_targets = false;
+    let mut has_focus_summary = false;
+    let mut has_focus_steps = false;
+    let mut has_focus_example = false;
     let mut safety_sensitive = false;
 
     if let Some(p) = prag_opt {
@@ -298,6 +324,14 @@ fn build_planner_hints_v1(
         is_follow_up = (f & INTENT_FLAG_IS_FOLLOW_UP) != 0;
         is_problem_solve = (f & INTENT_FLAG_IS_PROBLEM_SOLVE) != 0;
         is_logic_puzzle = (f & INTENT_FLAG_IS_LOGIC_PUZZLE) != 0;
+        is_compare_request = (f & INTENT_FLAG_IS_COMPARE_REQUEST) != 0;
+        is_recommend_request = (f & INTENT_FLAG_IS_RECOMMEND_REQUEST) != 0;
+        is_summarize_request = (f & INTENT_FLAG_IS_SUMMARIZE_REQUEST) != 0;
+        is_explain_request = (f & INTENT_FLAG_IS_EXPLAIN_REQUEST) != 0;
+        has_compare_targets = (f & INTENT_FLAG_HAS_COMPARE_TARGETS) != 0;
+        has_focus_summary = (f & INTENT_FLAG_HAS_FOCUS_SUMMARY) != 0;
+        has_focus_steps = (f & INTENT_FLAG_HAS_FOCUS_STEPS) != 0;
+        has_focus_example = (f & INTENT_FLAG_HAS_FOCUS_EXAMPLE) != 0;
         safety_sensitive = (f & INTENT_FLAG_SAFETY_SENSITIVE) != 0;
     }
 
@@ -312,14 +346,22 @@ fn build_planner_hints_v1(
 
     // Prefer steps when the message contains constraints, code, or math.
     // Also prefer steps for problem-solving and logic puzzles when detected by pragmatics.
-    let prefer_steps =
-        has_constraints || has_code || has_math || is_problem_solve || is_logic_puzzle;
+    let prefer_steps = has_constraints
+        || has_code
+        || has_math
+        || is_problem_solve
+        || is_logic_puzzle
+        || is_explain_request
+        || has_focus_steps;
     if prefer_steps {
         flags |= PH_FLAG_PREFER_STEPS;
     }
 
     // Prefer direct when the message is short and question-like.
-    let prefer_direct = has_question && evidence_n <= 8;
+    let prefer_direct = (has_question && evidence_n <= 8)
+        || is_recommend_request
+        || is_summarize_request
+        || has_focus_summary;
     if prefer_direct {
         flags |= PH_FLAG_PREFER_DIRECT;
     }
@@ -357,17 +399,20 @@ fn build_planner_hints_v1(
         ));
     }
 
-    // Summary-first when there is enough evidence to summarize.
-    if evidence_n >= 3 {
+    // Summary-first when there is enough evidence to summarize,
+    // or when the user explicitly asks for a summary.
+    if evidence_n >= 3 || (is_summarize_request && evidence_n >= 1) {
         hints.push(PlannerHintItemV1::new(
             PlannerHintKindV1::SummaryFirst,
             Id64(HINT_ID_SUMMARY_FIRST),
-            30,
+            if is_summarize_request { 70 } else { 30 },
             20,
         ));
     }
 
-    // Compare hint when evidence spans multiple segments.
+    // Compare hint when evidence spans multiple segments,
+    // or when the user explicitly asks for a comparison.
+    let mut evidence_compare_ok = false;
     if evidence_n >= 2 {
         let mut segs: Vec<Hash32> = Vec::new();
         for it in evidence.items.iter() {
@@ -377,14 +422,15 @@ fn build_planner_hints_v1(
         }
         segs.sort();
         segs.dedup();
-        if segs.len() >= 2 {
-            hints.push(PlannerHintItemV1::new(
-                PlannerHintKindV1::Compare,
-                Id64(HINT_ID_COMPARE),
-                25,
-                21,
-            ));
-        }
+        evidence_compare_ok = segs.len() >= 2;
+    }
+    if evidence_compare_ok || is_compare_request {
+        hints.push(PlannerHintItemV1::new(
+            PlannerHintKindV1::Compare,
+            Id64(HINT_ID_COMPARE),
+            if is_compare_request { 65 } else { 25 },
+            21,
+        ));
     }
 
     let hints = sort_and_dedupe_hints(hints);
@@ -415,6 +461,88 @@ fn build_planner_hints_v1(
             60,
             "Do you want concrete next steps or a high-level overview?".to_string(),
             30,
+        ));
+    }
+
+    if is_recommend_request {
+        followups.push(PlannerFollowupV1::new(
+            Id64(FOLLOWUP_ID_RECOMMEND_PRIORITIES),
+            72,
+            "What matters most for the recommendation (cost, speed, simplicity, or risk)?"
+                .to_string(),
+            31,
+        ));
+    }
+
+    if is_compare_request && has_compare_targets {
+        followups.push(PlannerFollowupV1::new(
+            Id64(FOLLOWUP_ID_COMPARE_CRITERIA),
+            74,
+            "Which comparison criteria matter most?".to_string(),
+            34,
+        ));
+    }
+
+    if is_summarize_request {
+        let (followup_id, score, text, rationale_code) = if has_focus_steps {
+            (
+                FOLLOWUP_ID_SUMMARY_DEPTH,
+                72,
+                "Should I give the short summary first or the step-by-step breakdown?".to_string(),
+                35,
+            )
+        } else if has_focus_example {
+            (
+                FOLLOWUP_ID_SUMMARIZE_FOCUS,
+                70,
+                "Should I summarize first or start with an example?".to_string(),
+                36,
+            )
+        } else {
+            (
+                FOLLOWUP_ID_SUMMARIZE_FOCUS,
+                68,
+                "Which part should I summarize first?".to_string(),
+                32,
+            )
+        };
+        followups.push(PlannerFollowupV1::new(
+            Id64(followup_id),
+            score,
+            text,
+            rationale_code,
+        ));
+    }
+
+    if is_explain_request {
+        let (followup_id, score, text, rationale_code) = if has_focus_summary {
+            (
+                FOLLOWUP_ID_EXPLAIN_STYLE,
+                74,
+                "Should I start with the short summary or go straight into the walkthrough?"
+                    .to_string(),
+                37,
+            )
+        } else if has_focus_example {
+            (
+                FOLLOWUP_ID_EXPLAIN_FOCUS,
+                72,
+                "Should I explain it directly or start with an example?".to_string(),
+                38,
+            )
+        } else {
+            (
+                FOLLOWUP_ID_EXPLAIN_FOCUS,
+                70,
+                "Which part should I explain first?".to_string(),
+                33,
+            )
+        };
+        followups.push(PlannerFollowupV1::new(
+            Id64(followup_id),
+            score,
+            text,
+            rationale_code,
         ));
     }
 
@@ -565,10 +693,26 @@ fn build_forecast_v1(
 
     let mut is_problem_solve = false;
     let mut is_logic_puzzle = false;
+    let mut is_compare_request = false;
+    let mut is_recommend_request = false;
+    let mut is_summarize_request = false;
+    let mut is_explain_request = false;
+    let mut has_compare_targets = false;
+    let mut has_focus_summary = false;
+    let mut has_focus_steps = false;
+    let mut has_focus_example = false;
     if let Some(p) = prag_opt {
         let f = p.flags;
         is_problem_solve = (f & INTENT_FLAG_IS_PROBLEM_SOLVE) != 0;
         is_logic_puzzle = (f & INTENT_FLAG_IS_LOGIC_PUZZLE) != 0;
+        is_compare_request = (f & INTENT_FLAG_IS_COMPARE_REQUEST) != 0;
+        is_recommend_request = (f & INTENT_FLAG_IS_RECOMMEND_REQUEST) != 0;
+        is_summarize_request = (f & INTENT_FLAG_IS_SUMMARIZE_REQUEST) != 0;
+        is_explain_request = (f & INTENT_FLAG_IS_EXPLAIN_REQUEST) != 0;
+        has_compare_targets = (f & INTENT_FLAG_HAS_COMPARE_TARGETS) != 0;
+        has_focus_summary = (f & INTENT_FLAG_HAS_FOCUS_SUMMARY) != 0;
+        has_focus_steps = (f & INTENT_FLAG_HAS_FOCUS_STEPS) != 0;
+        has_focus_example = (f & INTENT_FLAG_HAS_FOCUS_EXAMPLE) != 0;
     }
 
     if prefer_clarify {
@@ -593,6 +737,42 @@ fn build_forecast_v1(
         60,
         3,
     ));
+
+    if is_compare_request {
+        intents.push(ForecastIntentV1::new(
+            ForecastIntentKindV1::Compare,
+            Id64(FC_INTENT_ID_COMPARE),
+            80,
+            4,
+        ));
+    }
+
+    if is_recommend_request {
+        intents.push(ForecastIntentV1::new(
+            ForecastIntentKindV1::NextSteps,
+            Id64(FC_INTENT_ID_NEXT_STEPS),
+            72,
+            5,
+        ));
+    }
+
+    if is_summarize_request {
+        intents.push(ForecastIntentV1::new(
+            ForecastIntentKindV1::MoreDetail,
+            Id64(FC_INTENT_ID_MORE_DETAIL),
+            68,
+            5,
+        ));
+    }
+
+    if is_explain_request {
+        intents.push(ForecastIntentV1::new(
+            ForecastIntentKindV1::MoreDetail,
+            Id64(FC_INTENT_ID_MORE_DETAIL),
+            72,
+            5,
+        ));
+    }
 
     if hints_has_kind(hints, PlannerHintKindV1::Compare) {
         intents.push(ForecastIntentV1::new(
@@ -733,13 +913,94 @@ fn build_forecast_v1(
                 6,
             ));
         } else {
+            let generic_constraints_score = if is_compare_request
+                || is_recommend_request
+                || is_summarize_request
+                || is_explain_request
+            {
+                78
+            } else {
+                90
+            };
             questions.push(ForecastQuestionV1::new(
                 Id64(FC_QUESTION_ID_CONSTRAINTS),
-                90,
+                generic_constraints_score,
                 "What constraints should I assume?".to_string(),
                 2,
             ));
         }
+    }
+
+    if prefer_clarify && is_recommend_request {
+        questions.push(ForecastQuestionV1::new(
+            Id64(FC_QUESTION_ID_RECOMMEND_PRIORITIES),
+            88,
+            "What matters most for the recommendation (cost, speed, simplicity, or risk)?"
+                .to_string(),
+            7,
+        ));
+    }
+
+    if prefer_clarify && is_summarize_request {
+        let (question_id, score, text, rationale_code) = if has_focus_steps {
+            (
+                FC_QUESTION_ID_SUMMARY_DEPTH,
+                88,
+                "Should I give the short summary first or the step-by-step breakdown?".to_string(),
+                8,
+            )
+        } else if has_focus_example {
+            (
+                FC_QUESTION_ID_SUMMARY_EXAMPLE,
+                86,
+                "Should I summarize first or start with an example?".to_string(),
+                9,
+            )
+        } else {
+            (
+                FC_QUESTION_ID_SUMMARIZE_FOCUS,
+                84,
+                "Which part should I summarize first?".to_string(),
+                8,
+            )
+        };
+        questions.push(ForecastQuestionV1::new(
+            Id64(question_id),
+            score,
+            text,
+            rationale_code,
+        ));
+    }
+
+    if prefer_clarify && is_explain_request {
+        let (question_id, score, text, rationale_code) = if has_focus_summary {
+            (
+                FC_QUESTION_ID_EXPLAIN_SUMMARY,
+                90,
+                "Do you want the short summary first or the full walkthrough?".to_string(),
+                10,
+            )
+        } else if has_focus_example {
+            (
+                FC_QUESTION_ID_EXPLAIN_EXAMPLE,
+                88,
+                "Should I explain it directly or start with an example?".to_string(),
+                11,
+            )
+        } else {
+            (
+                FC_QUESTION_ID_EXPLAIN_FOCUS,
+                86,
+                "Which part should I explain first?".to_string(),
+                9,
+            )
+        };
+        questions.push(ForecastQuestionV1::new(
+            Id64(question_id),
+            score,
+            text,
+            rationale_code,
+        ));
     }
 
     questions.push(ForecastQuestionV1::new(
@@ -750,11 +1011,27 @@ fn build_forecast_v1(
     ));
 
     if hints_has_kind(hints, PlannerHintKindV1::Compare) {
+        let (question_id, score, text, rationale_code) =
+            if is_compare_request && has_compare_targets {
+                (
+                    FC_QUESTION_ID_COMPARE_CRITERIA,
+                    94,
+                    "Which comparison criteria matter most?".to_string(),
+                    12,
+                )
+            } else {
+                (
+                    FC_QUESTION_ID_COMPARE,
+                    if is_compare_request { 92 } else { 55 },
+                    "Which options should I compare?".to_string(),
+                    4,
+                )
+            };
         questions.push(ForecastQuestionV1::new(
-            Id64(FC_QUESTION_ID_COMPARE),
-            55,
-            "Which options should I compare?".to_string(),
-            4,
+            Id64(question_id),
+            score,
+            text,
+            rationale_code,
         ));
     }
 
@@ -1122,6 +1399,157 @@ mod tests {
         let top = fc.questions[0].text.to_lowercase();
         assert!(
             top.contains("variables") || top.contains("domains"),
+            "top={}",
+            fc.questions[0].text
+        );
+    }
+
+    #[test]
+    fn plan_with_guidance_adds_compare_hint_for_compare_request() {
+        let b = sample_bundle_n(1);
+        let bundle_id = blake3_hash(b"bundle_id");
+        let cfg = PlannerCfgV1::default_v1();
+        let prag = sample_prag(
+            crate::pragmatics_frame::INTENT_FLAG_IS_COMPARE_REQUEST
+                | crate::pragmatics_frame::INTENT_FLAG_HAS_REQUEST,
+        );
+
+        let o =
+            plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
+        assert!(o
+            .hints
+            .hints
+            .iter()
+            .any(|h| h.kind == crate::planner_hints::PlannerHintKindV1::Compare));
+        assert!(o
+            .forecast
+            .intents
+            .iter()
+            .any(|it| it.kind == crate::forecast::ForecastIntentKindV1::Compare));
+    }
+
+    #[test]
+    fn plan_with_guidance_adds_summary_first_for_summarize_request() {
+        let b = sample_bundle_n(1);
+        let bundle_id = blake3_hash(b"bundle_id");
+        let cfg = PlannerCfgV1::default_v1();
+        let prag = sample_prag(
+            crate::pragmatics_frame::INTENT_FLAG_IS_SUMMARIZE_REQUEST
+                | crate::pragmatics_frame::INTENT_FLAG_HAS_REQUEST,
+        );
+
+        let o =
+            plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
+        assert!(o
+            .hints
+            .hints
+            .iter()
+            .any(|h| h.kind == crate::planner_hints::PlannerHintKindV1::SummaryFirst));
+        assert_eq!(o.plan.items[0].kind, AnswerPlanItemKindV1::Summary);
+    }
+
+    #[test]
+    fn forecast_questions_prioritize_recommend_request_when_clarify() {
+        let b = sample_bundle_n(0);
+        let prag = sample_prag(
+            crate::pragmatics_frame::INTENT_FLAG_IS_RECOMMEND_REQUEST
+                | crate::pragmatics_frame::INTENT_FLAG_HAS_REQUEST,
+        );
+        let hints = build_planner_hints_v1(b.query_id, &b, Some(&prag));
+        let fc = build_forecast_v1(b.query_id, Some(&prag), &hints);
+        assert!(fc
+            .questions
+            .iter()
+            .any(|q| q.text.to_lowercase().contains("recommendation")));
+        assert!(fc
+            .intents
+            .iter()
+            .any(|it| it.kind == crate::forecast::ForecastIntentKindV1::NextSteps));
+    }
+
+    #[test]
+    fn plan_with_guidance_prefers_steps_for_explain_request() {
+        let b = sample_bundle_n(2);
+        let bundle_id = blake3_hash(b"bundle_id");
+        let cfg = PlannerCfgV1::default_v1();
+        let prag = sample_prag(
+            crate::pragmatics_frame::INTENT_FLAG_IS_EXPLAIN_REQUEST
+                | crate::pragmatics_frame::INTENT_FLAG_HAS_REQUEST,
+        );
+
+        let o =
+            plan_from_evidence_bundle_v1_with_guidance(&b, bundle_id, &cfg, Some(&prag)).unwrap();
+        assert_ne!(
+            o.hints.flags & crate::planner_hints::PH_FLAG_PREFER_STEPS,
+            0
+        );
+        assert!(o
+            .forecast
+            .intents
+            .iter()
+            .any(|it| it.kind == crate::forecast::ForecastIntentKindV1::MoreDetail));
+    }
+
+    #[test]
+    fn focus_steps_sets_prefer_steps_in_hints() {
+        let b = sample_bundle_n(1);
+        let prag = sample_prag(
+            crate::pragmatics_frame::INTENT_FLAG_HAS_REQUEST
+                | crate::pragmatics_frame::INTENT_FLAG_HAS_FOCUS_STEPS,
+        );
+        let hints = build_planner_hints_v1(b.query_id, &b, Some(&prag));
+        assert_ne!(hints.flags & crate::planner_hints::PH_FLAG_PREFER_STEPS, 0);
+    }
+
+    #[test]
+    fn forecast_compare_clarifier_uses_criteria_when_targets_are_present() {
+        let b = sample_bundle_n(0);
+        let prag = sample_prag(
+            crate::pragmatics_frame::INTENT_FLAG_IS_COMPARE_REQUEST
+                | crate::pragmatics_frame::INTENT_FLAG_HAS_REQUEST
+                | crate::pragmatics_frame::INTENT_FLAG_HAS_COMPARE_TARGETS,
+        );
+        let hints = build_planner_hints_v1(b.query_id, &b, Some(&prag));
+        let fc = build_forecast_v1(b.query_id, Some(&prag), &hints);
+        assert!(fc
+            .questions
+            .iter()
+            .any(|q| q.text.to_lowercase().contains("criteria")));
+    }
+
+    #[test]
+    fn forecast_explain_clarifier_uses_focus_cues() {
+        let b = sample_bundle_n(0);
+        let prag = sample_prag(
+            crate::pragmatics_frame::INTENT_FLAG_IS_EXPLAIN_REQUEST
+                | crate::pragmatics_frame::INTENT_FLAG_HAS_REQUEST
+                | crate::pragmatics_frame::INTENT_FLAG_HAS_FOCUS_SUMMARY,
+        );
+        let hints = build_planner_hints_v1(b.query_id, &b, Some(&prag));
+        let fc = build_forecast_v1(b.query_id, Some(&prag), &hints);
+        let top = fc.questions[0].text.to_lowercase();
+        assert!(
+            top.contains("short summary") || top.contains("walkthrough"),
+            "top={}",
+            fc.questions[0].text
+        );
+    }
+
+    #[test]
+    fn forecast_recommend_clarifier_prioritizes_recommendation_specific_question() {
+        let b = sample_bundle_n(0);
+        let prag = sample_prag(
+            crate::pragmatics_frame::INTENT_FLAG_IS_RECOMMEND_REQUEST
+                | crate::pragmatics_frame::INTENT_FLAG_HAS_REQUEST,
+        );
+        let hints = build_planner_hints_v1(b.query_id, &b, Some(&prag));
+        let fc = build_forecast_v1(b.query_id, Some(&prag), &hints);
+        let top = fc.questions[0].text.to_lowercase();
+        assert!(
+            top.contains("recommendation")
+                || top.contains("cost")
+                || top.contains("speed")
+                || top.contains("risk"),
             "top={}",
             fc.questions[0].text
         );

@@ -99,6 +99,42 @@ pub struct ConversationCanonicalizeReport {
     pub messages_truncated: usize,
 }
 
+/// Saved presentation mode for resumed user or operator surfaces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConversationPresentationModeV1 {
+    /// User-facing conversational surface.
+    User,
+    /// Operator-facing diagnostic surface.
+    Operator,
+}
+
+impl ConversationPresentationModeV1 {
+    /// Encodes the presentation mode as a stable trailer byte.
+    pub fn to_u8(self) -> u8 {
+        match self {
+            Self::User => 0,
+            Self::Operator => 1,
+        }
+    }
+
+    /// Decodes a presentation mode from a stable trailer byte.
+    pub fn from_u8(v: u8) -> Result<Self, DecodeError> {
+        match v {
+            0 => Ok(Self::User),
+            1 => Ok(Self::Operator),
+            _ => Err(DecodeError::new("invalid presentation mode")),
+        }
+    }
+
+    /// Returns the stable lowercase text form used by CLI surfaces.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Operator => "operator",
+        }
+    }
+}
+
 /// Canonical, resumable conversation artifact (v1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConversationPackV1 {
@@ -115,6 +151,14 @@ pub struct ConversationPackV1 {
     pub sig_map_id: Hash32,
     /// Optional lexicon snapshot id used for expansion.
     pub lexicon_snapshot_id: Option<Hash32>,
+    /// Optional Markov model id used for bounded phrasing hints.
+    pub markov_model_id: Option<Hash32>,
+    /// Optional exemplar memory id used for advisory shaping.
+    pub exemplar_memory_id: Option<Hash32>,
+    /// Optional graph relevance id used for bounded graph expansion.
+    pub graph_relevance_id: Option<Hash32>,
+    /// Optional saved presentation mode for resumed operator or user surfaces.
+    pub presentation_mode: Option<ConversationPresentationModeV1>,
 
     /// Limits used to canonicalize and bound message history.
     pub limits: ConversationLimits,
@@ -181,6 +225,10 @@ impl ConversationPackV1 {
             snapshot_id,
             sig_map_id,
             lexicon_snapshot_id,
+            markov_model_id: None,
+            exemplar_memory_id: None,
+            graph_relevance_id: None,
+            presentation_mode: None,
             limits,
             messages: Vec::new(),
         }
@@ -337,6 +385,19 @@ impl ConversationPackV1 {
         if self.lexicon_snapshot_id.is_some() {
             cap += 32;
         }
+        cap = cap.saturating_add(4);
+        if self.markov_model_id.is_some() {
+            cap = cap.saturating_add(32);
+        }
+        if self.exemplar_memory_id.is_some() {
+            cap = cap.saturating_add(32);
+        }
+        if self.graph_relevance_id.is_some() {
+            cap = cap.saturating_add(32);
+        }
+        if self.presentation_mode.is_some() {
+            cap = cap.saturating_add(1);
+        }
         for m in &self.messages {
             cap = cap.saturating_add(1 + 4 + m.content.len() + 1);
             if m.replay_id.is_some() {
@@ -383,6 +444,43 @@ impl ConversationPackV1 {
                 None => {
                     w.write_u8(0);
                 }
+            }
+        }
+
+        match &self.markov_model_id {
+            Some(h) => {
+                w.write_u8(1);
+                write_hash32(&mut w, h);
+            }
+            None => {
+                w.write_u8(0);
+            }
+        }
+        match &self.exemplar_memory_id {
+            Some(h) => {
+                w.write_u8(1);
+                write_hash32(&mut w, h);
+            }
+            None => {
+                w.write_u8(0);
+            }
+        }
+        match &self.graph_relevance_id {
+            Some(h) => {
+                w.write_u8(1);
+                write_hash32(&mut w, h);
+            }
+            None => {
+                w.write_u8(0);
+            }
+        }
+        match self.presentation_mode {
+            Some(v) => {
+                w.write_u8(1);
+                w.write_u8(v.to_u8());
+            }
+            None => {
+                w.write_u8(0);
             }
         }
 
@@ -449,6 +547,43 @@ impl ConversationPackV1 {
             });
         }
 
+        let mut markov_model_id: Option<Hash32> = None;
+        let mut exemplar_memory_id: Option<Hash32> = None;
+        let mut graph_relevance_id: Option<Hash32> = None;
+        let mut presentation_mode: Option<ConversationPresentationModeV1> = None;
+
+        if r.remaining() != 0 {
+            let has_markov = r.read_u8()?;
+            markov_model_id = match has_markov {
+                0 => None,
+                1 => Some(read_hash32(&mut r)?),
+                _ => return Err(DecodeError::new("invalid has_markov_model")),
+            };
+
+            let has_exemplar = r.read_u8()?;
+            exemplar_memory_id = match has_exemplar {
+                0 => None,
+                1 => Some(read_hash32(&mut r)?),
+                _ => return Err(DecodeError::new("invalid has_exemplar_memory")),
+            };
+
+            let has_graph = r.read_u8()?;
+            graph_relevance_id = match has_graph {
+                0 => None,
+                1 => Some(read_hash32(&mut r)?),
+                _ => return Err(DecodeError::new("invalid has_graph_relevance")),
+            };
+
+            if r.remaining() != 0 {
+                let has_presentation = r.read_u8()?;
+                presentation_mode = match has_presentation {
+                    0 => None,
+                    1 => Some(ConversationPresentationModeV1::from_u8(r.read_u8()?)?),
+                    _ => return Err(DecodeError::new("invalid has_presentation_mode")),
+                };
+            }
+        }
+
         if r.remaining() != 0 {
             return Err(DecodeError::new("trailing bytes"));
         }
@@ -470,6 +605,10 @@ impl ConversationPackV1 {
             snapshot_id,
             sig_map_id,
             lexicon_snapshot_id,
+            markov_model_id,
+            exemplar_memory_id,
+            graph_relevance_id,
+            presentation_mode,
             limits,
             messages,
         })
@@ -483,6 +622,101 @@ mod tests {
 
     fn z32(tag: &[u8]) -> Hash32 {
         blake3_hash(tag)
+    }
+
+    fn encode_legacy_without_advisory(p: &ConversationPackV1) -> Vec<u8> {
+        let mut w = ByteWriter::with_capacity(256);
+        w.write_u16(p.version);
+        w.write_u64(p.seed);
+        w.write_u32(p.max_output_tokens);
+        write_hash32(&mut w, &p.snapshot_id);
+        write_hash32(&mut w, &p.sig_map_id);
+        match &p.lexicon_snapshot_id {
+            Some(h) => {
+                w.write_u8(1);
+                write_hash32(&mut w, h);
+            }
+            None => {
+                w.write_u8(0);
+            }
+        }
+        w.write_u32(p.limits.max_message_bytes);
+        w.write_u32(p.limits.max_total_message_bytes);
+        w.write_u32(p.limits.max_messages);
+        write_bool_u8(&mut w, p.limits.keep_system);
+        w.write_u32(p.messages.len() as u32);
+        for m in &p.messages {
+            w.write_u8(m.role.to_u8());
+            w.write_str(&m.content).unwrap();
+            match &m.replay_id {
+                Some(h) => {
+                    w.write_u8(1);
+                    write_hash32(&mut w, h);
+                }
+                None => {
+                    w.write_u8(0);
+                }
+            }
+        }
+        w.into_bytes()
+    }
+
+    fn encode_with_advisory_without_presentation(p: &ConversationPackV1) -> Vec<u8> {
+        let mut w = ByteWriter::with_capacity(320);
+        w.write_u16(p.version);
+        w.write_u64(p.seed);
+        w.write_u32(p.max_output_tokens);
+        write_hash32(&mut w, &p.snapshot_id);
+        write_hash32(&mut w, &p.sig_map_id);
+        match &p.lexicon_snapshot_id {
+            Some(h) => {
+                w.write_u8(1);
+                write_hash32(&mut w, h);
+            }
+            None => {
+                w.write_u8(0);
+            }
+        }
+        w.write_u32(p.limits.max_message_bytes);
+        w.write_u32(p.limits.max_total_message_bytes);
+        w.write_u32(p.limits.max_messages);
+        write_bool_u8(&mut w, p.limits.keep_system);
+        w.write_u32(p.messages.len() as u32);
+        for m in &p.messages {
+            w.write_u8(m.role.to_u8());
+            w.write_str(&m.content).unwrap();
+            match &m.replay_id {
+                Some(h) => {
+                    w.write_u8(1);
+                    write_hash32(&mut w, h);
+                }
+                None => {
+                    w.write_u8(0);
+                }
+            }
+        }
+        match &p.markov_model_id {
+            Some(h) => {
+                w.write_u8(1);
+                write_hash32(&mut w, h);
+            }
+            None => w.write_u8(0),
+        }
+        match &p.exemplar_memory_id {
+            Some(h) => {
+                w.write_u8(1);
+                write_hash32(&mut w, h);
+            }
+            None => w.write_u8(0),
+        }
+        match &p.graph_relevance_id {
+            Some(h) => {
+                w.write_u8(1);
+                write_hash32(&mut w, h);
+            }
+            None => w.write_u8(0),
+        }
+        w.into_bytes()
     }
 
     #[test]
@@ -506,6 +740,10 @@ mod tests {
             content: "reply".to_string(),
             replay_id: Some(z32(b"replay1")),
         });
+        p.markov_model_id = Some(z32(b"markov"));
+        p.exemplar_memory_id = Some(z32(b"exemplar"));
+        p.graph_relevance_id = Some(z32(b"graph"));
+        p.presentation_mode = Some(ConversationPresentationModeV1::Operator);
 
         p.canonicalize_in_place();
         let bytes1 = p.encode_assuming_canonical().unwrap();
@@ -552,5 +790,75 @@ mod tests {
         let bytes = p.encode_assuming_canonical().unwrap();
         let dec = ConversationPackV1::decode(&bytes).unwrap();
         assert_eq!(dec, p);
+    }
+
+    #[test]
+    fn conversation_pack_decode_advisory_trailer_without_presentation() {
+        let limits = ConversationLimits::default_v1();
+        let mut p = ConversationPackV1::new(
+            9,
+            64,
+            z32(b"snap3"),
+            z32(b"sig3"),
+            Some(z32(b"lex3")),
+            limits,
+        );
+        p.messages.push(ConversationMessage {
+            role: ConversationRole::Assistant,
+            content: "reply".to_string(),
+            replay_id: Some(z32(b"replay3")),
+        });
+        p.markov_model_id = Some(z32(b"markov3"));
+        p.exemplar_memory_id = Some(z32(b"exemplar3"));
+        p.graph_relevance_id = Some(z32(b"graph3"));
+        p.canonicalize_in_place();
+
+        let bytes = encode_with_advisory_without_presentation(&p);
+        let dec = ConversationPackV1::decode(&bytes).unwrap();
+        assert_eq!(dec.markov_model_id, p.markov_model_id);
+        assert_eq!(dec.exemplar_memory_id, p.exemplar_memory_id);
+        assert_eq!(dec.graph_relevance_id, p.graph_relevance_id);
+        assert_eq!(dec.presentation_mode, None);
+        assert_eq!(dec.messages, p.messages);
+    }
+
+    #[test]
+    fn conversation_pack_decode_zeroed_advisory_trailer_without_presentation() {
+        let limits = ConversationLimits::default_v1();
+        let mut p = ConversationPackV1::new(11, 48, z32(b"snap4"), z32(b"sig4"), None, limits);
+        p.messages.push(ConversationMessage {
+            role: ConversationRole::User,
+            content: "hello".to_string(),
+            replay_id: None,
+        });
+        p.canonicalize_in_place();
+
+        let bytes = encode_with_advisory_without_presentation(&p);
+        let dec = ConversationPackV1::decode(&bytes).unwrap();
+        assert_eq!(dec.markov_model_id, None);
+        assert_eq!(dec.exemplar_memory_id, None);
+        assert_eq!(dec.graph_relevance_id, None);
+        assert_eq!(dec.presentation_mode, None);
+        assert_eq!(dec.messages, p.messages);
+    }
+
+    #[test]
+    fn conversation_pack_decode_legacy_bytes_without_advisory_ids() {
+        let limits = ConversationLimits::default_v1();
+        let mut p = ConversationPackV1::new(3, 32, z32(b"snap2"), z32(b"sig2"), None, limits);
+        p.messages.push(ConversationMessage {
+            role: ConversationRole::User,
+            content: "hello".to_string(),
+            replay_id: None,
+        });
+        p.canonicalize_in_place();
+
+        let bytes = encode_legacy_without_advisory(&p);
+        let dec = ConversationPackV1::decode(&bytes).unwrap();
+        assert_eq!(dec.markov_model_id, None);
+        assert_eq!(dec.exemplar_memory_id, None);
+        assert_eq!(dec.graph_relevance_id, None);
+        assert_eq!(dec.presentation_mode, None);
+        assert_eq!(dec.messages, p.messages);
     }
 }

@@ -568,6 +568,75 @@ PENDING (Phase Y)
 
 
 
+Conversation improvement sprint
+-------------------------------
+Goal: improve conversational flow using the existing evidence-first stack.
+
+Execution order for the current sprint:
+- C1: Conversation acceptance harness
+  - Add black-box regression coverage for multi-turn continuity, pronoun follow-ups,
+    one-best-clarifier behavior, repeated output stability, and evidence preservation.
+  - Add docs/CHAT_FLOW_ACCEPTANCE.md.
+- C2: Surface realizer refinement in the current renderer
+  - Refine openings, transitions, closers, clarifier wording, and presentation shape
+    inside the existing renderer only.
+- C3: Markov phrasing expansion inside the current quality path
+  - Expand bounded Markov phrasing selection from opener-only usage into approved
+    opener, transition, closer, and clarifier-intro choices with stable tracing.
+- C8: Rules-first conversation routing extension
+  - Strengthen deterministic routing and slot extraction before adding new advisory
+    layers or a decoder.
+- C4: Exemplar artifact contract and offline builder
+  - DONE: structure-only exemplar artifact contract and canonical codec.
+  - DONE: deterministic builder scaffold for canonical input planning, caps, and
+    finalization from caller-supplied rows.
+  - DONE: conservative offline mining from PromptPack, ConversationPack, and
+    MarkovTrace into canonical exemplar rows.
+  - DONE: offline builder command wired to existing artifact inputs and store
+    helpers.
+  - NEXT: broaden mining coverage for the remaining supported source families.
+- C5: Exemplar advisory runtime integration
+  - DONE: minimal answer-time exemplar lookup behind `--exemplar-memory`, with
+    clean empty-artifact fallback.
+  - DONE: bounded advisory shaping for tone, fixed presentation style, and
+    conservative Step-structure conversion only.
+  - DONE: added bounded exemplar inspectability (`exemplar_match ...`) and
+    tighter summary/comparison/recommendation structure shaping.
+- C6: Graph relevance artifact and bridge-expansion activation
+  - DONE: GraphRelevanceV1 artifact contract and content-addressed store helpers.
+  - DONE: offline builder scaffolding and conservative `FrameSegmentV1` graph mining helpers.
+  - DONE: offline builder command wiring via `build-graph-relevance`.
+  - DONE: activated bounded graph enrichment through the existing bridge expansion lane
+    while keeping lexical retrieval primary.
+- C7: Cross-layer grounding and precedence lock
+  - DONE: added precedence tests showing lexical evidence stays first over graph enrichment,
+    evidence lines remain unchanged under exemplar shaping and Markov phrasing, graph-only
+    expansion without supporting evidence does not add extra evidence rows, and exemplar or
+    Markov shaping does not change grounded plan refs.
+  - NEXT: add any final edge-case lock tests needed after the integrated inspectability pass.
+- Decision gate: evaluate whether C9 is still needed after C8 validation.
+- C9: Optional HMM-lite decoder integration
+  - Proceed only if the rules-first routing extension remains too brittle.
+- C10: Final conversation sprint polish and inspectability
+  - DONE: added bounded answer-time inspect lines for routing (`routing_trace ...`),
+    graph candidate reasons (`graph_trace ...` when active), and exemplar matches.
+  - DONE: finalized integrated docs polish and operator workflow cleanup for the
+    conversation stack.
+  - DONE: added final integrated answer-path regression coverage combining routing,
+    graph enrichment, exemplar guidance, and Markov phrasing while re-locking
+    evidence lines and grounded plan refs.
+
+Non-goals for this sprint:
+- no second renderer
+- no second planner
+- no second graph control plane
+- no new factual memory source
+- no online learning loop
+- no free-form Markov generation
+- no exemplar use as evidence
+- no retrieval replacement by style or routing layers
+- no unrestricted generative decoding
+
 Release quality
 ---------------
 - DONE: SPDX headers across src/ and tests/.
@@ -587,3 +656,6 @@ Release quality follow-ups (optional)
 - Broader Wiktionary extraction coverage (more POS headers and templates) while keeping deterministic caps and stable ordering.
 - Performance pass on Wiktionary ingest and segment building (streaming throughput and allocation trimming) without semantic changes.
 
+
+- Graph relevance offline builder command added: `build-graph-relevance`.
+- Graph relevance retrieval activation added for bounded term-to-term enrichment on the existing bridge-expansion lane.

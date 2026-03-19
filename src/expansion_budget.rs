@@ -4,8 +4,9 @@
 //! Bridge expansion budget contract.
 //!
 //! This module defines a small, canonical configuration type that captures
-//! expansion budgets and per-channel weight multipliers. It is schema-only in
-//! (no wiring into retrieval yet).
+//! expansion budgets and per-channel weight multipliers. The retrieval path
+//! consumes this budget through bridge expansion and retrieval policy wiring;
+//! this module itself remains the schema and validation layer.
 //!
 //! The budget is intended to bound and stabilize query expansion across
 //! multiple channels (LEX/META/ENT/GRAPH) while preserving deterministic
@@ -29,7 +30,7 @@ pub enum ExpansionKindV1 {
     Meta = 2,
     /// Identity/alias expansions (canonical entity edges).
     Ent = 3,
-    /// Graph adjacency expansions (future coprocessor).
+    /// Graph adjacency expansions (bounded offline graph relevance).
     Graph = 4,
 }
 

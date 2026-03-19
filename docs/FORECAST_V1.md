@@ -96,11 +96,13 @@ Rules (high level):
 
 - Always include a small set of base intents (Example, MoreDetail).
 - Add Clarify when PlannerHints prefers clarify.
-- Add Compare when PlannerHints includes Compare.
-- Add NextSteps when Pragmatics indicates a request.
+- Add Compare when PlannerHints includes Compare, with a higher score for explicit compare requests.
+- Add NextSteps when Pragmatics indicates a request, and use it as the recommendation lane for explicit best-choice prompts.
+- Add MoreDetail for explicit summarize/explain requests.
 - Add Implementation and VerifyOrTroubleshoot when Pragmatics indicates code (or when PlannerHints prefers steps).
 - Add Risks when Pragmatics indicates safety-sensitive or when PlannerHints prefers caveats.
 
 Questions are similarly template-driven and capped (max 4) and ordered canonically (score desc; tie-break id asc).
+When Pragmatics carries explicit compare targets, compare clarifiers should shift toward comparison criteria rather than generic option discovery. When Pragmatics carries response-focus cues (summary-first, step-by-step, example-led), clarify questions should specialize toward that requested answer shape while staying advisory.
 
 Horizon is currently 1 turn (top-of-next-message forecast).

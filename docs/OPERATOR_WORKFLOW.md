@@ -1,7 +1,7 @@
- operator guide (shard -> reduce -> replicate -> query/answer)
-====================================================================
+Operator workflow
+===================
 
-This guide describes the recommended workflow for operators:
+This guide describes the current recommended operator workflow for:
 - Sharded ingest
 - Deterministic reduce merge
 - Manifest-driven artifact replication over TCP
@@ -105,6 +105,65 @@ Example:
 
  With query expansion enabled:
  answer --root <dst_root> --prompt <prompt_hash> --snapshot <merged_snapshot_hash> --sig-map <merged_sig_map_hash> --expand --lexicon-snapshot <lexicon_snapshot_hash>...
+
+
+Conversation workflow (evidence-first with optional advisory artifacts)
+---------------------------------------------------------------------
+After reduce merge (and optional lexicon replication), operators can build the
+conversation-improvement artifacts offline and then opt into them during
+answering.
+
+Recommended order:
+
+1) Build bounded Markov phrasing model from replay logs
+ build-markov-model --root <root> --replay <hash32hex> [--replay <hash32hex>...] [--out-file <path>]
+
+2) Build exemplar memory from existing artifacts
+ build-exemplar-memory --root <root> --prompt <hash32hex> [--conversation-pack <hash32hex>...] [--markov-trace <hash32hex>...] [--out-file <path>]
+
+3) Build graph relevance from stored frame segments
+ build-graph-relevance --root <root> --frame-segment <hash32hex> [--frame-segment <hash32hex>...] [--out-file <path>]
+
+4) Answer with optional advisory artifacts
+ answer --root <root> --prompt <prompt_hash> --snapshot <merged_snapshot_hash> --sig-map <merged_sig_map_hash>    --expand --lexicon-snapshot <lexicon_snapshot_hash> --graph-relevance <graph_relevance_hash>    --markov-model <markov_model_hash> --exemplar-memory <exemplar_memory_hash>
+
+Default user surface vs operator surface
+----------------------------------------
+Normal `answer`, `ask`, and `chat` usage defaults to the user-facing surface.
+That default hides inspect-only lines and keeps the output conversational.
+
+Use `--presentation operator` when you want the inspect surface for debugging,
+release audit work, or workflow diffs. Saved `ask` and `chat` sessions also keep
+this presentation choice so resumed operator workflows stay operator-facing until
+changed.
+
+Answer inspect lines
+--------------------
+When the optional conversation artifacts are enabled, answer output may include
+stable inspect lines near the top of the operator answer surface:
+
+- `directives ...`
+  Final realizer directives used for the answer.
+- `routing_trace ...`
+  Top planner hint, top forecast intent, key flags, and final tone/style.
+- `graph_trace ...`
+  Present only when bounded graph candidates are active; summarizes seed and
+  candidate counts plus up to 2 candidate reasons.
+- `exemplar_match ...`
+  Present only when one exemplar row is selected; summarizes the matched row,
+  score, support_count, and bounded reason flags.
+
+These lines are read-only diagnostics. They do not replace retrieval, evidence,
+or grounded plan refs. They are intended for the operator surface, not the
+normal default user surface.
+
+Conversation stack guardrails
+-----------------------------
+- Lexical retrieval remains primary.
+- Graph relevance only enriches candidates; it is not a second fact source.
+- Exemplar memory shapes presentation only; it is not evidence.
+- Markov phrasing only selects among fixed approved surface templates.
+- The evidence bundle remains authoritative for truth and for grounded plan refs.
 
 Common failure modes
 --------------------

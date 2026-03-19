@@ -1,6 +1,6 @@
-# Scale Report V1 (schema version 2)
+# Scale report v1
 
-`ScaleDemoScaleReportV1` is a deterministic, content-addressed summary artifact for the scale demo pipeline (Track C).
+`ScaleDemoScaleReportV1` is a deterministic, content-addressed summary artifact for the `scale-demo` pipeline.
 
 It is designed to be:
 

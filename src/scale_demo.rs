@@ -1204,11 +1204,7 @@ fn run_scale_demo_build_answers_v1_impl<S: ArtifactStore>(
         //: Use the quality gate token builder so scale-demo MarkovTrace
         // matches the answer CLI (including any wired surface-template ids).
         let mt_tokens: Vec<crate::markov_model::MarkovTokenV1> =
-            crate::quality_gate_v1::build_markov_trace_tokens_v1(
-                &plan,
-                qr.markov.opener_preface_choice,
-                did_append_q,
-            );
+            crate::quality_gate_v1::build_markov_trace_tokens_v1(&plan, &qr.markov, did_append_q);
 
         let trace = crate::markov_trace::MarkovTraceV1 {
             version: crate::markov_trace::MARKOV_TRACE_V1_VERSION,

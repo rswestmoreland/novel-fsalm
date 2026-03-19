@@ -354,9 +354,21 @@ Ask command
  - This is a convenience wrapper around `prompt` + `answer`.
  - All flags accepted by `answer` are supported except `--prompt`.
  - When --snapshot/--sig-map are omitted, the command uses workspace defaults (see docs/WORKSPACE_V1.md).
+ - When --k is omitted and workspace_v1.txt sets default_k, the command uses that value.
+ - When --expand is omitted and workspace_v1.txt sets default_expand=1, the command enables bounded query expansion.
+ - When --meta is omitted and workspace_v1.txt sets default_meta=1, the command enables metaphone expansion.
+ - When workspace_v1.txt sets markov_model, exemplar_memory, or graph_relevance and the matching flags are omitted, the command auto-uses those advisory artifacts.
+ - If one of those workspace advisory artifacts is absent, the command falls back cleanly without enabling that advisory layer.
+ - Those advisory artifacts remain bounded and subordinate when auto-used: graph enrichment does not outrank lexical evidence, exemplar shaping does not change retrieval or truth, and Markov phrasing does not change evidence or plan refs.
  - When --session-file is set, the command resumes from the session file when it exists, and
    stores an updated ConversationPackV1 after the answer. It updates the session file and prints
-   `conversation_pack=<hash32hex>` to stderr.
+   `conversation_pack=<hash32hex>` to stderr. Saved conversation packs also record sticky advisory ids
+   when present: `markov_model_id`, `exemplar_memory_id`, and `graph_relevance_id`.
+   They also record the selected `presentation_mode` so resumed user vs operator workflows can stay consistent.
+   On resume, saved sticky advisory ids and `presentation_mode` are restored automatically when the
+   caller does not pass newer explicit overrides. Older conversation packs without those sticky
+   trailer fields still resume safely and fall back to explicit flags, then workspace defaults,
+   then the normal user-facing surface.
  - When --conversation is set, the command resumes from that ConversationPackV1 and stores an updated
    ConversationPackV1 after the answer, printing the new `conversation_pack=<hash32hex>` to stderr.
  - When resuming a conversation (via --session-file or --conversation), overriding --snapshot/--sig-map
@@ -365,7 +377,7 @@ Ask command
  - Use --text <string> if you prefer passing the prompt as a flagged value.
 
  Logic puzzles:
- - The answer loop may ask clarifying questions to avoid guessing.
+ - The answer loop may ask a short user-facing clarifying question to avoid guessing. In the default user surface this is shown as `Quick question: ...`.
  - An optional [puzzle]...[/puzzle] block is accepted for reproducible inputs.
    See docs/LOGIC_SOLVER_V1.md.
 
@@ -391,13 +403,20 @@ Chat command
  - This is a convenience wrapper around `prompt` + `answer`.
  - All flags accepted by `answer` are supported except `--prompt` and `--out-file`.
  - When --snapshot/--sig-map are omitted, the command uses workspace defaults (see docs/WORKSPACE_V1.md).
+ - When --k is omitted and workspace_v1.txt sets default_k, the command uses that value.
+ - When --expand is omitted and workspace_v1.txt sets default_expand=1, the command enables bounded query expansion.
+ - When --meta is omitted and workspace_v1.txt sets default_meta=1, the command enables metaphone expansion.
 
  Resume and persistence:
  - When --resume is set, the command loads message history from that ConversationPackV1.
    If the caller did not provide snapshot/sig-map ids, the pack ids are used.
  - When --session-file is set, the command attempts to read `conversation_pack=<hash32hex>` from the file and resumes when present.
  - /save stores a ConversationPackV1 and prints `conversation_pack=<hash32hex>` to stderr.
-   If --session-file is set, /save also updates the session file.
+   If --session-file is set, /save also updates the session file. Saved conversation packs also record
+   sticky advisory ids when present: `markov_model_id`, `exemplar_memory_id`, and `graph_relevance_id`.
+   They also record the selected `presentation_mode` so resumed user vs operator workflows can stay consistent.
+   Older conversation packs without those sticky trailer fields still resume safely and fall back
+   to explicit flags, then workspace defaults, then the normal user-facing surface.
  - --autosave requires --session-file and stores a ConversationPackV1 after each assistant reply, updating the session file.
 
  Markov context:
@@ -405,7 +424,7 @@ Chat command
    in the current session (bounded tail). See docs/MARKOV_CHAT_CONTEXT_V1.md.
 
  Logic puzzles:
- - The chat loop may ask clarifying questions to avoid guessing.
+ - The chat loop may ask a short user-facing clarifying question to avoid guessing. In the default user surface this is shown as `Quick question: ...`.
  - An optional [puzzle]...[/puzzle] block is accepted for reproducible inputs.
    See docs/LOGIC_SOLVER_V1.md.
 
@@ -419,6 +438,7 @@ Show-workspace command
  Output fields include:
  - merged_snapshot, merged_sig_map, lexicon_snapshot
  - default_k, default_expand, default_meta
+ - markov_model, exemplar_memory, graph_relevance
  - workspace_present, workspace_pair_ok, workspace_ready
 
 
@@ -427,24 +447,45 @@ Show-conversation command
 ------------------------
 
 - show-conversation --root <dir> <hash32hex>
- Print a ConversationPackV1 in a stable, parse-friendly form.
+ Print a ConversationPackV1 in a stable, parse-friendly form, including any recorded advisory ids and
+ the saved `presentation_mode` (`user`, `operator`, or `NONE`).
 
 
 Answer command
 --------------
 
-- answer --root <dir> --prompt <hash32hex> --snapshot <hash32hex> [--sig-map <hash32hex>] [--pragmatics <hash32hex>...] [--k <n>] [--meta] [--max_terms <n>] [--no_ties] [--expand --lexicon-snapshot <hash32hex>] [--plan_items <n>] [--verify-trace <0|1>] [--markov-model <hash32hex>] [--markov-max-choices <n>] [--out-file <path>]
+- answer --root <dir> --prompt <hash32hex> --snapshot <hash32hex> [--sig-map <hash32hex>] [--pragmatics <hash32hex>...] [--k <n>] [--meta] [--max_terms <n>] [--no_ties] [--expand [--lexicon-snapshot <hash32hex>] [--graph-relevance <hash32hex>]] [--plan_items <n>] [--verify-trace <0|1>] [--markov-model <hash32hex>] [--markov-max-choices <n>] [--exemplar-memory <hash32hex>] [--presentation <user|operator>] [--out-file <path>]
  Run the full evidence-first answering loop.
 
  Behavior (high level):
  - Retrieves hits from the snapshot (optionally signature-gated with --sig-map).
  - Builds an EvidenceBundleV1 from top hits.
- - Plans an answer from evidence (optionally guided by lexicon expansion).
- - Realizes an answer with optional quality-gate features (directives, hints/forecast, Markov opener).
+ - Plans an answer from evidence (optionally guided by lexicon expansion and bounded graph enrichment).
+ - Realizes an answer with optional quality-gate features (directives, hints/forecast, bounded Markov phrasing, and optional exemplar advisory shaping).
+
+ Inspect lines:
+ - `--presentation user` hides raw operator diagnostics from the default answer surface.
+ - `--presentation operator` shows the stable inspect lines near the top of the answer.
+ - When directives are present, operator output may include a stable `directives ...` line.
+ - Operator output includes one bounded `routing_trace ...` line summarizing the selected planner/forecast route.
+ - When `--expand --graph-relevance <hash32hex>` yields bounded term candidates, operator output includes one bounded `graph_trace ...` line.
+ - When `--exemplar-memory <hash32hex>` yields a bounded advisory match, operator output includes one `exemplar_match ...` line.
 
  Notes:
+ - If workspace_v1.txt sets default_k and --k is omitted, the command uses that value.
+ - If workspace_v1.txt sets default_expand=1 and --expand is omitted, the command enables bounded query expansion.
+ - If workspace_v1.txt sets default_meta=1 and --meta is omitted, the command enables metaphone expansion.
+ - If workspace_v1.txt sets markov_model, exemplar_memory, or graph_relevance and the matching flags are omitted, the command auto-uses those advisory artifacts.
+ - If one of those workspace advisory artifacts is absent, the command falls back cleanly without enabling that advisory layer.
+ - Those advisory artifacts remain bounded and subordinate when auto-used: graph enrichment does not outrank lexical evidence, exemplar shaping does not change retrieval or truth, and Markov phrasing does not change evidence or plan refs.
  - For a detailed pipeline overview, see docs/ANSWERING_LOOP.md.
  - Use --out-file to write the full output for scripting.
+ - `--presentation user` is the default presentation target for ask, chat, and answer.
+ - `--presentation operator` preserves the current inspect-friendly answer surface across answer, ask, and chat.
+ - Operator mode keeps the answer header plus stable `query_id=...`, `routing_trace ...`, and any bounded advisory trace lines near the top of the output.
+ - These inspect lines are read-only diagnostics; they do not change evidence selection or truth.
+ - Inspect lines are only assembled in operator mode; default user mode skips that extra diagnostic string building.
+ - Switching presentation mode changes only the visible surface for the same runtime inputs; evidence lines and plan refs stay the same.
 
 - compact-index --root <dir> --snapshot <hash32hex> [--target-bytes <n>] [--max-out-segments <n>] [--dry-run] [--verbose]
  Run deterministic index compaction for a snapshot. Compaction writes new artifacts only.
@@ -466,7 +507,7 @@ Cache tuning
 ------------
 For `--cache-stats` and cache sizing knobs, see docs/CACHES_V1.md.
 
-Scale demo command (Track C)
+Scale demo command
 ----------------------------
 
 - scale-demo [--seed <u64>] [--docs <n>] [--queries <n>] [--min_doc_tokens <n>] [--max_doc_tokens <n>] [--vocab <n>] [--query_tokens <n>] [--tie_pair <0|1>] [--ingest <0|1>] [--build_index <0|1>] [--prompts <0|1>] [--evidence <0|1>] [--answer <0|1>] [--root <dir>] [--out-file <path>]
@@ -529,6 +570,62 @@ Markov training command
  - If --top-next > 0, includes up to N next entries per printed state (already canonical).
  - If --out-file is set, writes the same lines to that path.
 
+Answer exemplar advisory
+------------------------
+
+- answer ... [--exemplar-memory <hash32hex>] ...
+
+ Purpose:
+ - Optionally load one ExemplarMemoryV1 artifact at answer time.
+
+ Behavior:
+ - Empty exemplar artifacts fall back cleanly.
+ - A matched exemplar row may shape tone, fixed presentation style, and bounded
+   plan-item structure.
+ - When a row is matched, operator answer output includes one `exemplar_match ...` line
+   after the directives and routing trace lines so operators can inspect the selected exemplar.
+ - Exemplar runtime use is advisory only and must not change retrieval or truth.
+
+Exemplar builder command
+------------------------
+
+- build-exemplar-memory --root <dir> [--replay <hash32hex>...] [--prompt <hash32hex>...] [--golden-pack <hash32hex>...] [--golden-pack-conversation <hash32hex>...] [--conversation-pack <hash32hex>...] [--markov-trace <hash32hex>...] [--max-inputs-total <n>] [--max-inputs-per-source-kind <n>] [--max-rows <n>] [--max-support-refs-per-row <n>] [--out-file <path>]
+
+ Purpose:
+ - Build and store one ExemplarMemoryV1 artifact offline from selected existing artifacts.
+
+ Behavior:
+ - Collects supported input hashes from the command line and derives a deterministic build_id from the canonical input inventory and builder caps.
+ - Prepares a canonical build plan, loads each kept input artifact from the store, mines bounded exemplar rows, finalizes the artifact, and stores one ExemplarMemoryV1 artifact.
+ - ReplayLog, GoldenPack, and GoldenPackConversation are accepted as supported inputs even if they are currently inventory-only for row mining.
+ - Prints one summary line beginning with `exemplar_memory_v1`.
+ - If --out-file is set, writes the same summary line to that path.
+
+ Notes:
+ - This command is offline and advisory-only.
+ - Exemplar rows do not replace retrieval or evidence.
+ - The current builder mines rows from PromptPack, ConversationPack, and MarkovTrace.
+
+Graph relevance builder command
+-------------------------------
+
+- build-graph-relevance --root <dir> [--frame-segment <hash32hex>...] [--replay <hash32hex>...] [--prompt <hash32hex>...] [--conversation-pack <hash32hex>...] [--max-inputs-total <n>] [--max-inputs-per-source-kind <n>] [--max-rows <n>] [--max-edges-per-row <n>] [--max-terms-per-frame-row <n>] [--max-entities-per-frame-row <n>] [--out-file <path>]
+
+ Purpose:
+ - Build and store one GraphRelevanceV1 artifact offline from selected existing artifacts.
+
+ Behavior:
+ - Collects supported input hashes from the command line and derives a deterministic build_id from the canonical input inventory and builder caps.
+ - Prepares a canonical build plan, loads each kept input artifact from the store, mines bounded graph rows, finalizes the artifact, and stores one GraphRelevanceV1 artifact.
+ - FrameSegmentV1 is the currently mined source family. ReplayLog, PromptPack, and ConversationPack are accepted as supported inputs even if they are currently inventory-only for graph mining.
+ - Prints one summary line beginning with `graph_relevance_v1`.
+ - If --out-file is set, writes the same summary line to that path.
+
+ Notes:
+ - This command is offline and deterministic.
+ - The current graph builder derives bounded term/entity/verb co-occurrence edges automatically from stored frame rows.
+ - Operators do not need to specify relationships manually.
+
 Golden pack command
 -----------------------------
 
@@ -584,3 +681,6 @@ Golden pack conversation command
 
  See:
  - docs/GOLDEN_PACK_CONVERSATION_V1.md
+
+
+In default user presentation, simple direct answers now soften the raw `Plan` / `Evidence` report framing. User mode renders a lighter conversational surface such as `Based on: ...` with a `Sources` section, while operator mode keeps the full inspectable report. Multi-section compare, recommend, summarize, and explain style answers collapse into lighter labels such as `Summary`, `Key points`, and `Keep in mind`. Procedural and troubleshooting flows still keep explicit step-oriented structure with labels like `Steps`, while default user mode suppresses the remaining report-style banners.

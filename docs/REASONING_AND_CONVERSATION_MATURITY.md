@@ -4,8 +4,8 @@ Reasoning and conversation maturity
 Purpose
 -------
 This note records how the current repo wires together retrieval, planning, and
-conversation continuity. It also calls out maturity gaps where concepts or
-schemas exist but are not yet fully exploited.
+conversation continuity. It also distinguishes live behavior from the smaller
+set of remaining maturity gaps.
 
 Novel is evidence-first and deterministic. "Reasoning" is treated as a product
 of:
@@ -20,7 +20,7 @@ remains docs/MASTER_PLAN.md.
 
 Entry points (end user)
 ----------------------
-The primary operator-facing commands are implemented in src/bin/fsa_lm.rs:
+The primary end-user commands are implemented in src/bin/fsa_lm.rs:
 - ask: single prompt -> full reply; optional conversation continuation
 - chat: interactive loop; optional resume + session file persistence
 - load-wikipedia / load-wiktionary: populate workspace defaults
@@ -72,9 +72,9 @@ Behavioral effect:
 - src/quality_gate_v1.rs can append a bounded clarifying question using
   PlannerHintsV1 + ForecastV1.
 
-Maturity note:
-- docs/PLANNER_HINTS_V1.md describes the schema as "future wiring" but the
-  current CLI path already stores and uses PlannerHintsV1 and ForecastV1.
+Current state:
+- docs/PLANNER_HINTS_V1.md now matches the implemented answer path: the current
+  CLI flow stores and uses PlannerHintsV1 and ForecastV1.
 
 
 Bridge expansion and lexicon-powered query expansion
@@ -92,12 +92,15 @@ CLI wiring:
 - answer/ask/chat accept --expand.
 - when --expand is enabled, a LexiconSnapshot id is required (via
   --lexicon-snapshot or workspace defaults).
+- workspace_v1.txt can also enable expansion through default_expand=1 or a
+  configured graph_relevance artifact.
 
 Notes:
 - Expansion today is primarily about recall and "same meaning, different
   surface form" alignment.
 - The lexicon is not yet used as a first-class signal for higher-level intent
-  or for conversation continuity beyond Markov surface hints.
+  shaping. Conversation continuity for retrieval is handled by
+  ContextAnchorsV1, not by lexicon neighborhoods alone.
 
 
 Markov integration (surface-form guidance only)
@@ -111,7 +114,9 @@ Key modules:
 - src/quality_gate_v1.rs
 
 Wiring:
-- MarkovHintsV1 is derived (when --markov-model is supplied) by
+- MarkovHintsV1 is derived when a Markov model is active, whether it arrives
+  from an explicit CLI flag, a workspace default, or a resumed conversation
+  pack sticky id. The derivation path is
   derive_markov_hints_opener_preface_opt(...).
 - MarkovTraceV1 is emitted for each answer by quality gate helpers and stored as
   an artifact. The trace is referenced from ReplayLog.
@@ -122,8 +127,8 @@ Chat history context:
 - The rebuild uses replay_id values stored in ConversationPackV1 and loads the
   prior MarkovTraceV1 artifacts referenced from ReplayLog.
 
-Maturity note:
-- docs/MARKOV_CHAT_CONTEXT_V1.md describes resume integration as "future" but the
+Current state:
+- docs/MARKOV_CHAT_CONTEXT_V1.md now matches the implemented ask/chat flow: the
   current CLI path reconstructs Markov context across runs when replay ids are
   present.
 
@@ -149,39 +154,45 @@ ConversationPackV1 can store a replay_id for assistant turns. This enables:
 - Markov context reconstruction across runs
 - deterministic audit of how a reply was produced (ReplayLog linkage)
 
+ConversationPackV1 can also store sticky runtime choices for:
+- markov_model_id
+- exemplar_memory_id
+- graph_relevance_id
+- presentation_mode
 
-EvidenceBundleV1 reserved kinds (Lexicon and Proof)
--------------------------------------------------
+ask and chat restore those saved values on resume unless the caller provides a
+newer explicit CLI override.
+
+
+EvidenceBundleV1 live kinds and remaining growth area
+--------------------------------------------------
 EvidenceBundleV1 is the canonical output of retrieval (src/evidence_bundle.rs).
-Two item kinds are reserved for maturity growth:
+The current answer path can now include:
 
-- EvidenceItemDataV1::Lexicon(LexiconRowRefV1)
-  - reserved for retrieval paths that return lexicon rows as evidence
-  - current default answering flow uses frame rows from index snapshots
+- EvidenceItemDataV1::Frame(FrameRowRefV1)
+  - the normal grounded retrieval result from index snapshots
 
 - EvidenceItemDataV1::Proof(ProofRefV1)
-  - reserved for verifier outputs such as small proofs or solver results
-  - not yet produced by the default answering flow
+  - used when the deterministic puzzle and logic flow produces a Proof artifact
+  - attached as evidence-first output rather than free-form reasoning text
 
-These reserved kinds are intended to remain evidence-first: they are references
-to canonical artifacts, not free-form reasoning text.
+One growth area still remains:
+
+- EvidenceItemDataV1::Lexicon(LexiconRowRefV1)
+  - reserved for retrieval paths that return lexicon rows directly as evidence
+  - the current default answering flow still uses frame rows as its primary
+    evidence surface
+
+These evidence kinds remain references to canonical artifacts, not free-form
+reasoning text.
 
 
-Maturity gaps worth exploiting next
-----------------------------------
-The repo already contains most of the right extension points. The gaps that
-materially limit "conversation with reasoning" today are:
+Remaining maturity gap worth exploiting next
+-------------------------------------------
+The repo already contains most of the right extension points. The main gap that
+still materially limits "conversation with reasoning" today is:
 
 - Lexicon-first intent shaping
   - PragmaticsFrameV1 has intent flags and cue-count machinery, but cue selection
-    is not driven by lexicon neighborhoods derived from Wiktionary.
-
-- Conversation continuity for retrieval
-  - ContextAnchorsV1 (docs/CONTEXT_ANCHORS_V1.md) records bounded, low-weight
-    query terms derived from prior conversation messages and merges them into
-    retrieval for follow-up continuity.
-
-- Proof evidence for logic problems
-  - ProofRefV1 exists in EvidenceBundleV1, but there is no Proof artifact and no
-    deterministic solver that can attach proof evidence to an answer.
+    is not yet driven by lexicon neighborhoods derived from Wiktionary.
 

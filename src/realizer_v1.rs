@@ -148,12 +148,24 @@ pub struct RealizerMarkovEventsV1 {
     /// If a preface line was emitted, this records the deterministic choice id
     /// of the selected preface template.
     pub opener_preface_choice: Option<Id64>,
+    /// If the Default/Concise details heading was emitted, this records the
+    /// deterministic choice id of the selected transition template.
+    pub details_heading_transition_choice: Option<Id64>,
+    /// If the Default/Concise caveat heading was emitted, this records the
+    /// deterministic choice id of the selected closer template.
+    pub caveat_heading_closer_choice: Option<Id64>,
+    /// If a clarifying-question intro line was emitted, this records the
+    /// deterministic choice id of the selected intro template.
+    pub clarifier_intro_choice: Option<Id64>,
 }
 
 impl RealizerMarkovEventsV1 {
     fn none() -> RealizerMarkovEventsV1 {
         RealizerMarkovEventsV1 {
             opener_preface_choice: None,
+            details_heading_transition_choice: None,
+            caveat_heading_closer_choice: None,
+            clarifier_intro_choice: None,
         }
     }
 }
@@ -338,7 +350,14 @@ fn realize_answer_plan_v1_with_directives_inner_events<S: ArtifactStore>(
         d.style == StyleV1::StepByStep
     };
 
-    render_plan_sections_v1(&mut out, plan, d, use_numbered);
+    render_plan_sections_v1(
+        &mut out,
+        plan,
+        d,
+        use_numbered,
+        markov_hints,
+        &mut markov_events,
+    );
 
     out.push_str("\nEvidence\n");
 
@@ -501,8 +520,9 @@ fn preface_choice_for_tone(
 
     match t {
         ToneV1::Supportive => {
-            const V0: &str = "I can help with that. Here is what the evidence supports:";
-            const V1: &str = "Happy to help. Here is what the evidence supports:";
+            const V0: &str =
+                "I can help with that. Based on the evidence, here is the clearest answer:";
+            const V1: &str = "Happy to help. Based on the evidence, here is the clearest answer:";
             let cid0 = preface_choice_id_v1(t, 0);
             let cid1 = preface_choice_id_v1(t, 1);
             if desired == Some(cid1) {
@@ -512,8 +532,8 @@ fn preface_choice_for_tone(
             }
         }
         ToneV1::Neutral => {
-            const V0: &str = "Here is what the evidence supports:";
-            const V1: &str = "Here is the evidence:";
+            const V0: &str = "Based on the evidence, here is the clearest answer:";
+            const V1: &str = "From the available evidence, here is the best-supported answer:";
             let cid0 = preface_choice_id_v1(t, 0);
             let cid1 = preface_choice_id_v1(t, 1);
             if desired == Some(cid1) {
@@ -523,8 +543,8 @@ fn preface_choice_for_tone(
             }
         }
         ToneV1::Direct => {
-            const V0: &str = "Based on the evidence:";
-            const V1: &str = "Evidence suggests:";
+            const V0: &str = "The evidence points to this answer:";
+            const V1: &str = "Most directly, the evidence supports this answer:";
             let cid0 = preface_choice_id_v1(t, 0);
             let cid1 = preface_choice_id_v1(t, 1);
             if desired == Some(cid1) {
@@ -534,8 +554,8 @@ fn preface_choice_for_tone(
             }
         }
         ToneV1::Cautious => {
-            const V0: &str = "Based on the available evidence:";
-            const V1: &str = "Based on the evidence we have:";
+            const V0: &str = "From the available evidence, this is the most supported answer:";
+            const V1: &str = "With the current evidence, this is the safest answer:";
             let cid0 = preface_choice_id_v1(t, 0);
             let cid1 = preface_choice_id_v1(t, 1);
             if desired == Some(cid1) {
@@ -544,6 +564,98 @@ fn preface_choice_for_tone(
                 (cid0, V0)
             }
         }
+    }
+}
+fn details_heading_choice_id_v1(variant: u8) -> Id64 {
+    match variant {
+        0 => derive_id64(b"markov_choice_v1", b"transition:details_heading:0"),
+        _ => derive_id64(b"markov_choice_v1", b"transition:details_heading:1"),
+    }
+}
+
+fn details_heading_choice_for_style(markov_hints: Option<&MarkovHintsV1>) -> (Id64, &'static str) {
+    const V0: &str = "Supporting points";
+    const V1: &str = "More detail";
+
+    let desired = match markov_hints {
+        Some(h) => {
+            if h.validate().is_ok() {
+                markov_choice_id_for_kind(h, MarkovChoiceKindV1::Transition)
+            } else {
+                None
+            }
+        }
+        None => None,
+    };
+
+    let cid0 = details_heading_choice_id_v1(0);
+    let cid1 = details_heading_choice_id_v1(1);
+    if desired == Some(cid1) {
+        (cid1, V1)
+    } else {
+        (cid0, V0)
+    }
+}
+
+fn caveat_heading_choice_id_v1(variant: u8) -> Id64 {
+    match variant {
+        0 => derive_id64(b"markov_choice_v1", b"closer:caveat_heading:0"),
+        _ => derive_id64(b"markov_choice_v1", b"closer:caveat_heading:1"),
+    }
+}
+
+fn caveat_heading_choice_for_style(markov_hints: Option<&MarkovHintsV1>) -> (Id64, &'static str) {
+    const V0: &str = "Things to keep in mind";
+    const V1: &str = "Final notes";
+
+    let desired = match markov_hints {
+        Some(h) => {
+            if h.validate().is_ok() {
+                markov_choice_id_for_kind(h, MarkovChoiceKindV1::Closer)
+            } else {
+                None
+            }
+        }
+        None => None,
+    };
+
+    let cid0 = caveat_heading_choice_id_v1(0);
+    let cid1 = caveat_heading_choice_id_v1(1);
+    if desired == Some(cid1) {
+        (cid1, V1)
+    } else {
+        (cid0, V0)
+    }
+}
+
+fn clarifier_intro_choice_id_v1(variant: u8) -> Id64 {
+    match variant {
+        0 => derive_id64(b"markov_choice_v1", b"other:clarifier_intro:0"),
+        _ => derive_id64(b"markov_choice_v1", b"other:clarifier_intro:1"),
+    }
+}
+
+fn clarifier_intro_choice_for_style(markov_hints: Option<&MarkovHintsV1>) -> (Id64, &'static str) {
+    const V0: &str = "\n\nTo make sure I answer the right thing:";
+    const V1: &str = "\n\nSo I can answer the right thing:";
+
+    let desired = match markov_hints {
+        Some(h) => {
+            if h.validate().is_ok() {
+                markov_choice_id_for_kind(h, MarkovChoiceKindV1::Other)
+            } else {
+                None
+            }
+        }
+        None => None,
+    };
+
+    let cid0 = clarifier_intro_choice_id_v1(0);
+    let cid1 = clarifier_intro_choice_id_v1(1);
+    if desired == Some(cid1) {
+        (cid1, V1)
+    } else {
+        (cid0, V0)
     }
 }
 
@@ -621,11 +733,49 @@ fn format_proof_solution_line_v1<S: ArtifactStore>(
     Some(out)
 }
 
+fn has_rationale_code_v1(d: &RealizerDirectivesV1, code: u16) -> bool {
+    d.rationale_codes.iter().any(|x| *x == code)
+}
+
+fn render_plan_group_heading_v1(
+    d: &RealizerDirectivesV1,
+    kind: AnswerPlanItemKindV1,
+    numbered: bool,
+) -> &'static str {
+    let procedural_steps = kind == AnswerPlanItemKindV1::Step
+        && (numbered
+            || has_rationale_code_v1(d, crate::realizer_directives::RD_RATIONALE_PROBLEM_SOLVE)
+            || has_rationale_code_v1(d, crate::realizer_directives::RD_RATIONALE_LOGIC_PUZZLE));
+
+    match d.style {
+        StyleV1::Default | StyleV1::Concise => match kind {
+            AnswerPlanItemKindV1::Summary => "Main answer",
+            AnswerPlanItemKindV1::Step => {
+                if procedural_steps {
+                    "Steps"
+                } else {
+                    "Suggested next steps"
+                }
+            }
+            AnswerPlanItemKindV1::Bullet => "Supporting points",
+            AnswerPlanItemKindV1::Caveat => "Things to keep in mind",
+        },
+        StyleV1::StepByStep | StyleV1::Checklist | StyleV1::Debug => match kind {
+            AnswerPlanItemKindV1::Summary => "Summary",
+            AnswerPlanItemKindV1::Step => "Steps",
+            AnswerPlanItemKindV1::Bullet => "Details",
+            AnswerPlanItemKindV1::Caveat => "Caveats",
+        },
+    }
+}
+
 fn render_plan_sections_v1(
     out: &mut String,
     plan: &AnswerPlanV1,
     d: &RealizerDirectivesV1,
     numbered: bool,
+    markov_hints: Option<&MarkovHintsV1>,
+    markov_events: &mut RealizerMarkovEventsV1,
 ) {
     let flags = d.format_flags;
     let include_summary = (flags & FORMAT_FLAG_INCLUDE_SUMMARY) != 0
@@ -647,18 +797,48 @@ fn render_plan_sections_v1(
             out,
             plan,
             AnswerPlanItemKindV1::Summary,
-            "Summary",
+            render_plan_group_heading_v1(d, AnswerPlanItemKindV1::Summary, numbered),
             numbered,
         );
     }
     if include_steps {
-        render_plan_group(out, plan, AnswerPlanItemKindV1::Step, "Steps", numbered);
+        render_plan_group(
+            out,
+            plan,
+            AnswerPlanItemKindV1::Step,
+            render_plan_group_heading_v1(d, AnswerPlanItemKindV1::Step, numbered),
+            numbered,
+        );
     }
     if include_details {
-        render_plan_group(out, plan, AnswerPlanItemKindV1::Bullet, "Details", numbered);
+        let heading = if matches!(d.style, StyleV1::Default | StyleV1::Concise)
+            && plan
+                .items
+                .iter()
+                .any(|it| it.kind == AnswerPlanItemKindV1::Bullet)
+        {
+            let (cid, heading) = details_heading_choice_for_style(markov_hints);
+            markov_events.details_heading_transition_choice = Some(cid);
+            heading
+        } else {
+            render_plan_group_heading_v1(d, AnswerPlanItemKindV1::Bullet, numbered)
+        };
+        render_plan_group(out, plan, AnswerPlanItemKindV1::Bullet, heading, numbered);
     }
     if include_caveats {
-        render_plan_group(out, plan, AnswerPlanItemKindV1::Caveat, "Caveats", numbered);
+        let heading = if matches!(d.style, StyleV1::Default | StyleV1::Concise)
+            && plan
+                .items
+                .iter()
+                .any(|it| it.kind == AnswerPlanItemKindV1::Caveat)
+        {
+            let (cid, heading) = caveat_heading_choice_for_style(markov_hints);
+            markov_events.caveat_heading_closer_choice = Some(cid);
+            heading
+        } else {
+            render_plan_group_heading_v1(d, AnswerPlanItemKindV1::Caveat, numbered)
+        };
+        render_plan_group(out, plan, AnswerPlanItemKindV1::Caveat, heading, numbered);
     }
 }
 
@@ -882,6 +1062,27 @@ pub fn append_clarifying_question_v1(
     fc: &ForecastV1,
     max_questions: u8,
 ) -> bool {
+    let mut events = RealizerMarkovEventsV1::none();
+    append_clarifying_question_v1_with_markov_events(
+        out,
+        hints,
+        fc,
+        max_questions,
+        None,
+        &mut events,
+    )
+}
+
+/// Append a single clarifying question and record the selected intro template,
+/// if any clarifying question was appended.
+pub fn append_clarifying_question_v1_with_markov_events(
+    out: &mut String,
+    hints: &PlannerHintsV1,
+    fc: &ForecastV1,
+    max_questions: u8,
+    markov_hints: Option<&MarkovHintsV1>,
+    markov_events: &mut RealizerMarkovEventsV1,
+) -> bool {
     const MAX_Q_BYTES: usize = 256;
 
     if max_questions == 0 {
@@ -899,9 +1100,8 @@ pub fn append_clarifying_question_v1(
         return false;
     }
 
-    let prefix = "
-
-Clarifying question: ";
+    let (lead_id, lead) = clarifier_intro_choice_for_style(markov_hints);
+    let prefix = "\nClarifying question: ";
     let suffix = if qtxt.ends_with('?') { "" } else { "?" };
 
     let mut qclip = qtxt;
@@ -913,9 +1113,11 @@ Clarifying question: ";
         qclip = &qclip[..end];
     }
 
+    out.push_str(lead);
     out.push_str(prefix);
     out.push_str(qclip);
     out.push_str(suffix);
+    markov_events.clarifier_intro_choice = Some(lead_id);
     true
 }
 
@@ -1044,11 +1246,624 @@ mod directed_realizer_tests {
 
         let appended = append_clarifying_question_v1(&mut out, &hints, &fc, 1);
         assert!(appended);
+        assert!(out.contains("To make sure I answer the right thing:"));
         assert!(out.contains("Clarifying question:"));
         assert!(out.ends_with('?'));
 
         let mut out2 = String::from("Hello");
         let appended2 = append_clarifying_question_v1(&mut out2, &hints, &fc, 0);
         assert!(!appended2);
+    }
+
+    #[test]
+    fn markov_clarifier_intro_variant_changes_lead_in() {
+        let mut out = String::from("Hello");
+
+        let hints = PlannerHintsV1 {
+            version: crate::planner_hints::PLANNER_HINTS_V1_VERSION,
+            query_id: [1u8; 32],
+            flags: PH_FLAG_PREFER_CLARIFY,
+            hints: Vec::new(),
+            followups: Vec::new(),
+        };
+
+        let fc = ForecastV1 {
+            version: crate::forecast::FORECAST_V1_VERSION,
+            query_id: [2u8; 32],
+            flags: 0,
+            horizon_turns: 1,
+            intents: Vec::new(),
+            questions: vec![crate::forecast::ForecastQuestionV1::new(
+                crate::frame::Id64(1),
+                1,
+                "What is your budget".to_string(),
+                0,
+            )],
+        };
+
+        let mh = MarkovHintsV1 {
+            version: crate::markov_hints::MARKOV_HINTS_V1_VERSION,
+            query_id: [1u8; 32],
+            flags: 0,
+            order_n: 1,
+            state_id: Id64(0),
+            model_hash: [0u8; 32],
+            context_hash: [0u8; 32],
+            choices: vec![crate::markov_hints::MarkovChoiceV1::new(
+                MarkovChoiceKindV1::Other,
+                clarifier_intro_choice_id_v1(1),
+                10,
+                0,
+            )],
+        };
+
+        let mut events = RealizerMarkovEventsV1::none();
+        let appended = append_clarifying_question_v1_with_markov_events(
+            &mut out,
+            &hints,
+            &fc,
+            1,
+            Some(&mh),
+            &mut events,
+        );
+        assert!(appended);
+        assert!(out.contains("So I can answer the right thing:"));
+        assert!(!out.contains("To make sure I answer the right thing:"));
+        assert_eq!(
+            events.clarifier_intro_choice,
+            Some(clarifier_intro_choice_id_v1(1))
+        );
+    }
+
+    #[test]
+    fn default_clarifier_intro_emits_default_markov_event() {
+        let mut out = String::from("Hello");
+
+        let hints = PlannerHintsV1 {
+            version: crate::planner_hints::PLANNER_HINTS_V1_VERSION,
+            query_id: [1u8; 32],
+            flags: PH_FLAG_PREFER_CLARIFY,
+            hints: Vec::new(),
+            followups: Vec::new(),
+        };
+
+        let fc = ForecastV1 {
+            version: crate::forecast::FORECAST_V1_VERSION,
+            query_id: [2u8; 32],
+            flags: 0,
+            horizon_turns: 1,
+            intents: Vec::new(),
+            questions: vec![crate::forecast::ForecastQuestionV1::new(
+                crate::frame::Id64(1),
+                1,
+                "What is your budget".to_string(),
+                0,
+            )],
+        };
+
+        let mut events = RealizerMarkovEventsV1::none();
+        let appended = append_clarifying_question_v1_with_markov_events(
+            &mut out,
+            &hints,
+            &fc,
+            1,
+            None,
+            &mut events,
+        );
+        assert!(appended);
+        assert!(out.contains("To make sure I answer the right thing:"));
+        assert_eq!(
+            events.clarifier_intro_choice,
+            Some(clarifier_intro_choice_id_v1(0))
+        );
+    }
+
+    #[test]
+    fn supportive_preface_is_more_conversational_but_still_deterministic() {
+        let store = NullStore;
+
+        let qid: Hash32 = [1u8; 32];
+        let sid: Hash32 = [2u8; 32];
+
+        let limits = EvidenceLimitsV1 {
+            segments_touched: 0,
+            max_items: 8,
+            max_bytes: 0,
+        };
+        let mut bundle = EvidenceBundleV1::new(qid, sid, limits, 1);
+        bundle.items.push(EvidenceItemV1 {
+            score: 100,
+            data: EvidenceItemDataV1::Proof(ProofRefV1 {
+                proof_id: [9u8; 32],
+            }),
+        });
+        bundle.canonicalize_in_place().unwrap();
+
+        let eb_id = evidence_bundle_id(&bundle).expect("bundle id");
+        let mut plan = AnswerPlanV1::new(qid, sid, eb_id, bundle.items.len() as u32);
+        plan.items.push(AnswerPlanItemV1 {
+            kind: AnswerPlanItemKindV1::Summary,
+            strength: 500,
+            evidence_item_ix: vec![0],
+        });
+
+        let mut rcfg = RealizerCfgV1::new();
+        rcfg.max_evidence_items = 8;
+        rcfg.load_frame_rows = false;
+        rcfg.max_terms_per_row = 4;
+
+        let d = RealizerDirectivesV1 {
+            version: crate::realizer_directives::REALIZER_DIRECTIVES_V1_VERSION,
+            tone: ToneV1::Supportive,
+            style: StyleV1::Default,
+            format_flags: FORMAT_FLAG_INCLUDE_SUMMARY,
+            max_preface_sentences: 1,
+            max_softeners: 0,
+            max_hedges: 0,
+            max_questions: 0,
+            rationale_codes: Vec::new(),
+        };
+
+        let text = realize_answer_plan_v1_with_directives(&store, &bundle, &plan, &rcfg, Some(&d))
+            .expect("realize");
+        assert!(text
+            .contains("I can help with that. Based on the evidence, here is the clearest answer:"));
+        assert!(!text.contains("Here is what the evidence supports:"));
+        assert!(text.contains("Main answer"));
+        assert!(!text.contains("\nSummary\n"));
+    }
+
+    #[test]
+    fn default_style_problem_solve_steps_keep_explicit_steps_label() {
+        let store = NullStore;
+
+        let qid: Hash32 = [8u8; 32];
+        let sid: Hash32 = [9u8; 32];
+
+        let limits = EvidenceLimitsV1 {
+            segments_touched: 0,
+            max_items: 8,
+            max_bytes: 0,
+        };
+        let mut bundle = EvidenceBundleV1::new(qid, sid, limits, 1);
+        bundle.items.push(EvidenceItemV1 {
+            score: 100,
+            data: EvidenceItemDataV1::Proof(ProofRefV1 {
+                proof_id: [5u8; 32],
+            }),
+        });
+        bundle.canonicalize_in_place().unwrap();
+
+        let eb_id = evidence_bundle_id(&bundle).expect("bundle id");
+        let mut plan = AnswerPlanV1::new(qid, sid, eb_id, bundle.items.len() as u32);
+        plan.items.push(AnswerPlanItemV1 {
+            kind: AnswerPlanItemKindV1::Summary,
+            strength: 500,
+            evidence_item_ix: vec![0],
+        });
+        plan.items.push(AnswerPlanItemV1 {
+            kind: AnswerPlanItemKindV1::Step,
+            strength: 400,
+            evidence_item_ix: vec![0],
+        });
+
+        let mut rcfg = RealizerCfgV1::new();
+        rcfg.max_evidence_items = 8;
+        rcfg.load_frame_rows = false;
+        rcfg.max_terms_per_row = 4;
+
+        let d = RealizerDirectivesV1 {
+            version: crate::realizer_directives::REALIZER_DIRECTIVES_V1_VERSION,
+            tone: ToneV1::Neutral,
+            style: StyleV1::Default,
+            format_flags: FORMAT_FLAG_INCLUDE_NEXT_STEPS,
+            max_preface_sentences: 0,
+            max_softeners: 0,
+            max_hedges: 0,
+            max_questions: 0,
+            rationale_codes: vec![crate::realizer_directives::RD_RATIONALE_PROBLEM_SOLVE],
+        };
+
+        let text = realize_answer_plan_v1_with_directives(&store, &bundle, &plan, &rcfg, Some(&d))
+            .expect("realize");
+        assert!(text.contains("Main answer"));
+        assert!(text.contains("\nSteps\n"));
+        assert!(!text.contains("\nSuggested next steps\n"));
+    }
+
+    #[test]
+    fn default_style_uses_softer_section_labels() {
+        let store = NullStore;
+
+        let qid: Hash32 = [3u8; 32];
+        let sid: Hash32 = [4u8; 32];
+
+        let limits = EvidenceLimitsV1 {
+            segments_touched: 0,
+            max_items: 8,
+            max_bytes: 0,
+        };
+        let mut bundle = EvidenceBundleV1::new(qid, sid, limits, 1);
+        bundle.items.push(EvidenceItemV1 {
+            score: 100,
+            data: EvidenceItemDataV1::Proof(ProofRefV1 {
+                proof_id: [7u8; 32],
+            }),
+        });
+        bundle.items.push(EvidenceItemV1 {
+            score: 90,
+            data: EvidenceItemDataV1::Lexicon(LexiconRowRefV1 {
+                segment_id: [6u8; 32],
+                row_ix: 2,
+            }),
+        });
+        bundle.canonicalize_in_place().unwrap();
+
+        let eb_id = evidence_bundle_id(&bundle).expect("bundle id");
+        let mut plan = AnswerPlanV1::new(qid, sid, eb_id, bundle.items.len() as u32);
+        plan.items.push(AnswerPlanItemV1 {
+            kind: AnswerPlanItemKindV1::Summary,
+            strength: 500,
+            evidence_item_ix: vec![0],
+        });
+        plan.items.push(AnswerPlanItemV1 {
+            kind: AnswerPlanItemKindV1::Bullet,
+            strength: 400,
+            evidence_item_ix: vec![1],
+        });
+        plan.items.push(AnswerPlanItemV1 {
+            kind: AnswerPlanItemKindV1::Caveat,
+            strength: 300,
+            evidence_item_ix: vec![0],
+        });
+
+        let mut rcfg = RealizerCfgV1::new();
+        rcfg.max_evidence_items = 8;
+        rcfg.load_frame_rows = false;
+        rcfg.max_terms_per_row = 4;
+
+        let d = RealizerDirectivesV1 {
+            version: crate::realizer_directives::REALIZER_DIRECTIVES_V1_VERSION,
+            tone: ToneV1::Cautious,
+            style: StyleV1::Default,
+            format_flags: FORMAT_FLAG_INCLUDE_SUMMARY
+                | FORMAT_FLAG_INCLUDE_ASSUMPTIONS
+                | FORMAT_FLAG_INCLUDE_RISKS,
+            max_preface_sentences: 1,
+            max_softeners: 0,
+            max_hedges: 0,
+            max_questions: 0,
+            rationale_codes: Vec::new(),
+        };
+
+        let text = realize_answer_plan_v1_with_directives(&store, &bundle, &plan, &rcfg, Some(&d))
+            .expect("realize");
+        assert!(text.contains("Main answer"));
+        assert!(text.contains("Supporting points"));
+        assert!(text.contains("Things to keep in mind"));
+        assert!(!text.contains(
+            "
+Summary
+"
+        ));
+        assert!(!text.contains(
+            "
+Details
+"
+        ));
+        assert!(!text.contains(
+            "
+Caveats
+"
+        ));
+        assert!(text.contains(
+            "
+Evidence
+"
+        ));
+    }
+    #[test]
+    fn markov_transition_variant_changes_default_details_heading() {
+        let store = NullStore;
+
+        let qid: Hash32 = [10u8; 32];
+        let sid: Hash32 = [11u8; 32];
+
+        let limits = EvidenceLimitsV1 {
+            segments_touched: 0,
+            max_items: 8,
+            max_bytes: 0,
+        };
+        let mut bundle = EvidenceBundleV1::new(qid, sid, limits, 1);
+        bundle.items.push(EvidenceItemV1 {
+            score: 100,
+            data: EvidenceItemDataV1::Proof(ProofRefV1 {
+                proof_id: [3u8; 32],
+            }),
+        });
+        bundle.items.push(EvidenceItemV1 {
+            score: 90,
+            data: EvidenceItemDataV1::Lexicon(LexiconRowRefV1 {
+                segment_id: [4u8; 32],
+                row_ix: 1,
+            }),
+        });
+        bundle.canonicalize_in_place().unwrap();
+
+        let eb_id = evidence_bundle_id(&bundle).expect("bundle id");
+        let mut plan = AnswerPlanV1::new(qid, sid, eb_id, bundle.items.len() as u32);
+        plan.items.push(AnswerPlanItemV1 {
+            kind: AnswerPlanItemKindV1::Summary,
+            strength: 500,
+            evidence_item_ix: vec![0],
+        });
+        plan.items.push(AnswerPlanItemV1 {
+            kind: AnswerPlanItemKindV1::Bullet,
+            strength: 400,
+            evidence_item_ix: vec![1],
+        });
+
+        let mut rcfg = RealizerCfgV1::new();
+        rcfg.max_evidence_items = 8;
+        rcfg.load_frame_rows = false;
+        rcfg.max_terms_per_row = 4;
+
+        let d = RealizerDirectivesV1 {
+            version: crate::realizer_directives::REALIZER_DIRECTIVES_V1_VERSION,
+            tone: ToneV1::Neutral,
+            style: StyleV1::Default,
+            format_flags: FORMAT_FLAG_INCLUDE_SUMMARY | FORMAT_FLAG_INCLUDE_ASSUMPTIONS,
+            max_preface_sentences: 0,
+            max_softeners: 0,
+            max_hedges: 0,
+            max_questions: 0,
+            rationale_codes: Vec::new(),
+        };
+
+        let mh = MarkovHintsV1 {
+            version: crate::markov_hints::MARKOV_HINTS_V1_VERSION,
+            query_id: qid,
+            flags: 0,
+            order_n: 1,
+            state_id: Id64(0),
+            model_hash: [0u8; 32],
+            context_hash: [0u8; 32],
+            choices: vec![crate::markov_hints::MarkovChoiceV1::new(
+                MarkovChoiceKindV1::Transition,
+                details_heading_choice_id_v1(1),
+                10,
+                0,
+            )],
+        };
+
+        let out = realize_answer_plan_v1_with_directives_and_markov_events(
+            &store,
+            &bundle,
+            &plan,
+            &rcfg,
+            Some(&d),
+            Some(&mh),
+        )
+        .expect("realize");
+
+        assert!(out.text.contains("More detail"));
+        assert!(!out.text.contains("Supporting points"));
+        assert_eq!(
+            out.markov.details_heading_transition_choice,
+            Some(details_heading_choice_id_v1(1))
+        );
+    }
+
+    #[test]
+    fn default_details_heading_emits_default_transition_choice_event() {
+        let store = NullStore;
+
+        let qid: Hash32 = [12u8; 32];
+        let sid: Hash32 = [13u8; 32];
+
+        let limits = EvidenceLimitsV1 {
+            segments_touched: 0,
+            max_items: 8,
+            max_bytes: 0,
+        };
+        let mut bundle = EvidenceBundleV1::new(qid, sid, limits, 1);
+        bundle.items.push(EvidenceItemV1 {
+            score: 100,
+            data: EvidenceItemDataV1::Proof(ProofRefV1 {
+                proof_id: [1u8; 32],
+            }),
+        });
+        bundle.items.push(EvidenceItemV1 {
+            score: 90,
+            data: EvidenceItemDataV1::Lexicon(LexiconRowRefV1 {
+                segment_id: [2u8; 32],
+                row_ix: 0,
+            }),
+        });
+        bundle.canonicalize_in_place().unwrap();
+
+        let eb_id = evidence_bundle_id(&bundle).expect("bundle id");
+        let mut plan = AnswerPlanV1::new(qid, sid, eb_id, bundle.items.len() as u32);
+        plan.items.push(AnswerPlanItemV1 {
+            kind: AnswerPlanItemKindV1::Bullet,
+            strength: 400,
+            evidence_item_ix: vec![1],
+        });
+
+        let mut rcfg = RealizerCfgV1::new();
+        rcfg.max_evidence_items = 8;
+        rcfg.load_frame_rows = false;
+        rcfg.max_terms_per_row = 4;
+
+        let d = RealizerDirectivesV1 {
+            version: crate::realizer_directives::REALIZER_DIRECTIVES_V1_VERSION,
+            tone: ToneV1::Neutral,
+            style: StyleV1::Default,
+            format_flags: FORMAT_FLAG_INCLUDE_ASSUMPTIONS,
+            max_preface_sentences: 0,
+            max_softeners: 0,
+            max_hedges: 0,
+            max_questions: 0,
+            rationale_codes: Vec::new(),
+        };
+
+        let out = realize_answer_plan_v1_with_directives_and_markov_events(
+            &store,
+            &bundle,
+            &plan,
+            &rcfg,
+            Some(&d),
+            None,
+        )
+        .expect("realize");
+
+        assert!(out.text.contains("Supporting points"));
+        assert_eq!(
+            out.markov.details_heading_transition_choice,
+            Some(details_heading_choice_id_v1(0))
+        );
+    }
+
+    #[test]
+    fn markov_closer_variant_changes_default_caveat_heading() {
+        let store = NullStore;
+
+        let qid: Hash32 = [14u8; 32];
+        let sid: Hash32 = [15u8; 32];
+
+        let limits = EvidenceLimitsV1 {
+            segments_touched: 0,
+            max_items: 8,
+            max_bytes: 0,
+        };
+        let mut bundle = EvidenceBundleV1::new(qid, sid, limits, 1);
+        bundle.items.push(EvidenceItemV1 {
+            score: 100,
+            data: EvidenceItemDataV1::Proof(ProofRefV1 {
+                proof_id: [6u8; 32],
+            }),
+        });
+        bundle.canonicalize_in_place().unwrap();
+
+        let eb_id = evidence_bundle_id(&bundle).expect("bundle id");
+        let mut plan = AnswerPlanV1::new(qid, sid, eb_id, bundle.items.len() as u32);
+        plan.items.push(AnswerPlanItemV1 {
+            kind: AnswerPlanItemKindV1::Caveat,
+            strength: 300,
+            evidence_item_ix: vec![0],
+        });
+
+        let mut rcfg = RealizerCfgV1::new();
+        rcfg.max_evidence_items = 8;
+        rcfg.load_frame_rows = false;
+        rcfg.max_terms_per_row = 4;
+
+        let d = RealizerDirectivesV1 {
+            version: crate::realizer_directives::REALIZER_DIRECTIVES_V1_VERSION,
+            tone: ToneV1::Cautious,
+            style: StyleV1::Default,
+            format_flags: FORMAT_FLAG_INCLUDE_RISKS,
+            max_preface_sentences: 0,
+            max_softeners: 0,
+            max_hedges: 0,
+            max_questions: 0,
+            rationale_codes: Vec::new(),
+        };
+
+        let mh = MarkovHintsV1 {
+            version: crate::markov_hints::MARKOV_HINTS_V1_VERSION,
+            query_id: qid,
+            flags: 0,
+            order_n: 1,
+            state_id: Id64(0),
+            model_hash: [0u8; 32],
+            context_hash: [0u8; 32],
+            choices: vec![crate::markov_hints::MarkovChoiceV1::new(
+                MarkovChoiceKindV1::Closer,
+                caveat_heading_choice_id_v1(1),
+                10,
+                0,
+            )],
+        };
+
+        let out = realize_answer_plan_v1_with_directives_and_markov_events(
+            &store,
+            &bundle,
+            &plan,
+            &rcfg,
+            Some(&d),
+            Some(&mh),
+        )
+        .expect("realize");
+
+        assert!(out.text.contains("Final notes"));
+        assert!(!out.text.contains("Things to keep in mind"));
+        assert_eq!(
+            out.markov.caveat_heading_closer_choice,
+            Some(caveat_heading_choice_id_v1(1))
+        );
+    }
+
+    #[test]
+    fn default_caveat_heading_emits_default_closer_choice_event() {
+        let store = NullStore;
+
+        let qid: Hash32 = [16u8; 32];
+        let sid: Hash32 = [17u8; 32];
+
+        let limits = EvidenceLimitsV1 {
+            segments_touched: 0,
+            max_items: 8,
+            max_bytes: 0,
+        };
+        let mut bundle = EvidenceBundleV1::new(qid, sid, limits, 1);
+        bundle.items.push(EvidenceItemV1 {
+            score: 100,
+            data: EvidenceItemDataV1::Proof(ProofRefV1 {
+                proof_id: [8u8; 32],
+            }),
+        });
+        bundle.canonicalize_in_place().unwrap();
+
+        let eb_id = evidence_bundle_id(&bundle).expect("bundle id");
+        let mut plan = AnswerPlanV1::new(qid, sid, eb_id, bundle.items.len() as u32);
+        plan.items.push(AnswerPlanItemV1 {
+            kind: AnswerPlanItemKindV1::Caveat,
+            strength: 300,
+            evidence_item_ix: vec![0],
+        });
+
+        let mut rcfg = RealizerCfgV1::new();
+        rcfg.max_evidence_items = 8;
+        rcfg.load_frame_rows = false;
+        rcfg.max_terms_per_row = 4;
+
+        let d = RealizerDirectivesV1 {
+            version: crate::realizer_directives::REALIZER_DIRECTIVES_V1_VERSION,
+            tone: ToneV1::Cautious,
+            style: StyleV1::Default,
+            format_flags: FORMAT_FLAG_INCLUDE_RISKS,
+            max_preface_sentences: 0,
+            max_softeners: 0,
+            max_hedges: 0,
+            max_questions: 0,
+            rationale_codes: Vec::new(),
+        };
+
+        let out = realize_answer_plan_v1_with_directives_and_markov_events(
+            &store,
+            &bundle,
+            &plan,
+            &rcfg,
+            Some(&d),
+            None,
+        )
+        .expect("realize");
+
+        assert!(out.text.contains("Things to keep in mind"));
+        assert_eq!(
+            out.markov.caveat_heading_closer_choice,
+            Some(caveat_heading_choice_id_v1(0))
+        );
     }
 }

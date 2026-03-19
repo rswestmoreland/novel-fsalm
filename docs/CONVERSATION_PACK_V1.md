@@ -48,6 +48,20 @@ Messages:
 - u32 messages_len
 - Message repeated
 
+Optional advisory trailer:
+- Legacy v1 packs may end immediately after the message list.
+- Newer v1 packs may append these sticky advisory ids:
+  - u8 has_markov_model (0 or 1)
+  - if has_markov_model == 1: Hash32 markov_model_id
+  - u8 has_exemplar_memory (0 or 1)
+  - if has_exemplar_memory == 1: Hash32 exemplar_memory_id
+  - u8 has_graph_relevance (0 or 1)
+  - if has_graph_relevance == 1: Hash32 graph_relevance_id
+  - u8 has_presentation_mode (0 or 1)
+  - if has_presentation_mode == 1: u8 presentation_mode
+    - 0: user
+    - 1: operator
+
 Message encoding
 ----------------
 Each Message is:
@@ -63,6 +77,9 @@ Notes:
 - replay_id is intended to reference a ReplayLog artifact for the assistant
   turn that produced this message.
 - has_replay may be 0 for System and User messages.
+- When a saved ConversationPackV1 is used to resume `ask` or `chat`, the stored
+  sticky advisory ids and stored `presentation_mode` are reused automatically
+  unless the caller passes newer explicit overrides on the command line.
 
 Canonicalization
 ----------------
@@ -114,5 +131,13 @@ Determinism notes
 - ConversationPackV1 hashing depends only on canonical bytes.
 - snapshot_id, sig_map_id, and lexicon_snapshot_id are recorded so resuming a
   conversation can be deterministic even if the workspace defaults change.
+- markov_model_id, exemplar_memory_id, and graph_relevance_id may also be
+  recorded so resumed conversations can preserve the same advisory artifact
+  selections across runs.
+- presentation_mode may also be recorded so a saved operator workflow or the
+  default user-facing workflow can be resumed consistently across runs.
 - If a caller chooses to override these ids at runtime, that override must be
   explicit and should be recorded in the next saved ConversationPack.
+- Decoders must accept both legacy v1 packs with no advisory trailer and newer
+  v1 packs that include the advisory trailer. The presentation field is also optional
+  within that trailer for backward compatibility with earlier saved packs.

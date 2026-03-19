@@ -4,7 +4,7 @@ PromptPack Artifacts
 Goal
 ----
 PromptPack is stored as an artifact so it can be referenced by hash in ReplayLog
-and in future job envelopes.
+and by any higher-level wrapper that needs a stable prompt input artifact.
 
 Contract
 --------
@@ -21,5 +21,5 @@ API
 
 Notes
 -----
-- Token-based limits are not implemented yet. uses byte/count limits
- from PromptLimits as a deterministic budget.
+- V1 uses byte/count limits from PromptLimits as the deterministic budget.
+  Token-based budgeting is outside this document's scope.

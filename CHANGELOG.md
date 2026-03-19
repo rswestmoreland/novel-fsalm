@@ -4,6 +4,22 @@ This file tracks user-visible changes.
 
 ## Unreleased
 
+- No user-visible changes recorded yet.
+
+## 0.1.3
+### Added
+- Exemplar guidance support via `ExemplarMemoryV1`, including exemplar-memory build/runtime flows and bounded answer shaping for tone, structure, and clarifier style.
+- Graph-assisted query expansion via `GraphRelevanceV1`, including graph-relevance build/runtime flows that enrich expansion candidates without outranking lexical evidence.
+- Acceptance and release-audit docs for the new default user-vs-operator presentation split, plus comparison smoke scripts for both surfaces.
+
+### Changed
+- Default presentation now targets a conversational user-facing surface for `ask`, `chat`, and `answer`, while `--presentation operator` preserves the inspect-friendly workflow.
+- Raw operator diagnostics such as `Answer v1`, `query_id=...`, `routing_trace ...`, `graph_trace ...`, and `exemplar_match ...` are hidden by default and shown only in operator mode.
+- Workspace scalar defaults (`default_k`, `default_expand`, and `default_meta`) now apply automatically when their flags are omitted.
+- Workspace advisory defaults (`markov_model`, `exemplar_memory`, and `graph_relevance`) now auto-apply in normal runtime flow when configured.
+- Conversation resume now restores sticky advisory artifact ids plus the selected presentation mode so saved user and operator workflows stay consistent.
+- README, release notes, release audit notes, and example scripts now describe and demonstrate the user-vs-operator surface split.
+
 ## 0.1.2
 ### Added
 - Lexicon-assisted pragmatics signals for problem solving and logic puzzles, feeding planner hints and forecast clarifiers.

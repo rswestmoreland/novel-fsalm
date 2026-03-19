@@ -112,13 +112,13 @@ This produces a stable, bounded history signal that can influence phrasing
 selection in later turns.
 
 
-Resume integration (future)
----------------------------
+Resume integration
+------------------
 
 When ConversationPackV1 is used to resume sessions across runs, the same
-contract applies. The context tail should be reconstructed from the saved
-assistant turns by loading their recorded ReplayLog outputs and extracting the
-referenced MarkovTraceV1 artifacts.
+contract applies. The context tail is reconstructed from saved assistant turns
+by loading their recorded ReplayLog outputs and extracting the referenced
+MarkovTraceV1 artifacts when replay ids are present.
 
 
 Related: context anchors for retrieval
@@ -126,8 +126,8 @@ Related: context anchors for retrieval
 
 Markov chat context is used only for phrasing selection (surface forms).
 
-Separately, Novel may derive low-weight context anchors from recent conversation
-message text and merge them into the retrieval query term list. This improves
+Separately, Novel derives low-weight context anchors from recent conversation
+message text and merges them into the retrieval query term list. This improves
 follow-up retrieval continuity when the user omits key terms from prior turns.
 
 See docs/CONTEXT_ANCHORS_V1.md.

@@ -98,6 +98,14 @@ Rhetoric/intent
  - bit 7: safety_sensitive (self-harm/violence cues) (rules-only, conservative)
  - bit 8: is_problem_solve (troubleshooting, debugging, reverse engineering, retrospection)
  - bit 9: is_logic_puzzle (logic puzzle / constraint satisfaction intent)
+ - bit 10: is_compare_request (explicit compare / versus intent)
+ - bit 11: is_recommend_request (explicit best-choice / recommendation intent)
+ - bit 12: is_summarize_request (explicit summary / recap intent)
+ - bit 13: is_explain_request (explicit explain / walkthrough intent)
+ - bit 14: has_compare_targets (explicit alternatives or named compare targets detected)
+ - bit 15: has_focus_summary (asks for a summary-first or high-level response shape)
+ - bit 16: has_focus_steps (asks for a step-by-step or detailed response shape)
+ - bit 17: has_focus_example (asks for an example-led response shape)
 
 Punctuation/emphasis summary
 ----------------------------
@@ -184,6 +192,10 @@ The planner should convert PragmaticsFrameV1 into directives, for example:
  - prefer options + pros/cons, invite iteration
 - If directness low:
  - ask one clarifying question before strong recommendations
+- If has_compare_targets:
+ - prefer criteria-focused compare clarifiers over generic "which options?"
+- If has_focus_summary / has_focus_steps / has_focus_example:
+ - bias clarifiers toward the requested response shape without changing evidence selection
 
 Idioms and metaphors
 --------------------

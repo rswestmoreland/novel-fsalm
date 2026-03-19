@@ -49,11 +49,14 @@ fn show_workspace_prints_resolved_values_and_last_wins() {
 
     let ws_path = root.join("workspace_v1.txt");
     let txt = format!(
-        "# comment\nunknown=abc\nmerged_snapshot={}\nmerged_snapshot={}\nmerged_sig_map={}\nlexicon_snapshot={}\ndefault_k=20\ndefault_expand=1\ndefault_meta=0\n",
+        "# comment\nunknown=abc\nmerged_snapshot={}\nmerged_snapshot={}\nmerged_sig_map={}\nlexicon_snapshot={}\ndefault_k=20\ndefault_expand=1\ndefault_meta=0\nmarkov_model={}\nexemplar_memory={}\ngraph_relevance={}\n",
         h('1'),
         h('2'),
         h('3'),
-        h('4')
+        h('4'),
+        h('5'),
+        h('6'),
+        h('7')
     );
     std::fs::write(&ws_path, txt.as_bytes()).unwrap();
 
@@ -72,6 +75,9 @@ fn show_workspace_prints_resolved_values_and_last_wins() {
     assert_eq!(find_line_value(&stdout, "default_k").unwrap(), "20");
     assert_eq!(find_line_value(&stdout, "default_expand").unwrap(), "1");
     assert_eq!(find_line_value(&stdout, "default_meta").unwrap(), "0");
+    assert_eq!(find_line_value(&stdout, "markov_model").unwrap(), h('5'));
+    assert_eq!(find_line_value(&stdout, "exemplar_memory").unwrap(), h('6'));
+    assert_eq!(find_line_value(&stdout, "graph_relevance").unwrap(), h('7'));
     assert_eq!(find_line_value(&stdout, "workspace_pair_ok").unwrap(), "1");
     assert_eq!(find_line_value(&stdout, "workspace_ready").unwrap(), "1");
 }

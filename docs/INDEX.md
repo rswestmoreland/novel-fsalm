@@ -1,7 +1,7 @@
 Docs index
 ==========
 
-This file is a navigation aid. For stage status, see docs/MASTER_PLAN.md.
+This file is a navigation aid. For detailed implementation status, see `docs/MASTER_PLAN.md`.
 
 Start here
 ----------
@@ -21,7 +21,7 @@ Core architecture
 - docs/METAPHONE.md: metaphonetics
 - docs/LEXICON.md: lexicon model and snapshots
 - docs/LEXICON_SYNC_V1.md: lexicon replication over artifact sync
-- docs/RETRIEVAL_PIPELINE.md: retrieval and evidence construction (high level)
+- docs/RETRIEVAL_PIPELINE.md: current retrieval path and evidence construction (high level)
 - docs/TWO_PASS_RETRIEVAL.md: deterministic two-pass scoring overview
 - docs/REASONING_FLOW.md: end-to-end reasoning diagram
 - docs/SYNAPSE_TRAINING.md: training export and inference hooks
@@ -36,17 +36,21 @@ Artifacts and storage
 - docs/SEGMENT_SIG_V1.md: SegmentSig schema (gating)
 - docs/EVIDENCE_BUNDLE_V1.md: EvidenceBundle schema
 - docs/EVIDENCE_BUILDER_V1.md: Evidence builder details
-- docs/SCALE_REPORT_V1.md: Scale demo scale report artifact
+- docs/SCALE_REPORT_V1.md: scale-demo summary artifact
 - docs/CONVERSATION_PACK_V1.md: resumable chat history artifact schema
+- docs/EXEMPLAR_MEMORY_V1.md: structure-only exemplar memory artifact
+- docs/GRAPH_RELEVANCE_V1.md: bounded graph-adjacency artifact, offline builder, and retrieval-enrichment notes
 
 Answering
 ---------
 - docs/ANSWERING_LOOP.md: Planner/Realizer loop
-- docs/REASONING_AND_CONVERSATION_MATURITY.md: wiring inventory and maturity gaps for reasoning + chat
+- docs/REASONING_AND_CONVERSATION_MATURITY.md: wiring inventory and remaining maturity gaps for reasoning + chat
+- docs/CHAT_FLOW_ACCEPTANCE.md: black-box conversation-flow regression scope
 - docs/LOGIC_SOLVER_V1.md: deterministic logic puzzle solver and ProofRef evidence
 - docs/REALIZER_DIRECTIVES_V1.md: realization control directives schema
 - docs/PLANNER_HINTS_V1.md: planner hint schema
 - docs/FORECAST_V1.md: forecast schema
+- docs/QUALITY_GATE_V1.md: quality-gate integration, inspect lines, and trace rules
 - docs/MARKOV_HINTS_V1.md: Markov/PPM hint schema
 - docs/MARKOV_MODEL_V1.md: Markov/PPM model schema
 - docs/MARKOV_TRACE_V1.md: Markov/PPM choice trace schema
@@ -62,7 +66,8 @@ Answering
 CLI
 ---
 - docs/CLI.md: command reference
-- docs/WORKSPACE_V1.md: workspace defaults (user-friendly command wiring)
+- docs/WORKSPACE_V1.md: live workspace defaults and command behavior
+- docs/RUNTIME_REACHABILITY.md: release-facing runtime reachability audit for defaults, advisory layers, and resume behavior
 - docs/REPLAY.md: ReplayLog and replayable workflows
 - docs/REPLAY_STEP_CONVENTIONS.md: step name conventions and required hash sets
 
@@ -87,8 +92,8 @@ Operator and maintenance
 - docs/COMPACTION_V1.md: index compaction contract
 - docs/INDEX_PACK_V1.md: compacted index-pack schema
 
-Scale demo (Track C)
---------------------
+Scale demo
+----------
 Scale demo is the deterministic end-to-end health check.
 
 - docs/SCALE_DEMO.md: stage overview

@@ -39,6 +39,13 @@ pub struct WorkspaceV1 {
     pub default_expand: Option<bool>,
     /// Default metaphone expansion behavior for end-user commands.
     pub default_meta: Option<bool>,
+
+    /// Default MarkovModelV1 hash for bounded phrasing hints.
+    pub markov_model: Option<Hash32>,
+    /// Default ExemplarMemoryV1 hash for advisory shaping.
+    pub exemplar_memory: Option<Hash32>,
+    /// Default GraphRelevanceV1 hash for bounded graph expansion.
+    pub graph_relevance: Option<Hash32>,
 }
 
 impl WorkspaceV1 {
@@ -148,6 +155,33 @@ pub fn parse_workspace_v1_text(text: &str) -> Result<WorkspaceV1, String> {
                     )
                 })?);
             }
+            "markov_model" => {
+                ws.markov_model = Some(parse_hash32_hex(v).map_err(|e| {
+                    format!(
+                        "workspace_v1: markov_model invalid on line {}: {}",
+                        idx + 1,
+                        e
+                    )
+                })?);
+            }
+            "exemplar_memory" => {
+                ws.exemplar_memory = Some(parse_hash32_hex(v).map_err(|e| {
+                    format!(
+                        "workspace_v1: exemplar_memory invalid on line {}: {}",
+                        idx + 1,
+                        e
+                    )
+                })?);
+            }
+            "graph_relevance" => {
+                ws.graph_relevance = Some(parse_hash32_hex(v).map_err(|e| {
+                    format!(
+                        "workspace_v1: graph_relevance invalid on line {}: {}",
+                        idx + 1,
+                        e
+                    )
+                })?);
+            }
             _ => {
                 // Unknown keys are ignored.
             }
@@ -225,6 +259,16 @@ fn serialize_workspace_v1(ws: &WorkspaceV1) -> String {
     }
     if let Some(v) = ws.default_meta {
         out.push_str(&format!("default_meta={}\n", if v { 1 } else { 0 }));
+    }
+
+    if let Some(h) = ws.markov_model {
+        out.push_str(&format!("markov_model={}\n", crate::hash::hex32(&h)));
+    }
+    if let Some(h) = ws.exemplar_memory {
+        out.push_str(&format!("exemplar_memory={}\n", crate::hash::hex32(&h)));
+    }
+    if let Some(h) = ws.graph_relevance {
+        out.push_str(&format!("graph_relevance={}\n", crate::hash::hex32(&h)));
     }
 
     out
@@ -329,9 +373,12 @@ mod tests {
     #[test]
     fn parse_trims_whitespace() {
         let t = format!(
-            " merged_snapshot = {} \n merged_sig_map = {} \n default_expand = 1 \n",
+            " merged_snapshot = {} \n merged_sig_map = {} \n default_expand = 1 \n markov_model = {} \n exemplar_memory = {} \n graph_relevance = {} \n",
             h('a'),
-            h('b')
+            h('b'),
+            h('c'),
+            h('d'),
+            h('e')
         );
         let ws = parse_workspace_v1_text(&t).unwrap();
         assert_eq!(
@@ -343,6 +390,34 @@ mod tests {
             parse_hash32_hex(&h('b')).unwrap()
         );
         assert_eq!(ws.default_expand, Some(true));
+        assert_eq!(ws.markov_model.unwrap(), parse_hash32_hex(&h('c')).unwrap());
+        assert_eq!(
+            ws.exemplar_memory.unwrap(),
+            parse_hash32_hex(&h('d')).unwrap()
+        );
+        assert_eq!(
+            ws.graph_relevance.unwrap(),
+            parse_hash32_hex(&h('e')).unwrap()
+        );
+    }
+
+    #[test]
+    fn serialize_includes_advisory_artifact_defaults() {
+        let ws = WorkspaceV1 {
+            merged_snapshot: None,
+            merged_sig_map: None,
+            lexicon_snapshot: None,
+            default_k: None,
+            default_expand: None,
+            default_meta: None,
+            markov_model: Some(parse_hash32_hex(&h('7')).unwrap()),
+            exemplar_memory: Some(parse_hash32_hex(&h('8')).unwrap()),
+            graph_relevance: Some(parse_hash32_hex(&h('9')).unwrap()),
+        };
+        let s = serialize_workspace_v1(&ws);
+        assert!(s.contains(&format!("markov_model={}\n", h('7'))));
+        assert!(s.contains(&format!("exemplar_memory={}\n", h('8'))));
+        assert!(s.contains(&format!("graph_relevance={}\n", h('9'))));
     }
 
     #[test]

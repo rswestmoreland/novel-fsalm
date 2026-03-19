@@ -1,4 +1,4 @@
-# Scale Demo (Track C)
+# Scale demo
 
 The scale demo is a deterministic workload runner for exercising the Novel FSA-LM pipeline on synthetic corpora. It is designed to be:
 

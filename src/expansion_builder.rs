@@ -8,7 +8,7 @@
 //! - [`ExpansionBudgetV1`](crate::expansion_budget::ExpansionBudgetV1)
 //! - [`ExpandedQfvV1`](crate::expanded_qfv::ExpandedQfvV1)
 //!
-//! is still not wired into retrieval. It is a pure builder:
+//! is used by bridge expansion for bounded retrieval enrichment. It remains a pure builder:
 //! - callers provide base anchors and candidate expansion items
 //! - the builder applies multipliers, dedup, stable ranking, and budget fill
 //! - the output is a canonical ExpandedQfvV1

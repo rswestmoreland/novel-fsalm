@@ -18,9 +18,12 @@ use crate::lexicon_expand_lookup::LexiconExpandLookupV1;
 use crate::lexicon_neighborhoods::{lemma_pos_mask, LexiconCueNeighborhoodsV1};
 use crate::pragmatics_frame::{
     IntentFlagsV1, PragmaticsFrameV1, PragmaticsFrameV1ValidateError, RhetoricModeV1,
-    INTENT_FLAG_HAS_CODE, INTENT_FLAG_HAS_CONSTRAINTS, INTENT_FLAG_HAS_MATH,
-    INTENT_FLAG_HAS_QUESTION, INTENT_FLAG_HAS_REQUEST, INTENT_FLAG_IS_FOLLOW_UP,
+    INTENT_FLAG_HAS_CODE, INTENT_FLAG_HAS_COMPARE_TARGETS, INTENT_FLAG_HAS_CONSTRAINTS,
+    INTENT_FLAG_HAS_FOCUS_EXAMPLE, INTENT_FLAG_HAS_FOCUS_STEPS, INTENT_FLAG_HAS_FOCUS_SUMMARY,
+    INTENT_FLAG_HAS_MATH, INTENT_FLAG_HAS_QUESTION, INTENT_FLAG_HAS_REQUEST,
+    INTENT_FLAG_IS_COMPARE_REQUEST, INTENT_FLAG_IS_EXPLAIN_REQUEST, INTENT_FLAG_IS_FOLLOW_UP,
     INTENT_FLAG_IS_LOGIC_PUZZLE, INTENT_FLAG_IS_META_PROMPT, INTENT_FLAG_IS_PROBLEM_SOLVE,
+    INTENT_FLAG_IS_RECOMMEND_REQUEST, INTENT_FLAG_IS_SUMMARIZE_REQUEST,
     INTENT_FLAG_SAFETY_SENSITIVE, PRAGMATICS_FRAME_V1_VERSION,
 };
 use crate::prompt_pack::PromptPack;
@@ -427,6 +430,39 @@ pub fn extract_pragmatics_frame_v1<'a>(
     );
     let problem_words = make_ids(tok_cfg, &["no", "not", "never", "none", "missing", "empty"]);
 
+    let compare_words = make_ids(tok_cfg, &["compare", "versus", "vs", "difference"]);
+    let compare_pairs = make_pairs(tok_cfg, &[("better", "than"), ("compare", "with")]);
+    let recommend_words = make_ids(tok_cfg, &["recommend", "recommended", "best"]);
+    let recommend_pairs = make_pairs(tok_cfg, &[("which", "best"), ("what", "best")]);
+    let summarize_words = make_ids(
+        tok_cfg,
+        &["summarize", "summary", "recap", "overview", "tldr"],
+    );
+    let summarize_pairs = make_pairs(tok_cfg, &[("sum", "up")]);
+    let explain_words = make_ids(tok_cfg, &["explain", "walkthrough", "reasoning"]);
+    let explain_pairs = make_pairs(
+        tok_cfg,
+        &[("walk", "through"), ("explain", "why"), ("explain", "how")],
+    );
+
+    let compare_target_words = make_ids(tok_cfg, &["and", "or", "between"]);
+    let compare_target_explicit_words = make_ids(tok_cfg, &["vs", "versus", "between"]);
+    let focus_summary_words = make_ids(tok_cfg, &["brief", "short", "overview", "recap", "tldr"]);
+    let focus_summary_pairs = make_pairs(tok_cfg, &[("high", "level"), ("sum", "up")]);
+    let focus_steps_words = make_ids(
+        tok_cfg,
+        &["steps", "step", "detailed", "detail", "walkthrough"],
+    );
+    let focus_steps_pairs = make_pairs(
+        tok_cfg,
+        &[("step", "by"), ("next", "steps"), ("walk", "through")],
+    );
+    let focus_example_words = make_ids(tok_cfg, &["example", "sample", "demo", "illustration"]);
+    let focus_example_pairs = make_pairs(tok_cfg, &[("for", "example")]);
+    let option_words = make_ids(tok_cfg, &["option"]);
+    let token_a = term_id_from_token("a", tok_cfg).0 .0;
+    let token_b = term_id_from_token("b", tok_cfg).0 .0;
+
     let imperative_first_words = make_ids(
         tok_cfg,
         &[
@@ -473,6 +509,17 @@ pub fn extract_pragmatics_frame_v1<'a>(
     let mut first_person = false;
     let mut negative_cue = false;
     let mut problem_cue = false;
+    let mut compare_cue = false;
+    let mut compare_target_cue = false;
+    let mut recommend_cue = false;
+    let mut summarize_cue = false;
+    let mut explain_cue = false;
+    let mut focus_summary_cue = false;
+    let mut focus_steps_cue = false;
+    let mut focus_example_cue = false;
+    let mut saw_compare_word = false;
+    let mut saw_option_a = false;
+    let mut saw_option_b = false;
     let mut wh_any = false;
 
     let mut first_id: Option<u64> = None;
@@ -566,6 +613,46 @@ pub fn extract_pragmatics_frame_v1<'a>(
         if in_ids(&problem_words, id) {
             problem_cue = true;
         }
+        if in_ids(&compare_words, id) {
+            compare_cue = true;
+            saw_compare_word = true;
+        }
+        if in_ids(&compare_target_explicit_words, id) {
+            compare_target_cue = true;
+        }
+        if saw_compare_word && in_ids(&compare_target_words, id) {
+            compare_target_cue = true;
+        }
+        if let Some(p) = prev_id {
+            if in_ids(&option_words, p) {
+                if id == token_a {
+                    saw_option_a = true;
+                }
+                if id == token_b {
+                    saw_option_b = true;
+                }
+            }
+        }
+        if in_ids(&recommend_words, id) {
+            recommend_cue = true;
+        }
+        if in_ids(&summarize_words, id) {
+            summarize_cue = true;
+            focus_summary_cue = true;
+        }
+        if in_ids(&explain_words, id) {
+            explain_cue = true;
+            focus_steps_cue = true;
+        }
+        if in_ids(&focus_summary_words, id) {
+            focus_summary_cue = true;
+        }
+        if in_ids(&focus_steps_words, id) {
+            focus_steps_cue = true;
+        }
+        if in_ids(&focus_example_words, id) {
+            focus_example_cue = true;
+        }
 
         if in_ids(&wh_words, id) {
             wh_any = true;
@@ -583,6 +670,30 @@ pub fn extract_pragmatics_frame_v1<'a>(
             if in_pairs(&brainstorm_pairs, p, id) {
                 is_brainstorm = true;
             }
+            if in_pairs(&compare_pairs, p, id) {
+                compare_cue = true;
+                saw_compare_word = true;
+            }
+            if in_pairs(&recommend_pairs, p, id) {
+                recommend_cue = true;
+            }
+            if in_pairs(&summarize_pairs, p, id) {
+                summarize_cue = true;
+                focus_summary_cue = true;
+            }
+            if in_pairs(&explain_pairs, p, id) {
+                explain_cue = true;
+                focus_steps_cue = true;
+            }
+            if in_pairs(&focus_summary_pairs, p, id) {
+                focus_summary_cue = true;
+            }
+            if in_pairs(&focus_steps_pairs, p, id) {
+                focus_steps_cue = true;
+            }
+            if in_pairs(&focus_example_pairs, p, id) {
+                focus_example_cue = true;
+            }
         }
 
         prev_id = Some(id);
@@ -596,6 +707,10 @@ pub fn extract_pragmatics_frame_v1<'a>(
         if in_pairs(&follow_pairs, a, b) {
             is_follow_up = true;
         }
+    }
+
+    if saw_option_a && saw_option_b {
+        compare_target_cue = true;
     }
 
     // Intent flags.
@@ -701,6 +816,34 @@ pub fn extract_pragmatics_frame_v1<'a>(
 
     if is_follow_up {
         flags |= INTENT_FLAG_IS_FOLLOW_UP;
+    }
+
+    let has_qr = (flags
+        & (INTENT_FLAG_HAS_QUESTION | INTENT_FLAG_HAS_REQUEST | INTENT_FLAG_HAS_CONSTRAINTS))
+        != 0;
+    if compare_cue && has_qr {
+        flags |= INTENT_FLAG_IS_COMPARE_REQUEST;
+    }
+    if recommend_cue && has_qr {
+        flags |= INTENT_FLAG_IS_RECOMMEND_REQUEST;
+    }
+    if summarize_cue && has_qr {
+        flags |= INTENT_FLAG_IS_SUMMARIZE_REQUEST;
+    }
+    if explain_cue && has_qr {
+        flags |= INTENT_FLAG_IS_EXPLAIN_REQUEST;
+    }
+    if compare_target_cue && has_qr {
+        flags |= INTENT_FLAG_HAS_COMPARE_TARGETS;
+    }
+    if focus_summary_cue && has_qr {
+        flags |= INTENT_FLAG_HAS_FOCUS_SUMMARY;
+    }
+    if focus_steps_cue && has_qr {
+        flags |= INTENT_FLAG_HAS_FOCUS_STEPS;
+    }
+    if focus_example_cue && has_qr {
+        flags |= INTENT_FLAG_HAS_FOCUS_EXAMPLE;
     }
 
     // Emphasis score.
@@ -995,6 +1138,36 @@ mod tests {
         let f2 = extract_pragmatics_frame_v1(Id64(1), 0, "Logic puzzle: deduce the answer.", &cfg)
             .unwrap();
         assert!((f2.flags & INTENT_FLAG_IS_LOGIC_PUZZLE) != 0);
+    }
+
+    #[test]
+    fn extract_sets_compare_recommend_summary_and_explain_flags() {
+        let f_compare = ex("Please compare banana and apple for speed.");
+        assert!((f_compare.flags & INTENT_FLAG_IS_COMPARE_REQUEST) != 0);
+
+        let f_recommend = ex("What is the best option to recommend here?");
+        assert!((f_recommend.flags & INTENT_FLAG_IS_RECOMMEND_REQUEST) != 0);
+
+        let f_summary = ex("Please summarize the banana notes.");
+        assert!((f_summary.flags & INTENT_FLAG_IS_SUMMARIZE_REQUEST) != 0);
+
+        let f_explain = ex("Can you explain how the banana index works?");
+        assert!((f_explain.flags & INTENT_FLAG_IS_EXPLAIN_REQUEST) != 0);
+    }
+
+    #[test]
+    fn extract_sets_compare_target_and_focus_flags() {
+        let f_compare = ex("Please compare option a and option b.");
+        assert!((f_compare.flags & INTENT_FLAG_IS_COMPARE_REQUEST) != 0);
+        assert!((f_compare.flags & INTENT_FLAG_HAS_COMPARE_TARGETS) != 0);
+
+        let f_focus = ex("Can you explain this with a short high level summary and an example?");
+        assert!((f_focus.flags & INTENT_FLAG_IS_EXPLAIN_REQUEST) != 0);
+        assert!((f_focus.flags & INTENT_FLAG_HAS_FOCUS_SUMMARY) != 0);
+        assert!((f_focus.flags & INTENT_FLAG_HAS_FOCUS_EXAMPLE) != 0);
+
+        let f_steps = ex("Please explain this step by step.");
+        assert!((f_steps.flags & INTENT_FLAG_HAS_FOCUS_STEPS) != 0);
     }
 
     #[test]

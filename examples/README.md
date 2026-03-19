@@ -23,6 +23,11 @@ Quickstart scripts (recommended)
   - Shows workspace defaults.
   - Runs `ask` with and without `--expand`.
 
+- `demo_cmd_compare_presentation.(bat|sh)`
+  - Loads a tiny TSV into one root.
+  - Runs the same `ask` prompt once in default user mode and once in operator mode.
+  - Useful for smoke-checking the conversational surface before a release.
+
 - `demo_cmd_build_markov_model.(bat|sh)`
   - Creates a small chat session (`--session-file` + `--autosave`).
   - Extracts assistant replay ids from the ConversationPack.

@@ -70,6 +70,12 @@ Label namespaces (v1)
  - Example: append:clarify_question
 - preface:* (realizer opener surface templates)
  - Example: preface:neutral:0
+- transition:* (wired transition surface templates)
+ - Example: transition:details_heading:0
+- closer:* (wired closer surface templates)
+ - Example: closer:caveat_heading:0
+- other:* (wired Other surface templates)
+ - Example: other:clarifier_intro:0
 
 Starting in (Option B), when a realizer surface-template site is
 wired, the trace MUST record the actual template choice id used at that site.
@@ -77,6 +83,23 @@ For the preface opener, this means:
 
 - If a preface line is emitted, record MarkovTokenV1(kind=Opener, choice_id=
  preface:<tone>:<variant>) as the first token in the stream.
+
+For the Default/Concise details heading transition, this means:
+
+- If the details heading is emitted, record MarkovTokenV1(kind=Transition,
+ choice_id=transition:details_heading:<variant>) before the first Bullet
+ placeholder token for that rendered group.
+
+For the Default/Concise caveat heading closer, this means:
+
+- If the caveat heading is emitted, record MarkovTokenV1(kind=Closer,
+ choice_id=closer:caveat_heading:<variant>) before the first Caveat
+ placeholder token for that rendered group.
+
+For the clarifier intro Other site, this means:
+
+- If a clarifying question is appended, record MarkovTokenV1(kind=Other,
+ choice_id=other:clarifier_intro:<variant>) before append:clarify_question.
 
 Until all selection sites are wired, v1 traces may contain both structural
 placeholder tokens and surface-template tokens. Training treats them as the

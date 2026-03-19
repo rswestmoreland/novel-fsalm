@@ -65,6 +65,30 @@ pub const INTENT_FLAG_IS_PROBLEM_SOLVE: IntentFlagsV1 = 1u32 << 8;
 /// The message is likely a logic puzzle / constraint satisfaction prompt.
 pub const INTENT_FLAG_IS_LOGIC_PUZZLE: IntentFlagsV1 = 1u32 << 9;
 
+/// The message is explicitly asking for a comparison.
+pub const INTENT_FLAG_IS_COMPARE_REQUEST: IntentFlagsV1 = 1u32 << 10;
+
+/// The message is explicitly asking for a recommendation or best-choice answer.
+pub const INTENT_FLAG_IS_RECOMMEND_REQUEST: IntentFlagsV1 = 1u32 << 11;
+
+/// The message is explicitly asking for a summary or recap.
+pub const INTENT_FLAG_IS_SUMMARIZE_REQUEST: IntentFlagsV1 = 1u32 << 12;
+
+/// The message is explicitly asking for an explanation or walkthrough.
+pub const INTENT_FLAG_IS_EXPLAIN_REQUEST: IntentFlagsV1 = 1u32 << 13;
+
+/// The message appears to name explicit comparison targets or alternatives.
+pub const INTENT_FLAG_HAS_COMPARE_TARGETS: IntentFlagsV1 = 1u32 << 14;
+
+/// The message asks for a summary-first or high-level response shape.
+pub const INTENT_FLAG_HAS_FOCUS_SUMMARY: IntentFlagsV1 = 1u32 << 15;
+
+/// The message asks for a step-by-step or detailed response shape.
+pub const INTENT_FLAG_HAS_FOCUS_STEPS: IntentFlagsV1 = 1u32 << 16;
+
+/// The message asks for an example-led response shape.
+pub const INTENT_FLAG_HAS_FOCUS_EXAMPLE: IntentFlagsV1 = 1u32 << 17;
+
 /// Mask of all defined v1 intent flags.
 pub const INTENT_FLAGS_V1_ALL: IntentFlagsV1 = INTENT_FLAG_HAS_QUESTION
     | INTENT_FLAG_HAS_REQUEST
@@ -75,7 +99,15 @@ pub const INTENT_FLAGS_V1_ALL: IntentFlagsV1 = INTENT_FLAG_HAS_QUESTION
     | INTENT_FLAG_IS_FOLLOW_UP
     | INTENT_FLAG_SAFETY_SENSITIVE
     | INTENT_FLAG_IS_PROBLEM_SOLVE
-    | INTENT_FLAG_IS_LOGIC_PUZZLE;
+    | INTENT_FLAG_IS_LOGIC_PUZZLE
+    | INTENT_FLAG_IS_COMPARE_REQUEST
+    | INTENT_FLAG_IS_RECOMMEND_REQUEST
+    | INTENT_FLAG_IS_SUMMARIZE_REQUEST
+    | INTENT_FLAG_IS_EXPLAIN_REQUEST
+    | INTENT_FLAG_HAS_COMPARE_TARGETS
+    | INTENT_FLAG_HAS_FOCUS_SUMMARY
+    | INTENT_FLAG_HAS_FOCUS_STEPS
+    | INTENT_FLAG_HAS_FOCUS_EXAMPLE;
 
 /// Errors produced by [`PragmaticsFrameV1::validate`].
 #[derive(Debug)]

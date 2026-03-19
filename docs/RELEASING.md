@@ -25,6 +25,15 @@ From the repository root:
 - Enforce formatting:
   - `cargo fmt --all --check`
 
+- Review release-facing runtime reachability:
+  - `docs/RUNTIME_REACHABILITY.md`
+  - `docs/RELEASE_AUDIT.md`
+
+- Run the user-vs-operator presentation smoke if the release changes the
+  default answer surface:
+  - Windows: `examples\demo_cmd_compare_presentation.bat`
+  - Linux/WSL: `examples/demo_cmd_compare_presentation.sh`
+
 ## Versioning
 
 This project uses semantic versioning.
@@ -37,12 +46,35 @@ To bump the version:
    - Keep an "Unreleased" section for upcoming changes.
    - Add a new version section with a short list of user-visible changes.
 
+## Repository upload prep
+
+Before you tag and push a release, verify that the repo surface shown to users is
+clean and complete.
+
+Checklist:
+
+- `README.md` reflects the current primary user flow and default presentation.
+- `CHANGELOG.md` and `docs/RELEASE_NOTES.md` match the version being cut.
+- `docs/RELEASE_AUDIT.md` and `docs/RELEASING.md` match the current release gate.
+- `examples/README.md` and any release-smoke scripts still point at the current CLI behavior.
+- Top-level release files are present and current: `LICENSE`, `NOTICE`, `SECURITY.md`, `CONTRIBUTING.md`, and `CODE_OF_ETHICS.md`.
+- Public-facing docs and examples do not use internal `Phase` / `Subphase` / `Task` wording outside `docs/MASTER_PLAN.md`.
+
+Suggested review set before upload:
+
+- `README.md`
+- `CHANGELOG.md`
+- `docs/RELEASE_NOTES.md`
+- `docs/RELEASE_AUDIT.md`
+- `docs/RELEASING.md`
+- `examples/README.md`
+
 ## Tagging
 
 Example for version `X.Y.Z`:
 
-1) Commit the version and changelog updates:
-   - `git add Cargo.toml CHANGELOG.md`
+1) Commit the version and release-document updates:
+   - `git add Cargo.toml CHANGELOG.md docs/RELEASE_NOTES.md docs/RELEASE_AUDIT.md docs/RELEASING.md`
    - `git commit -m "Release X.Y.Z"`
 
 2) Create an annotated tag:

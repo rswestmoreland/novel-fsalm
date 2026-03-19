@@ -253,7 +253,8 @@ fn wiktionary_ingest_produces_snapshot_and_enables_query_expansion() {
         String::from_utf8_lossy(&aerr_no)
     );
     let s_no = std::fs::read_to_string(&out_no).unwrap();
-    assert!(s_no.contains("Answer v1"));
+    assert!(!s_no.contains("Answer v1"));
+    assert!(!s_no.contains("query_id="));
     assert!(
         !s_no.contains("[E0]"),
         "expected no evidence without expansion"
@@ -289,6 +290,7 @@ fn wiktionary_ingest_produces_snapshot_and_enables_query_expansion() {
         String::from_utf8_lossy(&aerr_yes)
     );
     let s_yes = std::fs::read_to_string(&out_yes).unwrap();
-    assert!(s_yes.contains("Answer v1"));
+    assert!(!s_yes.contains("Answer v1"));
+    assert!(!s_yes.contains("query_id="));
     assert!(s_yes.contains("[E0]"), "expected evidence with expansion");
 }

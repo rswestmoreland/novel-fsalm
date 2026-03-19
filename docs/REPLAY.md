@@ -1,25 +1,27 @@
-Replay Logs (Baseline)
-======================
+Replay logs
+===========
 
 Purpose
 -------
-A replay log is a canonical artifact that records, per step, the input and output artifact
-hashes. This enables deterministic replay and regression checks.
+A replay log is the current canonical artifact used to record, per step, the
+input and output artifact hashes for replayable workflows. This enables
+deterministic replay and regression checks.
 
- scope
---------------
+Current scope
+-------------
 - ReplayLog v1 with:
  - version
  - list of steps: (name, inputs[], outputs[])
 - Canonical encoding and decoding
+- Step conventions shared by query, answer, ask, chat, and other replayable flows
 
-Later stages
-------------
-- Add typed job payload references and stage configs (DecodeCfg, snapshot_id, weights_id)
-- Add assertions for expected hashes for CI-style checks
+Reserved extensions
+-------------------
+- Typed job payload references and stage configs (DecodeCfg, snapshot_id, weights_id)
+- Assertions for expected hashes for CI-style checks
 
-: PromptPack linkage
-----------------------------
+PromptPack linkage
+------------------
 A ReplayLog step can reference PromptPack artifacts using a simple convention:
 
 - Step name: "prompt" (or user-chosen)
@@ -29,11 +31,11 @@ A ReplayLog step can reference PromptPack artifacts using a simple convention:
 This keeps ReplayLog schema stable while enabling end-to-end chains:
 
 - prompt step outputs PromptPack hash
-- future infer step inputs include PromptPack hash and snapshot hash
-- future infer step outputs include completion artifact hash
+- later inference-style steps can reference PromptPack plus retrieval/runtime inputs
+- later completion-style steps can reference the resulting output artifact hash
 
-: Step conventions
---------------------------
+Step conventions
+----------------
 Replay steps are interpreted by convention. See:
 - docs/REPLAY_STEP_CONVENTIONS.md
 

@@ -161,5 +161,6 @@ fn chat_save_and_resume_via_conversation_pack() {
         String::from_utf8_lossy(&out2.stderr)
     );
     let stdout2 = String::from_utf8_lossy(&out2.stdout);
-    assert!(stdout2.contains("Answer v1"), "stdout={}", stdout2);
+    assert!(!stdout2.contains("Answer v1"), "stdout={}", stdout2);
+    assert!(!stdout2.contains("query_id="), "stdout={}", stdout2);
 }

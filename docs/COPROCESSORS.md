@@ -1,16 +1,17 @@
-Coprocessors and optional neural modules
-=======================================
+Coprocessors and advisory modules
+==================================
 
 Purpose
 -------
 Novel's core architecture is deterministic and evidence-first:
 - structured memory (frames + lexicon)
-- deterministic retrieval (D + C/B)
+- deterministic retrieval
 - constrained synthesis (claims + uncertainty)
 
-Coprocessors are optional advisory modules that can improve planning, extraction, and fluency
-without replacing the core. They must preserve CPU-first, integer-only, bitwise determinism,
-bounded memory, and anti-plagiarism constraints.
+Coprocessors are optional advisory modules that can improve planning, extraction,
+and fluency without replacing the core. The current live surface is rules-first
+and bounded. Any future learned modules must still preserve CPU-first,
+integer-oriented determinism, bounded memory, and anti-plagiarism constraints.
 
 Coprocessor classes
 -------------------

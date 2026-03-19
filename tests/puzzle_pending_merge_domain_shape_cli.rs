@@ -111,7 +111,7 @@ fn puzzle_pending_merge_fills_domain_then_asks_shape() {
         ],
     );
     assert_eq!(c1, 0, "stderr={}", err1);
-    assert!(out1.contains("Clarifying question:"), "stdout={}", out1);
+    assert!(out1.contains("Quick question:"), "stdout={}", out1);
     assert!(out1.contains("possible values"), "stdout={}", out1);
 
     // Turn 2: provide a domain range; should merge and move to shape clarification.
@@ -129,7 +129,7 @@ fn puzzle_pending_merge_fills_domain_then_asks_shape() {
         ],
     );
     assert_eq!(c2, 0, "stderr={}", err2);
-    assert!(out2.contains("Clarifying question:"), "stdout={}", out2);
+    assert!(out2.contains("Quick question:"), "stdout={}", out2);
     assert!(out2.contains("ordering puzzle"), "stdout={}", out2);
     assert!(!out2.contains("Which entities"), "stdout={}", out2);
 }
@@ -184,7 +184,7 @@ fn puzzle_pending_merge_fills_shape_then_asks_constraints() {
         ],
     );
     assert_eq!(c1, 0, "stderr={}", err1);
-    assert!(out1.contains("Clarifying question:"), "stdout={}", out1);
+    assert!(out1.contains("Quick question:"), "stdout={}", out1);
     assert!(out1.contains("ordering puzzle"), "stdout={}", out1);
 
     // Turn 2: provide shape; should merge and then ask for constraints.
@@ -202,6 +202,6 @@ fn puzzle_pending_merge_fills_shape_then_asks_constraints() {
         ],
     );
     assert_eq!(c2, 0, "stderr={}", err2);
-    assert!(out2.contains("Clarifying question:"), "stdout={}", out2);
+    assert!(out2.contains("Quick question:"), "stdout={}", out2);
     assert!(out2.contains("What constraints"), "stdout={}", out2);
 }

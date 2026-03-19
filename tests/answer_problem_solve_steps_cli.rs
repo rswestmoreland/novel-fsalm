@@ -214,11 +214,26 @@ fn answer_problem_solve_prefers_steps_when_lexicon_pragmatics_present() {
     let s = std::fs::read_to_string(&out_path)
         .unwrap()
         .replace("\r\n", "\n");
-    assert!(s.contains("Answer v1\n"));
-    assert!(s.contains("\nPlan\n"));
+    assert!(!s.contains("Answer v1\n"));
+    assert!(!s.contains("query_id="));
     assert!(
-        s.contains("\nSteps\n"),
-        "expected Steps section, got: {}",
+        s.contains("Steps:") || s.contains("\nSteps\n"),
+        "output={}",
+        s
+    );
+    assert!(
+        s.contains("Steps:") || s.contains("\nSteps\n"),
+        "expected step-oriented output, got: {}",
+        s
+    );
+    assert!(
+        s.contains("\nSources\n") || s.contains("\nEvidence\n"),
+        "expected sources or evidence section, got: {}",
+        s
+    );
+    assert!(
+        s.contains("Quick question:") || !s.contains("Clarifying question:"),
+        "expected user-facing clarifier phrasing when clarification is present, got: {}",
         s
     );
 }

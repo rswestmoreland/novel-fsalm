@@ -1,4 +1,4 @@
-# Scale Demo Regression Pack 
+# Scale demo regression pack
 
 This document defines a recommended, fixed-seed regression workload for `scale-demo`.
 

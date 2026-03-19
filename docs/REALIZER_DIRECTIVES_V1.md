@@ -139,6 +139,15 @@ Additionally, style provides a default list formatting preference:
 - `StepByStep`: NUMBERED
 - `Debug`: BULLETS
 
+At render time, style also shapes non-debug plan labels:
+- `Default` and `Concise` prefer softer labels such as `Main answer`,
+  `Supporting points`, and `Things to keep in mind`.
+- Procedural troubleshooting and logic-puzzle step groups keep the explicit
+  `Steps` label even under `Default` or `Concise` so operator-facing step flows
+  remain clear.
+- `Checklist` and `StepByStep` keep more explicit structural labels such as
+  `Summary`, `Steps`, `Details`, and `Caveats`.
+
 Limits
 ^^^^^^
 These are small caps used by the Realizer to avoid excessive hedging or
@@ -162,6 +171,8 @@ Codes introduced in:
 - 15 LONG_INPUT (byte_len >= 300)
 - 16 LOW_POLITENESS (politeness <= 350)
 - 17 HIGH_AROUSAL (arousal >= 650)
+- 18 PROBLEM_SOLVE (troubleshooting, debugging, retrospection)
+- 19 LOGIC_PUZZLE (variables/domains/constraint solving)
 
 Canonical form: `rationale_codes` must be strictly increasing with no
 duplicates.

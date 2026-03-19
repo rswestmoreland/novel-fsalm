@@ -140,7 +140,7 @@ fn puzzle_sketch_replay_step_is_recorded_when_clarifying() {
         ],
     );
     assert_eq!(acode, 0, "stderr={}", aerr);
-    assert!(aout.contains("Clarifying question:"), "stdout={}", aout);
+    assert!(aout.contains("Quick question:"), "stdout={}", aout);
 
     let conv_hex = parse_file_kv(&session_file, "conversation_pack")
         .expect("conversation_pack in session file");

@@ -39,7 +39,8 @@ Goals
 Non-goals (v0)
 --------------
 
-- High performance lexicon lookup indexes (planned in later stages).
+- High performance lexicon lookup indexes. This document only covers
+  deterministic ownership, segmenting, validation, and merge policy.
 - Supporting overlapping lemmas across segments inside a single snapshot.
  (v0 treats overlaps as an error.)
 
@@ -122,8 +123,8 @@ Practical validation strategy
 - Build a sorted list of lemma_id values per segment.
 - Merge the lists (k-way merge) and reject duplicates.
 
-If full lemma enumeration is too expensive for a future large lexicon, a later
-stage can add a per-segment lemma range summary or a compact signature.
+If full lemma enumeration becomes too expensive for a larger lexicon, a later
+version can add a per-segment lemma range summary or a compact signature.
 
 Validation CLI
 --------------
@@ -135,18 +136,18 @@ To validate a LexiconSnapshotV1 for disjoint owner-lemma coverage:
 This command loads the snapshot and its referenced LexiconSegmentV1 artifacts and
 fails if any LemmaId is present in more than one segment.
 
-Future extension (not implemented in v0)
-----------------------------------------
+Reserved extension note
+-----------------------
 
-Overlapping segments may be needed for incremental updates or multi-source
-lexicons. If/when that is introduced, it MUST be explicit and deterministic.
-A likely policy is:
+V0 keeps overlapping segments out of scope. If a later version introduces
+incremental-update layers or multi-source overlays, that behavior MUST stay
+explicit and deterministic. One possible policy would be:
 
 - A snapshot becomes an ordered list of segment layers.
 - For any owner lemma, the first layer that defines it wins.
 - All rows for that lemma are taken from the winning segment only.
 
-This extension requires new manifest fields and is intentionally deferred.
+That would require new manifest fields and a separately versioned contract.
 
 Notes on relation edges
 -----------------------
@@ -161,13 +162,13 @@ cross-segment links based on budgets.
 Implementation status
 ---------------------
 
- implements the row segmenter in `src/lexicon_segmenting.rs`:
+The current runtime implements the row segmenter in `src/lexicon_segmenting.rs`:
 - `LexiconRowsV1` holds row-form bundles.
 - `segment_lexicon_rows_v1(rows, segment_count)` partitions rows by owner lemma.
 - Failures match the v0 contract (unknown SenseId in relation owner, SenseId owner mismatch, invalid segment_count).
- implements snapshot validation for disjoint lemma ownership in
+It also implements snapshot validation for disjoint lemma ownership in
 `src/lexicon_snapshot_validate.rs`:
 - `validate_lexicon_snapshot_v1_disjoint_owners(store, snapshot_hash)` performs a
  deterministic duplicate check via sorted lemma lists.
- exposes the validator via a CLI command:
+The CLI exposes the validator via:
 - `fsa_lm validate-lexicon-snapshot --root <dir> --snapshot <hash32hex>`

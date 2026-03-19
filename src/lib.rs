@@ -205,6 +205,27 @@ pub mod markov_train;
 /// Runtime Markov hint derivation helpers.
 pub mod markov_runtime;
 
+/// Exemplar memory schema.
+pub mod exemplar_memory;
+
+/// Exemplar memory artifact helpers.
+pub mod exemplar_memory_artifact;
+
+/// Offline exemplar builder helpers.
+pub mod exemplar_build;
+
+/// Runtime exemplar advisory helpers.
+pub mod exemplar_runtime;
+
+/// Graph relevance schema.
+pub mod graph_relevance;
+
+/// Graph relevance artifact helpers.
+pub mod graph_relevance_artifact;
+
+/// Offline graph relevance builder helpers.
+pub mod graph_build;
+
 /// Quality gate consolidation helpers.
 pub mod quality_gate_v1;
 

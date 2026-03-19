@@ -40,11 +40,17 @@ fn write_workspace_with_merged(
     merged_snapshot: &str,
     merged_sig_map: &str,
     default_k: u32,
+    markov_model: &str,
+    exemplar_memory: &str,
+    graph_relevance: &str,
 ) {
     let mut s = String::new();
     s.push_str(&format!("merged_snapshot={}\n", merged_snapshot));
     s.push_str(&format!("merged_sig_map={}\n", merged_sig_map));
     s.push_str(&format!("default_k={}\n", default_k));
+    s.push_str(&format!("markov_model={}\n", markov_model));
+    s.push_str(&format!("exemplar_memory={}\n", exemplar_memory));
+    s.push_str(&format!("graph_relevance={}\n", graph_relevance));
     std::fs::write(root.join("workspace_v1.txt"), s.as_bytes()).unwrap();
 }
 
@@ -56,7 +62,18 @@ fn load_wiktionary_writes_workspace_lexicon_and_preserves_merged() {
 
     let merged_snapshot = "1111111111111111111111111111111111111111111111111111111111111111";
     let merged_sig_map = "3333333333333333333333333333333333333333333333333333333333333333";
-    write_workspace_with_merged(&root, merged_snapshot, merged_sig_map, 9);
+    let markov_model = "5555555555555555555555555555555555555555555555555555555555555555";
+    let exemplar_memory = "6666666666666666666666666666666666666666666666666666666666666666";
+    let graph_relevance = "7777777777777777777777777777777777777777777777777777777777777777";
+    write_workspace_with_merged(
+        &root,
+        merged_snapshot,
+        merged_sig_map,
+        9,
+        markov_model,
+        exemplar_memory,
+        graph_relevance,
+    );
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let tiny_xml = manifest_dir.join("examples").join("wiktionary_tiny.xml");
@@ -96,4 +113,7 @@ fn load_wiktionary_writes_workspace_lexicon_and_preserves_merged() {
     assert!(ws_text.contains(&format!("merged_sig_map={}\n", merged_sig_map)));
     assert!(ws_text.contains(&format!("lexicon_snapshot={}\n", lexicon_snapshot)));
     assert!(ws_text.contains("default_k=9\n"));
+    assert!(ws_text.contains(&format!("markov_model={}\n", markov_model)));
+    assert!(ws_text.contains(&format!("exemplar_memory={}\n", exemplar_memory)));
+    assert!(ws_text.contains(&format!("graph_relevance={}\n", graph_relevance)));
 }

@@ -5,8 +5,10 @@ PlannerHintsV1 is a replayable, deterministic advisory record used to steer the
 Planner and Realizer toward more interactive, fluent conversations while
 preserving Novel's evidence-first guarantees.
 
-This stage defines the schema and canonical codec only. Generation and
-pipeline wiring are handled in future updates.
+This document defines the schema and canonical codec and records the current
+pipeline wiring used by the answer path. PlannerHintsV1 is already generated
+deterministically, stored as an artifact, and consumed by planning and quality
+gate logic.
 
 Design goals
 ------------
@@ -143,8 +145,9 @@ Rules (high level):
 - Prefer steps when we see constraints, code, or math.
 - Prefer steps when pragmatics indicates problem-solving or a logic puzzle.
 - Prefer caveats when the conversation is safety-sensitive or evidence is empty.
-- Emit SummaryFirst when we have enough evidence (>= 3 items).
-- Emit Compare when evidence spans multiple segments.
+- Emit SummaryFirst when we have enough evidence (>= 3 items), or when Pragmatics explicitly requests a summary and evidence is non-empty.
+- Emit Compare when evidence spans multiple segments, or when Pragmatics explicitly requests a comparison.
+- Prefer Steps for explain-style requests without changing evidence selection.
 
 Ordering, dedupe, and caps follow the canonical rules described above (score desc; tie-break kind asc then id asc).
 
@@ -154,3 +157,5 @@ Clarifying append behavior (v1):
 - The quality gate appends at most one clarifying question when `PH_FLAG_PREFER_CLARIFY` is set and directives allow questions.
 - The question text comes from the top-ranked `ForecastV1.questions[0]` entry.
 - For problem-solving and logic puzzles, the forecast should prioritize specific disambiguation questions (expected vs actual, minimal reproduction, variables/domains).
+- For explicit compare targets, the planner should prefer criteria-focused compare followups over generic option-selection prompts.
+- For summary-first, step-by-step, or example-led response-focus cues, the planner should keep the same evidence path but ask more specific clarifiers about answer shape.

@@ -58,7 +58,9 @@ pub struct ByteWriter {
 impl ByteWriter {
     /// Create a new writer with an initial capacity.
     pub fn with_capacity(cap: usize) -> Self {
-        Self { buf: Vec::with_capacity(cap) }
+        Self {
+            buf: Vec::with_capacity(cap),
+        }
     }
 
     /// Access the encoded bytes.
@@ -169,13 +171,17 @@ impl<'a> ByteReader<'a> {
     /// Read u64 LE.
     pub fn read_u64(&mut self) -> Result<u64, DecodeError> {
         let b = self.take(8)?;
-        Ok(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
+        Ok(u64::from_le_bytes([
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        ]))
     }
 
     /// Read i64 LE.
     pub fn read_i64(&mut self) -> Result<i64, DecodeError> {
         let b = self.take(8)?;
-        Ok(i64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
+        Ok(i64::from_le_bytes([
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        ]))
     }
 
     /// Read exactly n bytes (no length prefix); returns a slice view.

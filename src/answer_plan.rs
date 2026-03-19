@@ -46,9 +46,15 @@ impl core::fmt::Display for AnswerPlanValidateError {
             AnswerPlanValidateError::TooManyItems => f.write_str("too many plan items"),
             AnswerPlanValidateError::BadEvidenceItemCount => f.write_str("bad evidence item count"),
             AnswerPlanValidateError::TooManyEvidenceRefs => f.write_str("too many evidence refs"),
-            AnswerPlanValidateError::EvidenceIxOutOfRange => f.write_str("evidence item index out of range"),
-            AnswerPlanValidateError::EvidenceIxNotSorted => f.write_str("evidence item indices not sorted"),
-            AnswerPlanValidateError::EvidenceIxDuplicate => f.write_str("duplicate evidence item index"),
+            AnswerPlanValidateError::EvidenceIxOutOfRange => {
+                f.write_str("evidence item index out of range")
+            }
+            AnswerPlanValidateError::EvidenceIxNotSorted => {
+                f.write_str("evidence item indices not sorted")
+            }
+            AnswerPlanValidateError::EvidenceIxDuplicate => {
+                f.write_str("duplicate evidence item index")
+            }
             AnswerPlanValidateError::BadStrength => f.write_str("bad strength"),
         }
     }
@@ -75,7 +81,12 @@ pub struct AnswerPlanV1 {
 
 impl AnswerPlanV1 {
     /// Create an empty plan.
-    pub fn new(query_id: Hash32, snapshot_id: Hash32, evidence_bundle_id: Hash32, evidence_item_count: u32) -> Self {
+    pub fn new(
+        query_id: Hash32,
+        snapshot_id: Hash32,
+        evidence_bundle_id: Hash32,
+        evidence_item_count: u32,
+    ) -> Self {
         Self {
             version: ANSWER_PLAN_V1_VERSION,
             query_id,
@@ -220,7 +231,10 @@ mod tests {
     fn plan_validate_out_of_range_evidence_ix() {
         let mut p = sample_ok();
         p.items[0].evidence_item_ix.push(10);
-        assert_eq!(p.validate(), Err(AnswerPlanValidateError::EvidenceIxOutOfRange));
+        assert_eq!(
+            p.validate(),
+            Err(AnswerPlanValidateError::EvidenceIxOutOfRange)
+        );
     }
 
     #[test]
@@ -229,7 +243,10 @@ mod tests {
         p.items[0].evidence_item_ix.clear();
         p.items[0].evidence_item_ix.push(4);
         p.items[0].evidence_item_ix.push(1);
-        assert_eq!(p.validate(), Err(AnswerPlanValidateError::EvidenceIxNotSorted));
+        assert_eq!(
+            p.validate(),
+            Err(AnswerPlanValidateError::EvidenceIxNotSorted)
+        );
     }
 
     #[test]
@@ -238,6 +255,9 @@ mod tests {
         p.items[0].evidence_item_ix.clear();
         p.items[0].evidence_item_ix.push(2);
         p.items[0].evidence_item_ix.push(2);
-        assert_eq!(p.validate(), Err(AnswerPlanValidateError::EvidenceIxDuplicate));
+        assert_eq!(
+            p.validate(),
+            Err(AnswerPlanValidateError::EvidenceIxDuplicate)
+        );
     }
 }

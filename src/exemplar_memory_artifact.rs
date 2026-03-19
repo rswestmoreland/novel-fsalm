@@ -40,7 +40,9 @@ pub fn put_exemplar_memory_v1<S: ArtifactStore>(
     let bytes = exemplar_memory
         .encode()
         .map_err(ExemplarMemoryArtifactError::Encode)?;
-    store.put(&bytes).map_err(ExemplarMemoryArtifactError::Store)
+    store
+        .put(&bytes)
+        .map_err(ExemplarMemoryArtifactError::Store)
 }
 
 /// Load ExemplarMemoryV1 by content hash.
@@ -50,7 +52,9 @@ pub fn get_exemplar_memory_v1<S: ArtifactStore>(
     store: &S,
     hash: &Hash32,
 ) -> Result<Option<ExemplarMemoryV1>, ExemplarMemoryArtifactError> {
-    let bytes_opt = store.get(hash).map_err(ExemplarMemoryArtifactError::Store)?;
+    let bytes_opt = store
+        .get(hash)
+        .map_err(ExemplarMemoryArtifactError::Store)?;
     let bytes = match bytes_opt {
         Some(b) => b,
         None => return Ok(None),

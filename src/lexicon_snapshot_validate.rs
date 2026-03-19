@@ -163,9 +163,7 @@ pub fn validate_lexicon_snapshot_v1_disjoint_owners<S: ArtifactStore>(
         let seg_bytes = match store.get(&seg_hash)? {
             Some(b) => b,
             None => {
-                return Err(LexiconSnapshotValidateError::SegmentNotFound {
-                    segment: seg_hash,
-                })
+                return Err(LexiconSnapshotValidateError::SegmentNotFound { segment: seg_hash })
             }
         };
 

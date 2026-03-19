@@ -40,7 +40,9 @@ pub fn put_graph_relevance_v1<S: ArtifactStore>(
     let bytes = graph_relevance
         .encode()
         .map_err(GraphRelevanceArtifactError::Encode)?;
-    store.put(&bytes).map_err(GraphRelevanceArtifactError::Store)
+    store
+        .put(&bytes)
+        .map_err(GraphRelevanceArtifactError::Store)
 }
 
 /// Load GraphRelevanceV1 by content hash.
@@ -50,7 +52,9 @@ pub fn get_graph_relevance_v1<S: ArtifactStore>(
     store: &S,
     hash: &Hash32,
 ) -> Result<Option<GraphRelevanceV1>, GraphRelevanceArtifactError> {
-    let bytes_opt = store.get(hash).map_err(GraphRelevanceArtifactError::Store)?;
+    let bytes_opt = store
+        .get(hash)
+        .map_err(GraphRelevanceArtifactError::Store)?;
     let bytes = match bytes_opt {
         Some(b) => b,
         None => return Ok(None),
@@ -64,11 +68,11 @@ pub fn get_graph_relevance_v1<S: ArtifactStore>(
 mod tests {
     use super::*;
     use crate::artifact::FsArtifactStore;
+    use crate::frame::Id64;
     use crate::graph_relevance::{
         GraphNodeKindV1, GraphRelevanceEdgeV1, GraphRelevanceRowV1, GraphRelevanceV1,
-        GREDGE_FLAG_SYMMETRIC, GRAPH_RELEVANCE_V1_VERSION, GR_FLAG_HAS_TERM_ROWS,
+        GRAPH_RELEVANCE_V1_VERSION, GREDGE_FLAG_SYMMETRIC, GR_FLAG_HAS_TERM_ROWS,
     };
-    use crate::frame::Id64;
     use crate::hash::blake3_hash;
 
     fn tmp_dir(name: &str) -> std::path::PathBuf {

@@ -22,7 +22,8 @@ use crate::forecast::ForecastV1;
 use crate::frame::derive_id64;
 use crate::hash::Hash32;
 use crate::markov_hints::{
-    MarkovChoiceKindV1, MarkovHintsFlagsV1, MarkovHintsV1, MH_FLAG_HAS_HISTORY, MH_FLAG_HAS_PRAGMATICS,
+    MarkovChoiceKindV1, MarkovHintsFlagsV1, MarkovHintsV1, MH_FLAG_HAS_HISTORY,
+    MH_FLAG_HAS_PRAGMATICS,
 };
 use crate::markov_model::{MarkovModelV1, MarkovTokenV1};
 use crate::markov_runtime::derive_markov_hints_surface_choices_v1;
@@ -187,10 +188,26 @@ pub fn build_markov_trace_tokens_v1(
     let mut out: Vec<MarkovTokenV1> = Vec::with_capacity(
         plan.items.len()
             + if did_append_q { 1 } else { 0 }
-            + if markov_events.opener_preface_choice.is_some() { 1 } else { 0 }
-            + if markov_events.details_heading_transition_choice.is_some() { 1 } else { 0 }
-            + if markov_events.caveat_heading_closer_choice.is_some() { 1 } else { 0 }
-            + if did_append_q && markov_events.clarifier_intro_choice.is_some() { 1 } else { 0 },
+            + if markov_events.opener_preface_choice.is_some() {
+                1
+            } else {
+                0
+            }
+            + if markov_events.details_heading_transition_choice.is_some() {
+                1
+            } else {
+                0
+            }
+            + if markov_events.caveat_heading_closer_choice.is_some() {
+                1
+            } else {
+                0
+            }
+            + if did_append_q && markov_events.clarifier_intro_choice.is_some() {
+                1
+            } else {
+                0
+            },
     );
 
     if let Some(cid) = markov_events.opener_preface_choice {
@@ -200,7 +217,8 @@ pub fn build_markov_trace_tokens_v1(
     let mut did_emit_details_heading = false;
     let mut did_emit_caveat_heading = false;
     for it in plan.items.iter() {
-        if !did_emit_details_heading && it.kind == crate::answer_plan::AnswerPlanItemKindV1::Bullet {
+        if !did_emit_details_heading && it.kind == crate::answer_plan::AnswerPlanItemKindV1::Bullet
+        {
             if let Some(cid) = markov_events.details_heading_transition_choice {
                 out.push(MarkovTokenV1::new(MarkovChoiceKindV1::Transition, cid));
                 did_emit_details_heading = true;
@@ -247,8 +265,7 @@ mod tests {
     use crate::answer_plan::{AnswerPlanItemKindV1, AnswerPlanItemV1};
     use crate::frame::Id64;
     use crate::markov_model::{MarkovNextV1, MarkovStateV1, MARKOV_MODEL_V1_VERSION};
-    use crate::realizer_directives::{REALIZER_DIRECTIVES_V1_VERSION, StyleV1, ToneV1};
-
+    use crate::realizer_directives::{StyleV1, ToneV1, REALIZER_DIRECTIVES_V1_VERSION};
 
     #[test]
     fn build_markov_trace_tokens_includes_preface_first() {
@@ -274,8 +291,10 @@ mod tests {
     fn build_markov_trace_tokens_includes_details_heading_transition_before_bullets() {
         let z: Hash32 = [0u8; 32];
         let mut plan = AnswerPlanV1::new(z, z, z, 1);
-        plan.items.push(AnswerPlanItemV1::new(AnswerPlanItemKindV1::Summary));
-        plan.items.push(AnswerPlanItemV1::new(AnswerPlanItemKindV1::Bullet));
+        plan.items
+            .push(AnswerPlanItemV1::new(AnswerPlanItemKindV1::Summary));
+        plan.items
+            .push(AnswerPlanItemV1::new(AnswerPlanItemKindV1::Bullet));
 
         let transition = derive_id64(b"markov_choice_v1", b"transition:details_heading:1");
         let events = RealizerMarkovEventsV1 {
@@ -293,7 +312,10 @@ mod tests {
                 derive_id64(b"markov_choice_v1", b"plan_item:summary")
             )
         );
-        assert_eq!(toks[1], MarkovTokenV1::new(MarkovChoiceKindV1::Transition, transition));
+        assert_eq!(
+            toks[1],
+            MarkovTokenV1::new(MarkovChoiceKindV1::Transition, transition)
+        );
         assert_eq!(
             toks[2],
             MarkovTokenV1::new(
@@ -307,8 +329,10 @@ mod tests {
     fn build_markov_trace_tokens_includes_caveat_heading_closer_before_caveats() {
         let z: Hash32 = [0u8; 32];
         let mut plan = AnswerPlanV1::new(z, z, z, 1);
-        plan.items.push(AnswerPlanItemV1::new(AnswerPlanItemKindV1::Summary));
-        plan.items.push(AnswerPlanItemV1::new(AnswerPlanItemKindV1::Caveat));
+        plan.items
+            .push(AnswerPlanItemV1::new(AnswerPlanItemKindV1::Summary));
+        plan.items
+            .push(AnswerPlanItemV1::new(AnswerPlanItemKindV1::Caveat));
 
         let closer = derive_id64(b"markov_choice_v1", b"closer:caveat_heading:1");
         let events = RealizerMarkovEventsV1 {
@@ -326,7 +350,10 @@ mod tests {
                 derive_id64(b"markov_choice_v1", b"plan_item:summary")
             )
         );
-        assert_eq!(toks[1], MarkovTokenV1::new(MarkovChoiceKindV1::Closer, closer));
+        assert_eq!(
+            toks[1],
+            MarkovTokenV1::new(MarkovChoiceKindV1::Closer, closer)
+        );
         assert_eq!(
             toks[2],
             MarkovTokenV1::new(
@@ -409,9 +436,18 @@ mod tests {
         )
         .unwrap();
         assert!(h.validate().is_ok());
-        assert!(h.choices.iter().any(|c| c.kind == MarkovChoiceKindV1::Transition));
-        assert!(h.choices.iter().any(|c| c.kind == MarkovChoiceKindV1::Opener));
-        assert!(h.choices.iter().any(|c| c.kind == MarkovChoiceKindV1::Closer));
+        assert!(h
+            .choices
+            .iter()
+            .any(|c| c.kind == MarkovChoiceKindV1::Transition));
+        assert!(h
+            .choices
+            .iter()
+            .any(|c| c.kind == MarkovChoiceKindV1::Opener));
+        assert!(h
+            .choices
+            .iter()
+            .any(|c| c.kind == MarkovChoiceKindV1::Closer));
         assert!(h.choices.iter().any(|c| {
             c.kind == MarkovChoiceKindV1::Other
                 && c.choice_id == derive_id64(b"markov_choice_v1", b"other:clarifier_intro:1")
@@ -422,7 +458,8 @@ mod tests {
     fn build_markov_trace_tokens_includes_clarifier_intro_before_append() {
         let z: Hash32 = [0u8; 32];
         let mut plan = AnswerPlanV1::new(z, z, z, 1);
-        plan.items.push(AnswerPlanItemV1::new(AnswerPlanItemKindV1::Summary));
+        plan.items
+            .push(AnswerPlanItemV1::new(AnswerPlanItemKindV1::Summary));
 
         let intro = derive_id64(b"markov_choice_v1", b"other:clarifier_intro:1");
         let events = RealizerMarkovEventsV1 {
@@ -440,7 +477,10 @@ mod tests {
                 derive_id64(b"markov_choice_v1", b"plan_item:summary")
             )
         );
-        assert_eq!(toks[1], MarkovTokenV1::new(MarkovChoiceKindV1::Other, intro));
+        assert_eq!(
+            toks[1],
+            MarkovTokenV1::new(MarkovChoiceKindV1::Other, intro)
+        );
         assert_eq!(
             toks[2],
             MarkovTokenV1::new(
@@ -531,5 +571,4 @@ mod tests {
         assert_ne!(h0.context_hash, h1.context_hash);
         assert_ne!(h0.state_id, h1.state_id);
     }
-
 }

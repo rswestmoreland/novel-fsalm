@@ -12,7 +12,9 @@ use fsa_lm::exemplar_memory::{
 use fsa_lm::exemplar_memory_artifact::put_exemplar_memory_v1;
 use fsa_lm::frame::{derive_id64, Id64};
 use fsa_lm::markov_hints::MarkovChoiceKindV1;
-use fsa_lm::markov_model::{MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1, MARKOV_MODEL_V1_VERSION};
+use fsa_lm::markov_model::{
+    MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1, MARKOV_MODEL_V1_VERSION,
+};
 use fsa_lm::markov_model_artifact::put_markov_model_v1;
 use fsa_lm::pragmatics_frame::{PragmaticsFrameV1, RhetoricModeV1, PRAGMATICS_FRAME_V1_VERSION};
 use fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1;
@@ -220,12 +222,16 @@ fn ask_uses_workspace_markov_model_when_flag_is_omitted() {
 
     let (bcode, bout, berr) = run_cmd(bin, &["build-index", "--root", root.to_str().unwrap()]);
     assert_eq!(bcode, 0, "stderr={}", String::from_utf8_lossy(&berr));
-    let bout_s = String::from_utf8_lossy(&bout).replace("
+    let bout_s = String::from_utf8_lossy(&bout).replace(
+        "
 ", "
-");
-    let berr_s = String::from_utf8_lossy(&berr).replace("
+",
+    );
+    let berr_s = String::from_utf8_lossy(&berr).replace(
+        "
 ", "
-");
+",
+    );
     let idx_snap_hex = parse_first_hex(&bout_s).expect("snapshot hash on stdout");
     let sig_map_hex = parse_stderr_kv(&berr_s, "index_sig_map").expect("index_sig_map= on stderr");
 
@@ -282,8 +288,21 @@ fn plan_ref_lines_from_answer_text(s: &str) -> Vec<String> {
         .collect()
 }
 
-fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str, lexicon_snapshot: Option<&str>) {
-    write_workspace_with_defaults(root, merged_snapshot, merged_sig_map, lexicon_snapshot, None, None, None);
+fn write_workspace(
+    root: &Path,
+    merged_snapshot: &str,
+    merged_sig_map: &str,
+    lexicon_snapshot: Option<&str>,
+) {
+    write_workspace_with_defaults(
+        root,
+        merged_snapshot,
+        merged_sig_map,
+        lexicon_snapshot,
+        None,
+        None,
+        None,
+    );
 }
 
 fn write_workspace_with_default_k(
@@ -293,7 +312,15 @@ fn write_workspace_with_default_k(
     lexicon_snapshot: Option<&str>,
     default_k: Option<u32>,
 ) {
-    write_workspace_with_defaults(root, merged_snapshot, merged_sig_map, lexicon_snapshot, default_k, None, None);
+    write_workspace_with_defaults(
+        root,
+        merged_snapshot,
+        merged_sig_map,
+        lexicon_snapshot,
+        default_k,
+        None,
+        None,
+    );
 }
 
 fn write_workspace_with_default_expand(
@@ -303,7 +330,15 @@ fn write_workspace_with_default_expand(
     lexicon_snapshot: Option<&str>,
     default_expand: Option<bool>,
 ) {
-    write_workspace_with_defaults(root, merged_snapshot, merged_sig_map, lexicon_snapshot, None, default_expand, None);
+    write_workspace_with_defaults(
+        root,
+        merged_snapshot,
+        merged_sig_map,
+        lexicon_snapshot,
+        None,
+        default_expand,
+        None,
+    );
 }
 
 fn write_workspace_with_default_meta(
@@ -313,7 +348,15 @@ fn write_workspace_with_default_meta(
     lexicon_snapshot: Option<&str>,
     default_meta: Option<bool>,
 ) {
-    write_workspace_with_defaults(root, merged_snapshot, merged_sig_map, lexicon_snapshot, None, None, default_meta);
+    write_workspace_with_defaults(
+        root,
+        merged_snapshot,
+        merged_sig_map,
+        lexicon_snapshot,
+        None,
+        None,
+        default_meta,
+    );
 }
 
 fn write_workspace_with_defaults(
@@ -395,7 +438,10 @@ fn ask_runs_answer_pipeline_without_prompt_hash() {
     let s = std::fs::read_to_string(&out_path).unwrap();
     assert!(!s.contains("Answer v1"));
     assert!(!s.contains("query_id="));
-    assert!(s.contains("[E0]"), "expected evidence using workspace defaults");
+    assert!(
+        s.contains("[E0]"),
+        "expected evidence using workspace defaults"
+    );
 }
 
 #[test]
@@ -428,7 +474,8 @@ fn ask_expand_uses_workspace_lexicon_snapshot_when_omitted() {
     );
     assert_eq!(lxcode, 0, "stderr={}", String::from_utf8_lossy(&lxerr));
     let lxout_s = String::from_utf8_lossy(&lxout).replace("\r\n", "\n");
-    let lex_snap_hex = parse_hash_line(&lxout_s, "lexicon_snapshot").expect("lexicon_snapshot line");
+    let lex_snap_hex =
+        parse_hash_line(&lxout_s, "lexicon_snapshot").expect("lexicon_snapshot line");
 
     let (wcode, _wout, werr) = run_cmd(
         bin,
@@ -472,9 +519,11 @@ fn ask_expand_uses_workspace_lexicon_snapshot_when_omitted() {
     let s = std::fs::read_to_string(&out_path).unwrap();
     assert!(!s.contains("Answer v1"));
     assert!(!s.contains("query_id="));
-    assert!(s.contains("[E0]"), "expected evidence using workspace defaults");
+    assert!(
+        s.contains("[E0]"),
+        "expected evidence using workspace defaults"
+    );
 }
-
 
 #[test]
 fn ask_operator_presentation_preserves_diagnostics() {
@@ -531,9 +580,11 @@ fn ask_operator_presentation_preserves_diagnostics() {
     assert!(s.contains("Answer v1"));
     assert!(s.contains("query_id="));
     assert!(s.contains("routing_trace "));
-    assert!(s.contains("[E0]"), "expected evidence using operator presentation");
+    assert!(
+        s.contains("[E0]"),
+        "expected evidence using operator presentation"
+    );
 }
-
 
 #[test]
 fn ask_uses_workspace_default_k_when_flag_is_omitted() {
@@ -584,9 +635,11 @@ fn ask_uses_workspace_default_k_when_flag_is_omitted() {
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
     let s = std::fs::read_to_string(&out_path).unwrap();
     assert!(s.contains("[E0]"));
-    assert!(!s.contains("[E1]"), "expected workspace default_k=1 to cap evidence items");
+    assert!(
+        !s.contains("[E1]"),
+        "expected workspace default_k=1 to cap evidence items"
+    );
 }
-
 
 #[test]
 fn ask_uses_workspace_default_expand_when_flag_is_omitted() {
@@ -618,7 +671,8 @@ fn ask_uses_workspace_default_expand_when_flag_is_omitted() {
     );
     assert_eq!(lxcode, 0, "stderr={}", String::from_utf8_lossy(&lxerr));
     let lxout_s = String::from_utf8_lossy(&lxout).replace("\r\n", "\n");
-    let lex_snap_hex = parse_hash_line(&lxout_s, "lexicon_snapshot").expect("lexicon_snapshot line");
+    let lex_snap_hex =
+        parse_hash_line(&lxout_s, "lexicon_snapshot").expect("lexicon_snapshot line");
 
     let (wcode, _wout, werr) = run_cmd(
         bin,
@@ -641,7 +695,13 @@ fn ask_uses_workspace_default_expand_when_flag_is_omitted() {
     let idx_snap_hex = parse_first_hex(&bout_s).expect("snapshot hash on stdout");
     let sig_map_hex = parse_stderr_kv(&berr_s, "index_sig_map").expect("index_sig_map= on stderr");
 
-    write_workspace_with_default_expand(&root, &idx_snap_hex, &sig_map_hex, Some(&lex_snap_hex), Some(true));
+    write_workspace_with_default_expand(
+        &root,
+        &idx_snap_hex,
+        &sig_map_hex,
+        Some(&lex_snap_hex),
+        Some(true),
+    );
 
     let out_path = base.join("ask_default_expand.txt");
     let (acode, _aout, aerr) = run_cmd(
@@ -659,9 +719,11 @@ fn ask_uses_workspace_default_expand_when_flag_is_omitted() {
     );
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
     let s = std::fs::read_to_string(&out_path).unwrap();
-    assert!(s.contains("[E0]"), "expected workspace default_expand=1 to enable expansion");
+    assert!(
+        s.contains("[E0]"),
+        "expected workspace default_expand=1 to enable expansion"
+    );
 }
-
 
 #[test]
 fn ask_uses_workspace_default_meta_when_flag_is_omitted() {
@@ -713,7 +775,8 @@ fn ask_uses_workspace_default_meta_when_flag_is_omitted() {
     );
     assert_eq!(dcode, 0, "stderr={}", String::from_utf8_lossy(&derr));
     let s_default = std::fs::read_to_string(&out_default).unwrap();
-    let qid_default = parse_query_id_from_answer_text(&s_default).expect("query_id in default-meta ask answer");
+    let qid_default =
+        parse_query_id_from_answer_text(&s_default).expect("query_id in default-meta ask answer");
 
     let out_explicit = base.join("ask_explicit_meta_operator.txt");
     let (ecode, _eout, eerr) = run_cmd(
@@ -732,9 +795,13 @@ fn ask_uses_workspace_default_meta_when_flag_is_omitted() {
     );
     assert_eq!(ecode, 0, "stderr={}", String::from_utf8_lossy(&eerr));
     let s_explicit = std::fs::read_to_string(&out_explicit).unwrap();
-    let qid_explicit = parse_query_id_from_answer_text(&s_explicit).expect("query_id in explicit-meta ask answer");
+    let qid_explicit =
+        parse_query_id_from_answer_text(&s_explicit).expect("query_id in explicit-meta ask answer");
 
-    assert_eq!(qid_default, qid_explicit, "expected workspace default_meta=1 to match explicit --meta query_id");
+    assert_eq!(
+        qid_default, qid_explicit,
+        "expected workspace default_meta=1 to match explicit --meta query_id"
+    );
     assert!(s_default.contains("[E0]"));
     assert!(s_explicit.contains("[E0]"));
 }
@@ -857,9 +924,14 @@ fn ask_uses_workspace_exemplar_memory_when_flag_is_omitted() {
     );
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
     let s = std::fs::read_to_string(&out_path).unwrap();
-    assert!(s.contains("exemplar_match exemplar_id=7 response_mode=Direct structure=Direct tone=Supportive"), "output={}", s);
+    assert!(
+        s.contains(
+            "exemplar_match exemplar_id=7 response_mode=Direct structure=Direct tone=Supportive"
+        ),
+        "output={}",
+        s
+    );
 }
-
 
 #[test]
 fn ask_workspace_exemplar_memory_keeps_grounding_and_refs() {
@@ -971,7 +1043,13 @@ fn ask_workspace_exemplar_memory_keeps_grounding_and_refs() {
 
     let base_text = std::fs::read_to_string(&base_out).unwrap();
     let shaped_text = std::fs::read_to_string(&shaped_out).unwrap();
-    assert!(shaped_text.contains("exemplar_match exemplar_id=11 response_mode=Direct structure=Direct tone=Supportive"), "output={}", shaped_text);
+    assert!(
+        shaped_text.contains(
+            "exemplar_match exemplar_id=11 response_mode=Direct structure=Direct tone=Supportive"
+        ),
+        "output={}",
+        shaped_text
+    );
     assert_eq!(
         evidence_lines_from_answer_text(&base_text),
         evidence_lines_from_answer_text(&shaped_text)
@@ -1014,7 +1092,9 @@ fn ask_missing_workspace_exemplar_memory_falls_back_cleanly() {
     let idx_snap_hex = parse_first_hex(&bout_s).expect("snapshot hash on stdout");
     let sig_map_hex = parse_stderr_kv(&berr_s, "index_sig_map").expect("index_sig_map= on stderr");
 
-    let missing_exemplar_hex = fsa_lm::hash::hex32(&fsa_lm::hash::blake3_hash(b"missing-workspace-exemplar-memory"));
+    let missing_exemplar_hex = fsa_lm::hash::hex32(&fsa_lm::hash::blake3_hash(
+        b"missing-workspace-exemplar-memory",
+    ));
     write_workspace_with_advisories(
         &root,
         &idx_snap_hex,
@@ -1044,10 +1124,13 @@ fn ask_missing_workspace_exemplar_memory_falls_back_cleanly() {
     );
     let aerr_s = String::from_utf8_lossy(&aerr).replace("\r\n", "\n");
     assert_eq!(acode, 0, "stderr={}", aerr_s);
-    assert!(!aerr_s.contains("missing exemplar memory"), "stderr={}", aerr_s);
+    assert!(
+        !aerr_s.contains("missing exemplar memory"),
+        "stderr={}",
+        aerr_s
+    );
     let s = std::fs::read_to_string(&out_path).unwrap();
     assert!(s.contains("Answer v1"), "output={}", s);
     assert!(s.contains("[E0]"), "output={}", s);
     assert!(!s.contains("exemplar_match"), "output={}", s);
 }
-

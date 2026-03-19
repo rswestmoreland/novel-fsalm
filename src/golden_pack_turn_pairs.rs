@@ -74,7 +74,9 @@ impl GoldenPackTurnPairsReportV1 {
     /// Encode this report to canonical bytes.
     pub fn encode(&self) -> Result<Vec<u8>, EncodeError> {
         if self.version != GOLDEN_PACK_TURN_PAIRS_REPORT_V1_VERSION {
-            return Err(EncodeError::new("unsupported golden turn-pairs report version"));
+            return Err(EncodeError::new(
+                "unsupported golden turn-pairs report version",
+            ));
         }
         if self.turn_count != 2 {
             return Err(EncodeError::new("turn_count must be 2"));
@@ -95,7 +97,9 @@ impl GoldenPackTurnPairsReportV1 {
         let mut r = ByteReader::new(bytes);
         let version = r.read_u16()?;
         if version != GOLDEN_PACK_TURN_PAIRS_REPORT_V1_VERSION {
-            return Err(DecodeError::new("unsupported golden turn-pairs report version"));
+            return Err(DecodeError::new(
+                "unsupported golden turn-pairs report version",
+            ));
         }
         let pack_name = r.read_str_view()?.to_string();
         let workload_hash = read_hash32(&mut r)?;

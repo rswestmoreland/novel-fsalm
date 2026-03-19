@@ -61,20 +61,17 @@ fn show_workspace_prints_resolved_values_and_last_wins() {
     std::fs::write(&ws_path, txt.as_bytes()).unwrap();
 
     let bin = env!("CARGO_BIN_EXE_fsa_lm");
-    let (code, stdout, stderr) = run_cmd(
-        bin,
-        &[
-            "show-workspace",
-            "--root",
-            root.to_str().unwrap(),
-        ],
-    );
+    let (code, stdout, stderr) =
+        run_cmd(bin, &["show-workspace", "--root", root.to_str().unwrap()]);
     assert_eq!(code, 0, "stderr={}", stderr);
 
     assert_eq!(find_line_value(&stdout, "workspace_present").unwrap(), "1");
     assert_eq!(find_line_value(&stdout, "merged_snapshot").unwrap(), h('2'));
     assert_eq!(find_line_value(&stdout, "merged_sig_map").unwrap(), h('3'));
-    assert_eq!(find_line_value(&stdout, "lexicon_snapshot").unwrap(), h('4'));
+    assert_eq!(
+        find_line_value(&stdout, "lexicon_snapshot").unwrap(),
+        h('4')
+    );
     assert_eq!(find_line_value(&stdout, "default_k").unwrap(), "20");
     assert_eq!(find_line_value(&stdout, "default_expand").unwrap(), "1");
     assert_eq!(find_line_value(&stdout, "default_meta").unwrap(), "0");
@@ -96,14 +93,8 @@ fn show_workspace_marks_pair_inconsistent() {
     std::fs::write(&ws_path, txt.as_bytes()).unwrap();
 
     let bin = env!("CARGO_BIN_EXE_fsa_lm");
-    let (code, stdout, stderr) = run_cmd(
-        bin,
-        &[
-            "show-workspace",
-            "--root",
-            root.to_str().unwrap(),
-        ],
-    );
+    let (code, stdout, stderr) =
+        run_cmd(bin, &["show-workspace", "--root", root.to_str().unwrap()]);
     assert_eq!(code, 0, "stderr={}", stderr);
     assert_eq!(find_line_value(&stdout, "workspace_pair_ok").unwrap(), "0");
     assert_eq!(find_line_value(&stdout, "workspace_ready").unwrap(), "0");

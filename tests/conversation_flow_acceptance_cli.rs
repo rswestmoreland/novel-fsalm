@@ -46,7 +46,12 @@ fn write_wiktionary_xml(path: &Path) {
     std::fs::write(path, xml.as_bytes()).unwrap();
 }
 
-fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str, lexicon_snapshot: Option<&str>) {
+fn write_workspace(
+    root: &Path,
+    merged_snapshot: &str,
+    merged_sig_map: &str,
+    lexicon_snapshot: Option<&str>,
+) {
     let mut s = String::new();
     s.push_str(&format!("merged_snapshot={}\n", merged_snapshot));
     s.push_str(&format!("merged_sig_map={}\n", merged_sig_map));
@@ -151,7 +156,8 @@ fn setup_workspace(base_name: &str, with_lexicon: bool) -> (PathBuf, String) {
             ],
         );
         assert_eq!(lxcode, 0, "stderr={}", lxerr);
-        lexicon_snapshot = Some(parse_hash_line(&lxout, "lexicon_snapshot").expect("lexicon_snapshot line"));
+        lexicon_snapshot =
+            Some(parse_hash_line(&lxout, "lexicon_snapshot").expect("lexicon_snapshot line"));
     }
 
     let wiki_tsv = base.join("wiki.tsv");
@@ -175,7 +181,12 @@ fn setup_workspace(base_name: &str, with_lexicon: bool) -> (PathBuf, String) {
     assert_eq!(bcode, 0, "stderr={}", berr);
     let idx_snap_hex = parse_first_hex(&bout).expect("snapshot hash on stdout");
     let sig_map_hex = parse_stderr_kv(&berr, "index_sig_map").expect("index_sig_map= on stderr");
-    write_workspace(&root, &idx_snap_hex, &sig_map_hex, lexicon_snapshot.as_deref());
+    write_workspace(
+        &root,
+        &idx_snap_hex,
+        &sig_map_hex,
+        lexicon_snapshot.as_deref(),
+    );
 
     (root, bin)
 }
@@ -185,7 +196,8 @@ fn count_occurrences(s: &str, needle: &str) -> usize {
 }
 
 fn read_followup_context_anchors(root: &Path, session_file: &Path) -> ContextAnchorsV1 {
-    let conv_hex = parse_file_kv(session_file, "conversation_pack").expect("conversation_pack in session file");
+    let conv_hex = parse_file_kv(session_file, "conversation_pack")
+        .expect("conversation_pack in session file");
     let conv_hash: Hash32 = parse_hash32_hex(&conv_hex).unwrap();
     let store = FsArtifactStore::new(root).unwrap();
     let pack = get_conversation_pack(&store, &conv_hash).unwrap().unwrap();
@@ -209,7 +221,9 @@ fn read_followup_context_anchors(root: &Path, session_file: &Path) -> ContextAnc
         }
     }
     let anchors_hash = anchors_hash_opt.expect("context-anchors-v1 step");
-    get_context_anchors_v1(&store, &anchors_hash).unwrap().unwrap()
+    get_context_anchors_v1(&store, &anchors_hash)
+        .unwrap()
+        .unwrap()
 }
 
 fn evidence_lines(s: &str) -> Vec<String> {
@@ -225,7 +239,10 @@ fn evidence_lines(s: &str) -> Vec<String> {
 
 #[test]
 fn repeated_ask_output_is_stable_for_same_workspace_and_input() {
-    let (root, bin) = setup_workspace("repeated_ask_output_is_stable_for_same_workspace_and_input", false);
+    let (root, bin) = setup_workspace(
+        "repeated_ask_output_is_stable_for_same_workspace_and_input",
+        false,
+    );
 
     let out1 = root.parent().unwrap().join("ask1.txt");
     let out2 = root.parent().unwrap().join("ask2.txt");
@@ -256,11 +273,19 @@ fn repeated_ask_output_is_stable_for_same_workspace_and_input() {
     let (code2, _stdout2, stderr2) = run_cmd(&bin, &args2);
     assert_eq!(code2, 0, "stderr={}", stderr2);
 
-    let s1 = std::fs::read_to_string(&out1).unwrap().replace("\r\n", "\n");
-    let s2 = std::fs::read_to_string(&out2).unwrap().replace("\r\n", "\n");
+    let s1 = std::fs::read_to_string(&out1)
+        .unwrap()
+        .replace("\r\n", "\n");
+    let s2 = std::fs::read_to_string(&out2)
+        .unwrap()
+        .replace("\r\n", "\n");
 
     assert_eq!(s1, s2, "output changed across repeated runs");
-    assert_eq!(evidence_lines(&s1), evidence_lines(&s2), "evidence lines changed across repeated runs");
+    assert_eq!(
+        evidence_lines(&s1),
+        evidence_lines(&s2),
+        "evidence lines changed across repeated runs"
+    );
     assert!(!s1.contains("Answer v1"), "output={}", s1);
     assert!(!s1.contains("query_id="), "output={}", s1);
     assert!(s1.contains("[E0]"), "output={}", s1);
@@ -268,7 +293,10 @@ fn repeated_ask_output_is_stable_for_same_workspace_and_input() {
 
 #[test]
 fn ask_session_followup_with_pronoun_preserves_subject_and_evidence() {
-    let (root, bin) = setup_workspace("ask_session_followup_with_pronoun_preserves_subject_and_evidence", true);
+    let (root, bin) = setup_workspace(
+        "ask_session_followup_with_pronoun_preserves_subject_and_evidence",
+        true,
+    );
     let session_file = root.parent().unwrap().join("session.txt");
     let out1 = root.parent().unwrap().join("turn1.txt");
     let out2 = root.parent().unwrap().join("turn2.txt");
@@ -307,18 +335,25 @@ fn ask_session_followup_with_pronoun_preserves_subject_and_evidence() {
     );
     assert_eq!(code2, 0, "stderr={}", stderr2);
 
-    let s2 = std::fs::read_to_string(&out2).unwrap().replace("\r\n", "\n");
+    let s2 = std::fs::read_to_string(&out2)
+        .unwrap()
+        .replace("\r\n", "\n");
     assert!(!s2.contains("Answer v1"), "output={}", s2);
     assert!(!s2.contains("query_id="), "output={}", s2);
     assert!(s2.contains("[E0]"), "output={}", s2);
     assert!(session_file.exists(), "expected session file to exist");
 
     let ca = read_followup_context_anchors(&root, &session_file);
-    let tok_cfg = TokenizerCfg { max_token_bytes: 32 };
+    let tok_cfg = TokenizerCfg {
+        max_token_bytes: 32,
+    };
     let banana_tid = term_id_from_token("banana", tok_cfg);
     let banana_u64 = (banana_tid.0).0;
     let found = ca.terms.iter().any(|t| t.term_id.0 == banana_u64);
-    assert!(found, "expected banana term id in follow-up context anchors");
+    assert!(
+        found,
+        "expected banana term id in follow-up context anchors"
+    );
 }
 
 #[test]
@@ -329,16 +364,19 @@ fn free_text_logic_prompt_emits_one_best_clarifier() {
 
     let (code, stdout, stderr) = run_cmd(
         &bin,
-        &[
-            "ask",
-            "--root",
-            root.to_str().unwrap(),
-            "--text",
-            prompt,
-        ],
+        &["ask", "--root", root.to_str().unwrap(), "--text", prompt],
     );
     assert_eq!(code, 0, "stderr={}", stderr);
-    assert_eq!(count_occurrences(&stdout, "Quick question:"), 1, "stdout={}", stdout);
+    assert_eq!(
+        count_occurrences(&stdout, "Quick question:"),
+        1,
+        "stdout={}",
+        stdout
+    );
     assert!(stdout.contains("possible values"), "stdout={}", stdout);
-    assert!(!stdout.contains("Please provide the puzzle using"), "stdout={}", stdout);
+    assert!(
+        !stdout.contains("Please provide the puzzle using"),
+        "stdout={}",
+        stdout
+    );
 }

@@ -86,11 +86,7 @@ fn spawn_serve_sync(bin: &str, root: &str, addr: &str) -> (Child, String) {
 
 fn run_cmd(bin: &str, args: &[&str]) -> (i32, Vec<u8>, Vec<u8>) {
     let out = Command::new(bin).args(args).output().unwrap();
-    (
-        out.status.code().unwrap_or(-1),
-        out.stdout,
-        out.stderr,
-    )
+    (out.status.code().unwrap_or(-1), out.stdout, out.stderr)
 }
 
 fn parse_kv_lines(stdout: &str) -> BTreeMap<String, String> {
@@ -245,7 +241,12 @@ fn run_operator_workflow_pack(root_name: &str) -> String {
             "banana",
         ],
     );
-    assert_eq!(pcode, 0, "prompt failed: {}", String::from_utf8_lossy(&perr));
+    assert_eq!(
+        pcode,
+        0,
+        "prompt failed: {}",
+        String::from_utf8_lossy(&perr)
+    );
     let prompt_hash = String::from_utf8_lossy(&pout).trim().to_string();
     assert_eq!(prompt_hash.len(), 64, "prompt hash: {}", prompt_hash);
 
@@ -275,7 +276,10 @@ fn run_operator_workflow_pack(root_name: &str) -> String {
     let qnorm = normalize_text_bytes(&qout);
     assert!(!qnorm.is_empty(), "query-index returned empty stdout");
     let query_out_hash = blake3_hash(&qnorm);
-    let query_out_lines = qnorm.split(|b| *b == b'\n').filter(|l| !l.is_empty()).count();
+    let query_out_lines = qnorm
+        .split(|b| *b == b'\n')
+        .filter(|l| !l.is_empty())
+        .count();
 
     // 6) answer on the replicated root (hash stdout instead of locking raw text).
     let (acode, aout, aerr) = run_cmd(
@@ -301,7 +305,12 @@ fn run_operator_workflow_pack(root_name: &str) -> String {
             "1",
         ],
     );
-    assert_eq!(acode, 0, "answer failed: {}", String::from_utf8_lossy(&aerr));
+    assert_eq!(
+        acode,
+        0,
+        "answer failed: {}",
+        String::from_utf8_lossy(&aerr)
+    );
     let anorm = normalize_text_bytes(&aout);
     assert!(!anorm.is_empty(), "answer returned empty stdout");
     let answer_out_hash = blake3_hash(&anorm);

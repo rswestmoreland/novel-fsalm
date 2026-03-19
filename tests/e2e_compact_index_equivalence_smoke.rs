@@ -121,7 +121,11 @@ fn e2e_compact_index_preserves_query_hits_and_evidence_items() {
     qid_bytes.extend_from_slice(qtext.as_bytes());
     let query_id = blake3_hash(&qid_bytes);
 
-    let limits = EvidenceLimitsV1 { segments_touched: 0, max_items, max_bytes };
+    let limits = EvidenceLimitsV1 {
+        segments_touched: 0,
+        max_items,
+        max_bytes,
+    };
     let bcfg = EvidenceBuildCfgV1::new();
 
     let bundle_before = build_evidence_bundle_v1_from_hits(

@@ -21,20 +21,28 @@ use crate::index_sig_map_store::{put_index_sig_map_v1, IndexSigMapStoreError};
 use crate::index_snapshot::{IndexSnapshotEntryV1, IndexSnapshotV1};
 use crate::index_snapshot_store::{put_index_snapshot_v1, IndexSnapshotStoreError};
 use crate::index_store::{put_index_segment_v1, IndexStoreError};
+use crate::prompt_artifact::{put_prompt_pack, PromptArtifactError};
+use crate::prompt_pack::{Message, PromptIds, PromptLimits, PromptPack, Role};
 use crate::segment_sig::{SegmentSigBuildError, SegmentSigV1};
 use crate::segment_sig_store::{put_segment_sig_v1, SegmentSigStoreError};
 use crate::wiki_ingest::{ingest_wiki_tsv, WikiIngestCfg, WikiIngestError, WikiIngestManifestV1};
-use crate::workload_gen::{generate_workload_v1, workload_hash_v1, WorkloadCfgV1, WorkloadGenError, WorkloadV1};
-use crate::prompt_artifact::{put_prompt_pack, PromptArtifactError};
-use crate::prompt_pack::{Message, PromptIds, PromptLimits, PromptPack, Role};
+use crate::workload_gen::{
+    generate_workload_v1, workload_hash_v1, WorkloadCfgV1, WorkloadGenError, WorkloadV1,
+};
 
 use crate::cache::{Cache2Q, CacheCfgV1};
 use crate::evidence_artifact::{put_evidence_bundle_v1, EvidenceArtifactError};
-use crate::evidence_builder::{build_evidence_bundle_v1_from_hits_cached, EvidenceBuildCfgV1, EvidenceBuildError};
+use crate::evidence_builder::{
+    build_evidence_bundle_v1_from_hits_cached, EvidenceBuildCfgV1, EvidenceBuildError,
+};
 use crate::evidence_bundle::EvidenceLimitsV1;
 use crate::frame_segment::FrameSegmentV1;
-use crate::index_query::{query_terms_from_text, search_snapshot_gated, IndexQueryError, QueryTermsCfg, SearchCfg};
-use crate::scale_report::{HashListSummaryV1, ScaleDemoScaleReportV1, SCALE_DEMO_SCALE_REPORT_V1_VERSION};
+use crate::index_query::{
+    query_terms_from_text, search_snapshot_gated, IndexQueryError, QueryTermsCfg, SearchCfg,
+};
+use crate::scale_report::{
+    HashListSummaryV1, ScaleDemoScaleReportV1, SCALE_DEMO_SCALE_REPORT_V1_VERSION,
+};
 
 use std::sync::Arc;
 
@@ -168,7 +176,9 @@ fn generate_workload_and_hash(cfg: ScaleDemoCfgV1) -> Result<(WorkloadV1, Hash32
 }
 
 /// Generate the scale demo report ().
-pub fn run_scale_demo_generate_only_v1(cfg: ScaleDemoCfgV1) -> Result<ScaleDemoReportV1, ScaleDemoError> {
+pub fn run_scale_demo_generate_only_v1(
+    cfg: ScaleDemoCfgV1,
+) -> Result<ScaleDemoReportV1, ScaleDemoError> {
     let (w, h) = generate_workload_and_hash(cfg)?;
     Ok(ScaleDemoReportV1 {
         version: SCALE_DEMO_V1_VERSION,
@@ -394,7 +404,9 @@ impl core::fmt::Display for ScaleDemoIndexError {
         match self {
             ScaleDemoIndexError::Manifest(e) => write!(f, "manifest: {}", e),
             ScaleDemoIndexError::FrameStore(e) => write!(f, "frame store: {}", e),
-            ScaleDemoIndexError::MissingFrameSegment(h) => write!(f, "missing frame segment: {}", hex32(h)),
+            ScaleDemoIndexError::MissingFrameSegment(h) => {
+                write!(f, "missing frame segment: {}", hex32(h))
+            }
             ScaleDemoIndexError::IndexBuild(e) => write!(f, "index build: {}", e),
             ScaleDemoIndexError::IndexStore(e) => write!(f, "index store: {}", e),
             ScaleDemoIndexError::SegmentSigBuild(e) => write!(f, "segment sig build: {}", e),
@@ -469,8 +481,13 @@ pub fn run_scale_demo_build_index_from_manifest_v1<S: ArtifactStore>(
         let idx_hash = put_index_segment_v1(store, &idx)?;
 
         let terms: Vec<crate::frame::TermId> = idx.terms.iter().map(|e| e.term).collect();
-        let sig = SegmentSigV1::build(idx_hash, &terms, SCALE_DEMO_INDEX_BLOOM_BYTES, SCALE_DEMO_INDEX_BLOOM_K)
-            .map_err(ScaleDemoIndexError::SegmentSigBuild)?;
+        let sig = SegmentSigV1::build(
+            idx_hash,
+            &terms,
+            SCALE_DEMO_INDEX_BLOOM_BYTES,
+            SCALE_DEMO_INDEX_BLOOM_K,
+        )
+        .map_err(ScaleDemoIndexError::SegmentSigBuild)?;
         let sig_hash = put_segment_sig_v1(store, &sig)?;
         sig_map.push(idx_hash, sig_hash);
 
@@ -499,7 +516,6 @@ pub fn run_scale_demo_build_index_from_manifest_v1<S: ArtifactStore>(
         segments_total: segs.len() as u32,
     })
 }
-
 
 /// PromptPack report version (scale demo).
 pub const SCALE_DEMO_PROMPTS_V1_VERSION: u32 = 1;
@@ -701,7 +717,6 @@ pub fn run_scale_demo_generate_and_ingest_frames_v1<S: ArtifactStore>(
 
     Ok((report, frames))
 }
-
 
 /// Evidence report version (scale demo).
 pub const SCALE_DEMO_EVIDENCE_V1_VERSION: u32 = 1;
@@ -942,7 +957,6 @@ pub fn run_scale_demo_build_evidence_bundles_v1<S: ArtifactStore>(
     })
 }
 
-
 /// Scale demo answers report version.
 pub const SCALE_DEMO_ANSWERS_V1_VERSION: u32 = 3;
 
@@ -980,7 +994,6 @@ pub struct ScaleDemoAnswersReportV1 {
     pub markov_trace_hashes: Vec<Hash32>,
 }
 
-
 impl core::fmt::Display for ScaleDemoAnswersReportV1 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let answers_n = self.answer_hashes.len();
@@ -991,7 +1004,10 @@ impl core::fmt::Display for ScaleDemoAnswersReportV1 {
         let (ans_first, ans_last) = if answers_n == 0 {
             ([0u8; 32], [0u8; 32])
         } else {
-            (*self.answer_hashes.first().unwrap(), *self.answer_hashes.last().unwrap())
+            (
+                *self.answer_hashes.first().unwrap(),
+                *self.answer_hashes.last().unwrap(),
+            )
         };
         let (ph_first, ph_last) = if ph_n == 0 {
             ([0u8; 32], [0u8; 32])
@@ -1004,7 +1020,10 @@ impl core::fmt::Display for ScaleDemoAnswersReportV1 {
         let (fc_first, fc_last) = if fc_n == 0 {
             ([0u8; 32], [0u8; 32])
         } else {
-            (*self.forecast_hashes.first().unwrap(), *self.forecast_hashes.last().unwrap())
+            (
+                *self.forecast_hashes.first().unwrap(),
+                *self.forecast_hashes.last().unwrap(),
+            )
         };
 
         let (mt_first, mt_last) = if mt_n == 0 {
@@ -1131,9 +1150,12 @@ fn run_scale_demo_build_answers_v1_impl<S: ArtifactStore>(
 
     let mut answer_hashes: Vec<Hash32> = Vec::with_capacity(evidence_report.evidence_hashes.len());
 
-    let mut planner_hints_hashes: Vec<Hash32> = Vec::with_capacity(evidence_report.evidence_hashes.len());
-    let mut forecast_hashes: Vec<Hash32> = Vec::with_capacity(evidence_report.evidence_hashes.len());
-    let mut markov_trace_hashes: Vec<Hash32> = Vec::with_capacity(evidence_report.evidence_hashes.len());
+    let mut planner_hints_hashes: Vec<Hash32> =
+        Vec::with_capacity(evidence_report.evidence_hashes.len());
+    let mut forecast_hashes: Vec<Hash32> =
+        Vec::with_capacity(evidence_report.evidence_hashes.len());
+    let mut markov_trace_hashes: Vec<Hash32> =
+        Vec::with_capacity(evidence_report.evidence_hashes.len());
 
     for evh in evidence_report.evidence_hashes.iter() {
         let bundle_opt = crate::evidence_artifact::get_evidence_bundle_v1(store, evh)
@@ -1143,10 +1165,17 @@ fn run_scale_demo_build_answers_v1_impl<S: ArtifactStore>(
             None => return Err(ScaleDemoAnswerError::MissingEvidenceBundle),
         };
 
-        let eb_bytes = bundle.encode().map_err(ScaleDemoAnswerError::EvidenceEncode)?;
+        let eb_bytes = bundle
+            .encode()
+            .map_err(ScaleDemoAnswerError::EvidenceEncode)?;
         let eb_id = blake3_hash(&eb_bytes);
-        let pout = crate::planner_v1::plan_from_evidence_bundle_v1_with_guidance(&bundle, eb_id, &planner_cfg, None)
-            .map_err(ScaleDemoAnswerError::Planner)?;
+        let pout = crate::planner_v1::plan_from_evidence_bundle_v1_with_guidance(
+            &bundle,
+            eb_id,
+            &planner_cfg,
+            None,
+        )
+        .map_err(ScaleDemoAnswerError::Planner)?;
         let plan = pout.plan;
         let hints = pout.hints;
         let forecast = pout.forecast;
@@ -1175,11 +1204,7 @@ fn run_scale_demo_build_answers_v1_impl<S: ArtifactStore>(
         //: Use the quality gate token builder so scale-demo MarkovTrace
         // matches the answer CLI (including any wired surface-template ids).
         let mt_tokens: Vec<crate::markov_model::MarkovTokenV1> =
-            crate::quality_gate_v1::build_markov_trace_tokens_v1(
-                &plan,
-                &qr.markov,
-                did_append_q,
-            );
+            crate::quality_gate_v1::build_markov_trace_tokens_v1(&plan, &qr.markov, did_append_q);
 
         let trace = crate::markov_trace::MarkovTraceV1 {
             version: crate::markov_trace::MARKOV_TRACE_V1_VERSION,
@@ -1190,7 +1215,9 @@ fn run_scale_demo_build_answers_v1_impl<S: ArtifactStore>(
             .map_err(ScaleDemoAnswerError::MarkovTraceArtifact)?;
         markov_trace_hashes.push(trace_hash);
 
-        let ah = store.put(text.as_bytes()).map_err(ScaleDemoAnswerError::Store)?;
+        let ah = store
+            .put(text.as_bytes())
+            .map_err(ScaleDemoAnswerError::Store)?;
         answer_hashes.push(ah);
     }
 
@@ -1210,7 +1237,6 @@ fn run_scale_demo_build_answers_v1_impl<S: ArtifactStore>(
         markov_trace_hashes,
     })
 }
-
 
 /// Errors while assembling a ScaleDemoScaleReportV1.
 #[derive(Debug)]
@@ -1237,14 +1263,28 @@ pub enum ScaleDemoScaleReportError {
 impl core::fmt::Display for ScaleDemoScaleReportError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            ScaleDemoScaleReportError::WorkloadHashMismatch => f.write_str("workload hash mismatch"),
+            ScaleDemoScaleReportError::WorkloadHashMismatch => {
+                f.write_str("workload hash mismatch")
+            }
             ScaleDemoScaleReportError::QueryCountMismatch => f.write_str("query count mismatch"),
-            ScaleDemoScaleReportError::IndexManifestMismatch => f.write_str("index manifest mismatch"),
-            ScaleDemoScaleReportError::EvidenceRequiresIndex => f.write_str("evidence requires index"),
-            ScaleDemoScaleReportError::EvidenceIndexMismatch => f.write_str("evidence index mismatch"),
-            ScaleDemoScaleReportError::AnswersRequiresEvidence => f.write_str("answers requires evidence"),
-            ScaleDemoScaleReportError::AnswersIndexMismatch => f.write_str("answers index mismatch"),
-            ScaleDemoScaleReportError::GuidanceCountMismatch => f.write_str("guidance count mismatch"),
+            ScaleDemoScaleReportError::IndexManifestMismatch => {
+                f.write_str("index manifest mismatch")
+            }
+            ScaleDemoScaleReportError::EvidenceRequiresIndex => {
+                f.write_str("evidence requires index")
+            }
+            ScaleDemoScaleReportError::EvidenceIndexMismatch => {
+                f.write_str("evidence index mismatch")
+            }
+            ScaleDemoScaleReportError::AnswersRequiresEvidence => {
+                f.write_str("answers requires evidence")
+            }
+            ScaleDemoScaleReportError::AnswersIndexMismatch => {
+                f.write_str("answers index mismatch")
+            }
+            ScaleDemoScaleReportError::GuidanceCountMismatch => {
+                f.write_str("guidance count mismatch")
+            }
         }
     }
 }
@@ -1290,7 +1330,9 @@ pub fn build_scale_demo_scale_report_v1(
             Some(v) => v,
             None => return Err(ScaleDemoScaleReportError::EvidenceRequiresIndex),
         };
-        if er.index_snapshot_hash != ix.index_snapshot_hash || er.index_sig_map_hash != ix.index_sig_map_hash {
+        if er.index_snapshot_hash != ix.index_snapshot_hash
+            || er.index_sig_map_hash != ix.index_sig_map_hash
+        {
             return Err(ScaleDemoScaleReportError::EvidenceIndexMismatch);
         }
     }
@@ -1306,7 +1348,9 @@ pub fn build_scale_demo_scale_report_v1(
             Some(v) => v,
             None => return Err(ScaleDemoScaleReportError::AnswersRequiresEvidence),
         };
-        if ar.index_snapshot_hash != er.index_snapshot_hash || ar.index_sig_map_hash != er.index_sig_map_hash {
+        if ar.index_snapshot_hash != er.index_snapshot_hash
+            || ar.index_sig_map_hash != er.index_sig_map_hash
+        {
             return Err(ScaleDemoScaleReportError::AnswersIndexMismatch);
         }
 
@@ -1321,10 +1365,16 @@ pub fn build_scale_demo_scale_report_v1(
         }
     }
 
-    let (has_index, index_snapshot_hash, index_sig_map_hash, index_segments_total) = match index_report {
-        Some(ix) => (1u8, ix.index_snapshot_hash, ix.index_sig_map_hash, ix.segments_total),
-        None => (0u8, [0u8; 32], [0u8; 32], 0u32),
-    };
+    let (has_index, index_snapshot_hash, index_sig_map_hash, index_segments_total) =
+        match index_report {
+            Some(ix) => (
+                1u8,
+                ix.index_snapshot_hash,
+                ix.index_sig_map_hash,
+                ix.segments_total,
+            ),
+            None => (0u8, [0u8; 32], [0u8; 32], 0u32),
+        };
 
     let (has_prompts, prompts_max_output_tokens, prompts_summary) = match prompts_report {
         Some(pr) => (
@@ -1414,7 +1464,8 @@ pub fn build_scale_demo_scale_report_v1(
     };
 
     // Defensive canonical validation (should always pass).
-    rep.validate_canonical().map_err(|_| ScaleDemoScaleReportError::WorkloadHashMismatch)?;
+    rep.validate_canonical()
+        .map_err(|_| ScaleDemoScaleReportError::WorkloadHashMismatch)?;
 
     Ok(rep)
 }
@@ -1495,7 +1546,8 @@ mod tests {
 
         let (_r, frames) = run_scale_demo_generate_and_ingest_frames_v1(&store, cfg).unwrap();
         let man = load_wiki_ingest_manifest_v1(&store, &frames.frame_manifest_hash).unwrap();
-        let segs = collect_frame_segments_from_manifest_v1(&store, &frames.frame_manifest_hash).unwrap();
+        let segs =
+            collect_frame_segments_from_manifest_v1(&store, &frames.frame_manifest_hash).unwrap();
 
         assert_eq!(segs, man.segments);
         assert_eq!(segs.len() as u32, frames.segments_total);
@@ -1560,8 +1612,6 @@ mod tests {
         }
     }
 
-
-
     #[test]
     fn build_evidence_bundles_is_deterministic() {
         let dir = tmp_dir("scale_demo_build_evidence_bundles_is_deterministic");
@@ -1577,20 +1627,23 @@ mod tests {
         cfg.workload.include_tie_pair = 1;
 
         let (_r, frames) = run_scale_demo_generate_and_ingest_frames_v1(&store, cfg).unwrap();
-        let idx = run_scale_demo_build_index_from_manifest_v1(&store, &frames.frame_manifest_hash).unwrap();
+        let idx = run_scale_demo_build_index_from_manifest_v1(&store, &frames.frame_manifest_hash)
+            .unwrap();
 
         let e1 = run_scale_demo_build_evidence_bundles_v1(
             &store,
             cfg,
             &idx.index_snapshot_hash,
             &idx.index_sig_map_hash,
-        ).unwrap();
+        )
+        .unwrap();
         let e2 = run_scale_demo_build_evidence_bundles_v1(
             &store,
             cfg,
             &idx.index_snapshot_hash,
             &idx.index_sig_map_hash,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(e1, e2);
         assert_eq!(e1.query_count, cfg.workload.query_count);
@@ -1603,7 +1656,6 @@ mod tests {
             assert_eq!(got.snapshot_id, idx.index_snapshot_hash);
         }
     }
-
 
     #[test]
     fn build_answers_is_deterministic() {
@@ -1620,14 +1672,16 @@ mod tests {
         cfg.workload.include_tie_pair = 1;
 
         let (_r, frames) = run_scale_demo_generate_and_ingest_frames_v1(&store, cfg).unwrap();
-        let idx = run_scale_demo_build_index_from_manifest_v1(&store, &frames.frame_manifest_hash).unwrap();
+        let idx = run_scale_demo_build_index_from_manifest_v1(&store, &frames.frame_manifest_hash)
+            .unwrap();
 
         let e = run_scale_demo_build_evidence_bundles_v1(
             &store,
             cfg,
             &idx.index_snapshot_hash,
             &idx.index_sig_map_hash,
-        ).unwrap();
+        )
+        .unwrap();
 
         let a1 = run_scale_demo_build_answers_v1(&store, &e).unwrap();
         let a2 = run_scale_demo_build_answers_v1(&store, &e).unwrap();
@@ -1657,8 +1711,10 @@ mod tests {
 
         let (_r, frames) = run_scale_demo_generate_and_ingest_frames_v1(&store, cfg).unwrap();
 
-        let a = run_scale_demo_build_index_from_manifest_v1(&store, &frames.frame_manifest_hash).unwrap();
-        let b = run_scale_demo_build_index_from_manifest_v1(&store, &frames.frame_manifest_hash).unwrap();
+        let a = run_scale_demo_build_index_from_manifest_v1(&store, &frames.frame_manifest_hash)
+            .unwrap();
+        let b = run_scale_demo_build_index_from_manifest_v1(&store, &frames.frame_manifest_hash)
+            .unwrap();
         assert_eq!(a, b);
         assert_eq!(a.segments_total, frames.segments_total);
 
@@ -1667,9 +1723,10 @@ mod tests {
         let mut want = man.segments.clone();
         want.sort();
 
-        let snap = crate::index_snapshot_store::get_index_snapshot_v1(&store, &a.index_snapshot_hash)
-            .unwrap()
-            .unwrap();
+        let snap =
+            crate::index_snapshot_store::get_index_snapshot_v1(&store, &a.index_snapshot_hash)
+                .unwrap()
+                .unwrap();
         assert_eq!(snap.entries.len(), want.len());
 
         let mut got: Vec<Hash32> = snap.entries.iter().map(|e| e.frame_seg).collect();

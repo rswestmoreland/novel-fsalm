@@ -49,7 +49,10 @@ fn details_heading_choice_id_v1(variant: u8) -> Id64 {
 }
 
 fn allowed_transition_choice_ids_v1() -> [Id64; 2] {
-    [details_heading_choice_id_v1(0), details_heading_choice_id_v1(1)]
+    [
+        details_heading_choice_id_v1(0),
+        details_heading_choice_id_v1(1),
+    ]
 }
 
 fn caveat_heading_choice_id_v1(variant: u8) -> Id64 {
@@ -60,7 +63,10 @@ fn caveat_heading_choice_id_v1(variant: u8) -> Id64 {
 }
 
 fn allowed_closer_choice_ids_v1() -> [Id64; 2] {
-    [caveat_heading_choice_id_v1(0), caveat_heading_choice_id_v1(1)]
+    [
+        caveat_heading_choice_id_v1(0),
+        caveat_heading_choice_id_v1(1),
+    ]
 }
 
 fn clarifier_intro_choice_id_v1(variant: u8) -> Id64 {
@@ -71,7 +77,10 @@ fn clarifier_intro_choice_id_v1(variant: u8) -> Id64 {
 }
 
 fn allowed_other_choice_ids_v1() -> [Id64; 2] {
-    [clarifier_intro_choice_id_v1(0), clarifier_intro_choice_id_v1(1)]
+    [
+        clarifier_intro_choice_id_v1(0),
+        clarifier_intro_choice_id_v1(1),
+    ]
 }
 
 /// Derive MarkovHintsV1 for the currently wired surface-template sites.
@@ -222,8 +231,14 @@ mod tests {
         assert!(h.validate().is_ok());
         assert_eq!(h.choices.len(), 2);
         assert_eq!(h.choices[0].kind, MarkovChoiceKindV1::Opener);
-        assert_eq!(h.choices[0].choice_id, preface_choice_id_v1(ToneV1::Supportive, 0));
-        assert_eq!(h.choices[1].choice_id, preface_choice_id_v1(ToneV1::Supportive, 1));
+        assert_eq!(
+            h.choices[0].choice_id,
+            preface_choice_id_v1(ToneV1::Supportive, 0)
+        );
+        assert_eq!(
+            h.choices[1].choice_id,
+            preface_choice_id_v1(ToneV1::Supportive, 1)
+        );
     }
 
     #[test]
@@ -328,18 +343,18 @@ mod tests {
                 && c.choice_id == details_heading_choice_id_v1(1)
         }));
         assert!(h.choices.iter().any(|c| {
-            c.kind == MarkovChoiceKindV1::Closer
-                && c.choice_id == caveat_heading_choice_id_v1(0)
+            c.kind == MarkovChoiceKindV1::Closer && c.choice_id == caveat_heading_choice_id_v1(0)
         }));
         assert!(h.choices.iter().any(|c| {
-            c.kind == MarkovChoiceKindV1::Closer
-                && c.choice_id == caveat_heading_choice_id_v1(1)
+            c.kind == MarkovChoiceKindV1::Closer && c.choice_id == caveat_heading_choice_id_v1(1)
         }));
         assert!(h.choices.iter().any(|c| {
-            c.kind == MarkovChoiceKindV1::Other
-                && c.choice_id == clarifier_intro_choice_id_v1(1)
+            c.kind == MarkovChoiceKindV1::Other && c.choice_id == clarifier_intro_choice_id_v1(1)
         }));
-        assert!(!h.choices.iter().any(|c| c.kind == MarkovChoiceKindV1::Closer && c.choice_id == Id64(999)));
+        assert!(!h
+            .choices
+            .iter()
+            .any(|c| c.kind == MarkovChoiceKindV1::Closer && c.choice_id == Id64(999)));
     }
 
     #[test]
@@ -384,7 +399,13 @@ mod tests {
             8,
         );
         assert!(h.validate().is_ok());
-        assert!(h.choices.iter().all(|c| c.kind == MarkovChoiceKindV1::Opener));
-        assert!(!h.choices.iter().any(|c| c.kind == MarkovChoiceKindV1::Closer));
+        assert!(h
+            .choices
+            .iter()
+            .all(|c| c.kind == MarkovChoiceKindV1::Opener));
+        assert!(!h
+            .choices
+            .iter()
+            .any(|c| c.kind == MarkovChoiceKindV1::Closer));
     }
 }

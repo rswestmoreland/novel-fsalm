@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Richard S. Westmoreland <dev@rswestmore.land>
 
 use fsa_lm::answer_plan::{AnswerPlanItemKindV1, AnswerPlanItemV1, AnswerPlanV1};
-use fsa_lm::frame::{derive_id64, Id64};
 use fsa_lm::forecast::{ForecastQuestionV1, ForecastV1, FORECAST_V1_VERSION};
+use fsa_lm::frame::{derive_id64, Id64};
 use fsa_lm::hash::Hash32;
 use fsa_lm::markov_hints::{MarkovChoiceKindV1, MarkovChoiceV1, MarkovHintsV1};
 use fsa_lm::markov_model::MarkovTokenV1;
@@ -45,7 +45,12 @@ fn markov_valid_other_selects_alternate_clarifier_intro() {
         state_id: Id64(0),
         model_hash: [0u8; 32],
         context_hash: [0u8; 32],
-        choices: vec![MarkovChoiceV1::new(MarkovChoiceKindV1::Other, choice_id, 10, 0)],
+        choices: vec![MarkovChoiceV1::new(
+            MarkovChoiceKindV1::Other,
+            choice_id,
+            10,
+            0,
+        )],
     };
     let mut events = RealizerMarkovEventsV1 {
         opener_preface_choice: None,
@@ -72,7 +77,8 @@ fn markov_valid_other_selects_alternate_clarifier_intro() {
 fn clarifier_intro_trace_emits_other_before_append() {
     let z: Hash32 = [0u8; 32];
     let mut plan = AnswerPlanV1::new(z, z, z, 1);
-    plan.items.push(AnswerPlanItemV1::new(AnswerPlanItemKindV1::Summary));
+    plan.items
+        .push(AnswerPlanItemV1::new(AnswerPlanItemKindV1::Summary));
 
     let intro = derive_id64(b"markov_choice_v1", b"other:clarifier_intro:1");
     let events = RealizerMarkovEventsV1 {
@@ -90,7 +96,10 @@ fn clarifier_intro_trace_emits_other_before_append() {
             derive_id64(b"markov_choice_v1", b"plan_item:summary"),
         )
     );
-    assert_eq!(toks[1], MarkovTokenV1::new(MarkovChoiceKindV1::Other, intro));
+    assert_eq!(
+        toks[1],
+        MarkovTokenV1::new(MarkovChoiceKindV1::Other, intro)
+    );
     assert_eq!(
         toks[2],
         MarkovTokenV1::new(

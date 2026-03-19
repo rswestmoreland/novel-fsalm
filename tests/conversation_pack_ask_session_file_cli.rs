@@ -6,20 +6,24 @@ use std::process::Command;
 
 use fsa_lm::artifact::{ArtifactStore, FsArtifactStore};
 use fsa_lm::codec::ByteWriter;
-use fsa_lm::conversation_pack::{ConversationLimits, ConversationMessage, ConversationPackV1, ConversationRole};
-use fsa_lm::graph_relevance::{
-    GraphNodeKindV1, GraphRelevanceEdgeV1, GraphRelevanceRowV1, GraphRelevanceV1,
-    GRAPH_RELEVANCE_V1_VERSION, GREDGE_FLAG_SYMMETRIC, GR_FLAG_HAS_TERM_ROWS,
+use fsa_lm::conversation_pack::{
+    ConversationLimits, ConversationMessage, ConversationPackV1, ConversationRole,
 };
-use fsa_lm::graph_relevance_artifact::put_graph_relevance_v1;
 use fsa_lm::exemplar_memory::{
     ExemplarMemoryV1, ExemplarResponseModeV1, ExemplarRowV1, ExemplarStructureKindV1,
     ExemplarToneKindV1, EXEMPLAR_MEMORY_V1_VERSION,
 };
 use fsa_lm::exemplar_memory_artifact::put_exemplar_memory_v1;
 use fsa_lm::frame::{derive_id64, Id64};
+use fsa_lm::graph_relevance::{
+    GraphNodeKindV1, GraphRelevanceEdgeV1, GraphRelevanceRowV1, GraphRelevanceV1,
+    GRAPH_RELEVANCE_V1_VERSION, GREDGE_FLAG_SYMMETRIC, GR_FLAG_HAS_TERM_ROWS,
+};
+use fsa_lm::graph_relevance_artifact::put_graph_relevance_v1;
 use fsa_lm::markov_hints::MarkovChoiceKindV1;
-use fsa_lm::markov_model::{MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1, MARKOV_MODEL_V1_VERSION};
+use fsa_lm::markov_model::{
+    MarkovModelV1, MarkovNextV1, MarkovStateV1, MarkovTokenV1, MARKOV_MODEL_V1_VERSION,
+};
 use fsa_lm::markov_model_artifact::put_markov_model_v1;
 use fsa_lm::pragmatics_frame::{PragmaticsFrameV1, RhetoricModeV1, PRAGMATICS_FRAME_V1_VERSION};
 use fsa_lm::pragmatics_frame_store::put_pragmatics_frame_v1;
@@ -167,7 +171,10 @@ fn parse_file_kv(path: &Path, key: &str) -> Option<String> {
 }
 
 fn write_workspace(root: &Path, merged_snapshot: &str, merged_sig_map: &str) {
-    let s = format!("merged_snapshot={}\nmerged_sig_map={}\n", merged_snapshot, merged_sig_map);
+    let s = format!(
+        "merged_snapshot={}\nmerged_sig_map={}\n",
+        merged_snapshot, merged_sig_map
+    );
     std::fs::write(root.join("workspace_v1.txt"), s.as_bytes()).unwrap();
 }
 
@@ -187,7 +194,6 @@ fn write_workspace_with_lexicon_defaults(
     );
     std::fs::write(root.join("workspace_v1.txt"), s.as_bytes()).unwrap();
 }
-
 
 fn encode_legacy_conversation_pack(p: &ConversationPackV1) -> Vec<u8> {
     let mut w = ByteWriter::with_capacity(256);
@@ -299,10 +305,19 @@ fn ask_session_file_saves_and_resumes_conversation() {
     assert!(!aout_s.contains("Answer v1"), "stdout={}", aout_s);
     assert!(!aout_s.contains("query_id="), "stdout={}", aout_s);
 
-    let conv1 = parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= in session file");
+    let conv1 = parse_file_kv(&session_path, "conversation_pack")
+        .expect("conversation_pack= in session file");
     assert!(is_hex64(&conv1));
 
-    let (scode, sout, serr) = run_cmd(bin, &["show-conversation", "--root", root.to_str().unwrap(), &conv1]);
+    let (scode, sout, serr) = run_cmd(
+        bin,
+        &[
+            "show-conversation",
+            "--root",
+            root.to_str().unwrap(),
+            &conv1,
+        ],
+    );
     assert_eq!(scode, 0, "stderr={}", String::from_utf8_lossy(&serr));
     let sout_s = String::from_utf8_lossy(&sout).replace("\r\n", "\n");
     assert!(sout_s.contains(&format!("conversation_pack={}", conv1)));
@@ -326,11 +341,20 @@ fn ask_session_file_saves_and_resumes_conversation() {
     assert!(!aout2_s.contains("Answer v1"), "stdout={}", aout2_s);
     assert!(!aout2_s.contains("query_id="), "stdout={}", aout2_s);
 
-    let conv2 = parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= in session file after resume");
+    let conv2 = parse_file_kv(&session_path, "conversation_pack")
+        .expect("conversation_pack= in session file after resume");
     assert!(is_hex64(&conv2));
     assert_ne!(conv1, conv2, "session pointer should advance after ask");
 
-    let (scode2, sout2, serr2) = run_cmd(bin, &["show-conversation", "--root", root.to_str().unwrap(), &conv2]);
+    let (scode2, sout2, serr2) = run_cmd(
+        bin,
+        &[
+            "show-conversation",
+            "--root",
+            root.to_str().unwrap(),
+            &conv2,
+        ],
+    );
     assert_eq!(scode2, 0, "stderr={}", String::from_utf8_lossy(&serr2));
     let sout2_s = String::from_utf8_lossy(&sout2).replace("\r\n", "\n");
     assert!(sout2_s.contains("content=banana"));
@@ -383,7 +407,11 @@ fn ask_session_file_binds_workspace_lexicon_when_default_expand_is_enabled() {
     let lxout_s = String::from_utf8_lossy(&lxout).replace("\r\n", "\n");
     let lex_snap_hex = lxout_s
         .lines()
-        .find_map(|line| line.trim().strip_prefix("lexicon_snapshot=").map(|v| v.trim().to_string()))
+        .find_map(|line| {
+            line.trim()
+                .strip_prefix("lexicon_snapshot=")
+                .map(|v| v.trim().to_string())
+        })
         .expect("lexicon_snapshot line");
 
     let (wcode, _wout, werr) = run_cmd(
@@ -423,11 +451,19 @@ fn ask_session_file_binds_workspace_lexicon_when_default_expand_is_enabled() {
     );
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
 
-    let conv = parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= in session file");
-    let (scode, sout, serr) = run_cmd(bin, &["show-conversation", "--root", root.to_str().unwrap(), &conv]);
+    let conv = parse_file_kv(&session_path, "conversation_pack")
+        .expect("conversation_pack= in session file");
+    let (scode, sout, serr) = run_cmd(
+        bin,
+        &["show-conversation", "--root", root.to_str().unwrap(), &conv],
+    );
     assert_eq!(scode, 0, "stderr={}", String::from_utf8_lossy(&serr));
     let sout_s = String::from_utf8_lossy(&sout).replace("\r\n", "\n");
-    assert!(sout_s.contains(&format!("lexicon_snapshot_id={}", lex_snap_hex)), "stdout={}", sout_s);
+    assert!(
+        sout_s.contains(&format!("lexicon_snapshot_id={}", lex_snap_hex)),
+        "stdout={}",
+        sout_s
+    );
 }
 
 #[test]
@@ -465,7 +501,14 @@ fn ask_session_file_persists_advisory_ids_in_conversation_pack() {
     let markov_hex = "1111111111111111111111111111111111111111111111111111111111111111";
     let exemplar_hex = "2222222222222222222222222222222222222222222222222222222222222222";
     let graph_hex = "3333333333333333333333333333333333333333333333333333333333333333";
-    write_workspace_with_advisory_defaults(&root, &idx_snap_hex, &sig_map_hex, markov_hex, exemplar_hex, graph_hex);
+    write_workspace_with_advisory_defaults(
+        &root,
+        &idx_snap_hex,
+        &sig_map_hex,
+        markov_hex,
+        exemplar_hex,
+        graph_hex,
+    );
 
     let session_path = base.join("ask_session.txt");
     let (acode, _aout, aerr) = run_cmd(
@@ -481,13 +524,29 @@ fn ask_session_file_persists_advisory_ids_in_conversation_pack() {
     );
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
 
-    let conv = parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= in session file");
-    let (scode, sout, serr) = run_cmd(bin, &["show-conversation", "--root", root.to_str().unwrap(), &conv]);
+    let conv = parse_file_kv(&session_path, "conversation_pack")
+        .expect("conversation_pack= in session file");
+    let (scode, sout, serr) = run_cmd(
+        bin,
+        &["show-conversation", "--root", root.to_str().unwrap(), &conv],
+    );
     assert_eq!(scode, 0, "stderr={}", String::from_utf8_lossy(&serr));
     let sout_s = String::from_utf8_lossy(&sout).replace("\r\n", "\n");
-    assert!(sout_s.contains(&format!("markov_model_id={}", markov_hex)), "stdout={}", sout_s);
-    assert!(sout_s.contains(&format!("exemplar_memory_id={}", exemplar_hex)), "stdout={}", sout_s);
-    assert!(sout_s.contains(&format!("graph_relevance_id={}", graph_hex)), "stdout={}", sout_s);
+    assert!(
+        sout_s.contains(&format!("markov_model_id={}", markov_hex)),
+        "stdout={}",
+        sout_s
+    );
+    assert!(
+        sout_s.contains(&format!("exemplar_memory_id={}", exemplar_hex)),
+        "stdout={}",
+        sout_s
+    );
+    assert!(
+        sout_s.contains(&format!("graph_relevance_id={}", graph_hex)),
+        "stdout={}",
+        sout_s
+    );
 }
 
 #[test]
@@ -539,13 +598,20 @@ fn ask_session_file_persists_presentation_mode_in_conversation_pack() {
     );
     assert_eq!(acode, 0, "stderr={}", String::from_utf8_lossy(&aerr));
 
-    let conv = parse_file_kv(&session_path, "conversation_pack").expect("conversation_pack= in session file");
-    let (scode, sout, serr) = run_cmd(bin, &["show-conversation", "--root", root.to_str().unwrap(), &conv]);
+    let conv = parse_file_kv(&session_path, "conversation_pack")
+        .expect("conversation_pack= in session file");
+    let (scode, sout, serr) = run_cmd(
+        bin,
+        &["show-conversation", "--root", root.to_str().unwrap(), &conv],
+    );
     assert_eq!(scode, 0, "stderr={}", String::from_utf8_lossy(&serr));
     let sout_s = String::from_utf8_lossy(&sout).replace("\r\n", "\n");
-    assert!(sout_s.contains("presentation_mode=operator"), "stdout={}", sout_s);
+    assert!(
+        sout_s.contains("presentation_mode=operator"),
+        "stdout={}",
+        sout_s
+    );
 }
-
 
 #[test]
 fn ask_session_file_resume_restores_presentation_and_exemplar_memory() {
@@ -599,9 +665,7 @@ fn ask_session_file_resume_restores_presentation_and_exemplar_memory() {
 
     let ws1 = format!(
         "merged_snapshot={}\nmerged_sig_map={}\nexemplar_memory={}\n",
-        idx_snap_hex,
-        sig_map_hex,
-        exemplar_hex,
+        idx_snap_hex, sig_map_hex, exemplar_hex,
     );
     std::fs::write(root.join("workspace_v1.txt"), ws1.as_bytes()).unwrap();
 
@@ -622,7 +686,13 @@ fn ask_session_file_resume_restores_presentation_and_exemplar_memory() {
     assert_eq!(acode1, 0, "stderr={}", String::from_utf8_lossy(&aerr1));
     let stdout1 = String::from_utf8_lossy(&aout1);
     assert!(stdout1.contains("Answer v1"), "stdout={}", stdout1);
-    assert!(stdout1.contains("exemplar_match exemplar_id=7 response_mode=Direct structure=Direct tone=Supportive"), "stdout={}", stdout1);
+    assert!(
+        stdout1.contains(
+            "exemplar_match exemplar_id=7 response_mode=Direct structure=Direct tone=Supportive"
+        ),
+        "stdout={}",
+        stdout1
+    );
 
     write_workspace(&root, &idx_snap_hex, &sig_map_hex);
 
@@ -640,10 +710,14 @@ fn ask_session_file_resume_restores_presentation_and_exemplar_memory() {
     assert_eq!(acode2, 0, "stderr={}", String::from_utf8_lossy(&aerr2));
     let stdout2 = String::from_utf8_lossy(&aout2);
     assert!(stdout2.contains("Answer v1"), "stdout={}", stdout2);
-    assert!(stdout2.contains("exemplar_match exemplar_id=7 response_mode=Direct structure=Direct tone=Supportive"), "stdout={}", stdout2);
+    assert!(
+        stdout2.contains(
+            "exemplar_match exemplar_id=7 response_mode=Direct structure=Direct tone=Supportive"
+        ),
+        "stdout={}",
+        stdout2
+    );
 }
-
-
 
 #[test]
 fn ask_session_file_resume_restores_presentation_and_markov_model() {
@@ -684,9 +758,7 @@ fn ask_session_file_resume_restores_presentation_and_markov_model() {
 
     let ws1 = format!(
         "merged_snapshot={}\nmerged_sig_map={}\nmarkov_model={}\n",
-        idx_snap_hex,
-        sig_map_hex,
-        markov_hex,
+        idx_snap_hex, sig_map_hex, markov_hex,
     );
     std::fs::write(root.join("workspace_v1.txt"), ws1.as_bytes()).unwrap();
 
@@ -709,7 +781,11 @@ fn ask_session_file_resume_restores_presentation_and_markov_model() {
     assert_eq!(acode1, 0, "stderr={}", String::from_utf8_lossy(&aerr1));
     let stdout1 = String::from_utf8_lossy(&aout1);
     assert!(stdout1.contains("Answer v1"), "stdout={}", stdout1);
-    assert!(stdout1.contains(supportive_preface_v1()), "stdout={}", stdout1);
+    assert!(
+        stdout1.contains(supportive_preface_v1()),
+        "stdout={}",
+        stdout1
+    );
 
     write_workspace(&root, &idx_snap_hex, &sig_map_hex);
 
@@ -729,7 +805,11 @@ fn ask_session_file_resume_restores_presentation_and_markov_model() {
     assert_eq!(acode2, 0, "stderr={}", String::from_utf8_lossy(&aerr2));
     let stdout2 = String::from_utf8_lossy(&aout2);
     assert!(stdout2.contains("Answer v1"), "stdout={}", stdout2);
-    assert!(stdout2.contains(supportive_preface_v1()), "stdout={}", stdout2);
+    assert!(
+        stdout2.contains(supportive_preface_v1()),
+        "stdout={}",
+        stdout2
+    );
 }
 
 #[test]
@@ -788,9 +868,7 @@ fn ask_session_file_resume_restores_presentation_and_graph_relevance() {
 
     let ws1 = format!(
         "merged_snapshot={}\nmerged_sig_map={}\ndefault_expand=1\ngraph_relevance={}\n",
-        idx_snap_hex,
-        sig_map_hex,
-        graph_hex,
+        idx_snap_hex, sig_map_hex, graph_hex,
     );
     std::fs::write(root.join("workspace_v1.txt"), ws1.as_bytes()).unwrap();
 
@@ -811,7 +889,11 @@ fn ask_session_file_resume_restores_presentation_and_graph_relevance() {
     assert_eq!(acode1, 0, "stderr={}", String::from_utf8_lossy(&aerr1));
     let stdout1 = String::from_utf8_lossy(&aout1);
     assert!(stdout1.contains("Answer v1"), "stdout={}", stdout1);
-    assert!(stdout1.contains("graph_trace seeds=1 candidates=1 reasons=banana:"), "stdout={}", stdout1);
+    assert!(
+        stdout1.contains("graph_trace seeds=1 candidates=1 reasons=banana:"),
+        "stdout={}",
+        stdout1
+    );
 
     write_workspace(&root, &idx_snap_hex, &sig_map_hex);
 
@@ -829,14 +911,19 @@ fn ask_session_file_resume_restores_presentation_and_graph_relevance() {
     assert_eq!(acode2, 0, "stderr={}", String::from_utf8_lossy(&aerr2));
     let stdout2 = String::from_utf8_lossy(&aout2);
     assert!(stdout2.contains("Answer v1"), "stdout={}", stdout2);
-    assert!(stdout2.contains("graph_trace seeds=1 candidates=1 reasons=banana:"), "stdout={}", stdout2);
+    assert!(
+        stdout2.contains("graph_trace seeds=1 candidates=1 reasons=banana:"),
+        "stdout={}",
+        stdout2
+    );
     assert!(stdout2.contains("[E1]"), "stdout={}", stdout2);
 }
 
-
 #[test]
 fn ask_session_file_resume_from_legacy_pack_uses_workspace_exemplar_and_user_default_surface() {
-    let base = tmp_dir("ask_session_file_resume_from_legacy_pack_uses_workspace_exemplar_and_user_default_surface");
+    let base = tmp_dir(
+        "ask_session_file_resume_from_legacy_pack_uses_workspace_exemplar_and_user_default_surface",
+    );
     let root = base.join("root");
     std::fs::create_dir_all(&root).unwrap();
 
@@ -886,9 +973,7 @@ fn ask_session_file_resume_from_legacy_pack_uses_workspace_exemplar_and_user_def
 
     let ws1 = format!(
         "merged_snapshot={}\nmerged_sig_map={}\nexemplar_memory={}\n",
-        idx_snap_hex,
-        sig_map_hex,
-        exemplar_hex,
+        idx_snap_hex, sig_map_hex, exemplar_hex,
     );
     std::fs::write(root.join("workspace_v1.txt"), ws1.as_bytes()).unwrap();
 

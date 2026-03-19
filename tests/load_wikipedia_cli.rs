@@ -72,7 +72,14 @@ fn load_wikipedia_writes_workspace_defaults_and_preserves_lexicon() {
     let markov_model = "5555555555555555555555555555555555555555555555555555555555555555";
     let exemplar_memory = "6666666666666666666666666666666666666666666666666666666666666666";
     let graph_relevance = "7777777777777777777777777777777777777777777777777777777777777777";
-    write_workspace_with_lexicon(&root, lex, 7, markov_model, exemplar_memory, graph_relevance);
+    write_workspace_with_lexicon(
+        &root,
+        lex,
+        7,
+        markov_model,
+        exemplar_memory,
+        graph_relevance,
+    );
 
     let bin = env!("CARGO_BIN_EXE_fsa_lm");
     let out = Command::new(bin)
@@ -90,19 +97,40 @@ fn load_wikipedia_writes_workspace_defaults_and_preserves_lexicon() {
         .output()
         .unwrap();
 
-    assert_eq!(out.status.code().unwrap_or(-1), 0, "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code().unwrap_or(-1),
+        0,
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n");
     assert!(stdout.contains("workspace_written=1"));
 
-    let merged_snapshot = parse_hash_line(&stdout, "merged_snapshot").expect("merged_snapshot line");
+    let merged_snapshot =
+        parse_hash_line(&stdout, "merged_snapshot").expect("merged_snapshot line");
     let merged_sig_map = parse_hash_line(&stdout, "merged_sig_map").expect("merged_sig_map line");
 
     let ws_text = read_file(&root.join("workspace_v1.txt"));
     assert!(ws_text.contains(&format!("merged_snapshot={}\n", merged_snapshot)));
     assert!(ws_text.contains(&format!("merged_sig_map={}\n", merged_sig_map)));
-    assert!(ws_text.contains(&format!("lexicon_snapshot={}\n", lex)), "expected lexicon_snapshot preserved");
-    assert!(ws_text.contains("default_k=7\n"), "expected default_k preserved");
-    assert!(ws_text.contains(&format!("markov_model={}\n", markov_model)), "expected markov_model preserved");
-    assert!(ws_text.contains(&format!("exemplar_memory={}\n", exemplar_memory)), "expected exemplar_memory preserved");
-    assert!(ws_text.contains(&format!("graph_relevance={}\n", graph_relevance)), "expected graph_relevance preserved");
+    assert!(
+        ws_text.contains(&format!("lexicon_snapshot={}\n", lex)),
+        "expected lexicon_snapshot preserved"
+    );
+    assert!(
+        ws_text.contains("default_k=7\n"),
+        "expected default_k preserved"
+    );
+    assert!(
+        ws_text.contains(&format!("markov_model={}\n", markov_model)),
+        "expected markov_model preserved"
+    );
+    assert!(
+        ws_text.contains(&format!("exemplar_memory={}\n", exemplar_memory)),
+        "expected exemplar_memory preserved"
+    );
+    assert!(
+        ws_text.contains(&format!("graph_relevance={}\n", graph_relevance)),
+        "expected graph_relevance preserved"
+    );
 }

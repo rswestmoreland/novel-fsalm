@@ -49,11 +49,7 @@ fn write_wiki_tsv(path: &Path) {
 
 fn run_cmd(bin: &str, args: &[&str]) -> (i32, Vec<u8>, Vec<u8>) {
     let out = Command::new(bin).args(args).output().unwrap();
-    (
-        out.status.code().unwrap_or(-1),
-        out.stdout,
-        out.stderr,
-    )
+    (out.status.code().unwrap_or(-1), out.stdout, out.stderr)
 }
 
 fn is_hex64(s: &str) -> bool {
@@ -136,7 +132,8 @@ fn wiktionary_ingest_produces_snapshot_and_enables_query_expansion() {
         String::from_utf8_lossy(&err1)
     );
     let out1s = String::from_utf8_lossy(&out1).replace("\r\n", "\n");
-    let lex_snap_hex_1 = parse_hash_line(&out1s, "lexicon_snapshot").expect("lexicon_snapshot line");
+    let lex_snap_hex_1 =
+        parse_hash_line(&out1s, "lexicon_snapshot").expect("lexicon_snapshot line");
 
     // Validate snapshot via CLI.
     let (vcode, _vout, verr) = run_cmd(
@@ -178,7 +175,8 @@ fn wiktionary_ingest_produces_snapshot_and_enables_query_expansion() {
         String::from_utf8_lossy(&err2)
     );
     let out2s = String::from_utf8_lossy(&out2).replace("\r\n", "\n");
-    let lex_snap_hex_2 = parse_hash_line(&out2s, "lexicon_snapshot").expect("lexicon_snapshot line (root2)");
+    let lex_snap_hex_2 =
+        parse_hash_line(&out2s, "lexicon_snapshot").expect("lexicon_snapshot line (root2)");
     assert_eq!(lex_snap_hex_2, lex_snap_hex_1);
 
     // Ingest a minimal Wikipedia TSV into root1.
@@ -202,10 +200,7 @@ fn wiktionary_ingest_produces_snapshot_and_enables_query_expansion() {
     );
 
     // Build index snapshot + sig-map.
-    let (bcode, bout, berr) = run_cmd(
-        bin,
-        &["build-index", "--root", root1.to_str().unwrap()],
-    );
+    let (bcode, bout, berr) = run_cmd(bin, &["build-index", "--root", root1.to_str().unwrap()]);
     assert_eq!(
         bcode,
         0,
@@ -228,7 +223,8 @@ fn wiktionary_ingest_produces_snapshot_and_enables_query_expansion() {
         "prompt failed: stderr={}",
         String::from_utf8_lossy(&perr)
     );
-    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n")).expect("prompt hash");
+    let prompt_hex = parse_first_hex(&String::from_utf8_lossy(&pout).replace("\r\n", "\n"))
+        .expect("prompt hash");
 
     // Answer without expansion: should not find evidence for plural.
     let out_no = base.join("answer_no.txt");
@@ -259,7 +255,10 @@ fn wiktionary_ingest_produces_snapshot_and_enables_query_expansion() {
     let s_no = std::fs::read_to_string(&out_no).unwrap();
     assert!(!s_no.contains("Answer v1"));
     assert!(!s_no.contains("query_id="));
-    assert!(!s_no.contains("[E0]"), "expected no evidence without expansion");
+    assert!(
+        !s_no.contains("[E0]"),
+        "expected no evidence without expansion"
+    );
 
     // Answer with expansion: should find evidence via variant "banana" (allowed by lexicon).
     let out_yes = base.join("answer_yes.txt");

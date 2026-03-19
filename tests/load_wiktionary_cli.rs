@@ -65,7 +65,15 @@ fn load_wiktionary_writes_workspace_lexicon_and_preserves_merged() {
     let markov_model = "5555555555555555555555555555555555555555555555555555555555555555";
     let exemplar_memory = "6666666666666666666666666666666666666666666666666666666666666666";
     let graph_relevance = "7777777777777777777777777777777777777777777777777777777777777777";
-    write_workspace_with_merged(&root, merged_snapshot, merged_sig_map, 9, markov_model, exemplar_memory, graph_relevance);
+    write_workspace_with_merged(
+        &root,
+        merged_snapshot,
+        merged_sig_map,
+        9,
+        markov_model,
+        exemplar_memory,
+        graph_relevance,
+    );
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let tiny_xml = manifest_dir.join("examples").join("wiktionary_tiny.xml");
@@ -97,7 +105,8 @@ fn load_wiktionary_writes_workspace_lexicon_and_preserves_merged() {
     let stdout = String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n");
     assert!(stdout.contains("workspace_written=1"));
 
-    let lexicon_snapshot = parse_hash_line(&stdout, "lexicon_snapshot").expect("lexicon_snapshot line");
+    let lexicon_snapshot =
+        parse_hash_line(&stdout, "lexicon_snapshot").expect("lexicon_snapshot line");
 
     let ws_text = read_file(&root.join("workspace_v1.txt"));
     assert!(ws_text.contains(&format!("merged_snapshot={}\n", merged_snapshot)));

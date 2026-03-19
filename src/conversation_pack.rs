@@ -540,7 +540,11 @@ impl ConversationPackV1 {
                 _ => return Err(DecodeError::new("invalid has_replay")),
             };
 
-            messages.push(ConversationMessage { role, content, replay_id });
+            messages.push(ConversationMessage {
+                role,
+                content,
+                replay_id,
+            });
         }
 
         let mut markov_model_id: Option<Hash32> = None;
@@ -589,7 +593,9 @@ impl ConversationPackV1 {
             return Err(DecodeError::new("message count exceeds max_messages"));
         }
         if total_bytes > clamp_u32_to_usize(max_total_message_bytes) {
-            return Err(DecodeError::new("total message bytes exceed max_total_message_bytes"));
+            return Err(DecodeError::new(
+                "total message bytes exceed max_total_message_bytes",
+            ));
         }
 
         Ok(Self {
@@ -716,14 +722,8 @@ mod tests {
     #[test]
     fn conversation_pack_round_trip_and_stable_bytes() {
         let limits = ConversationLimits::default_v1();
-        let mut p = ConversationPackV1::new(
-            7,
-            256,
-            z32(b"snap"),
-            z32(b"sig"),
-            Some(z32(b"lex")),
-            limits,
-        );
+        let mut p =
+            ConversationPackV1::new(7, 256, z32(b"snap"), z32(b"sig"), Some(z32(b"lex")), limits);
 
         p.messages.push(ConversationMessage {
             role: ConversationRole::System,
@@ -792,11 +792,17 @@ mod tests {
         assert_eq!(dec, p);
     }
 
-
     #[test]
     fn conversation_pack_decode_advisory_trailer_without_presentation() {
         let limits = ConversationLimits::default_v1();
-        let mut p = ConversationPackV1::new(9, 64, z32(b"snap3"), z32(b"sig3"), Some(z32(b"lex3")), limits);
+        let mut p = ConversationPackV1::new(
+            9,
+            64,
+            z32(b"snap3"),
+            z32(b"sig3"),
+            Some(z32(b"lex3")),
+            limits,
+        );
         p.messages.push(ConversationMessage {
             role: ConversationRole::Assistant,
             content: "reply".to_string(),

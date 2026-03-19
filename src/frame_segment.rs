@@ -22,8 +22,8 @@
 
 use crate::codec::{ByteReader, ByteWriter, DecodeError, EncodeError};
 use crate::frame::{
-    ConfidenceQ16, DocId, EntityId, FrameRowV1, Id64, Polarity, SectionId, SourceId, TermFreq, TermId,
-    VerbId, WhereId,
+    ConfidenceQ16, DocId, EntityId, FrameRowV1, Id64, Polarity, SectionId, SourceId, TermFreq,
+    TermId, VerbId, WhereId,
 };
 
 /// Magic bytes for FrameSegment v1.
@@ -48,7 +48,10 @@ impl FrameSegmentV1 {
     /// - entity_ids are sorted ascending by id
     /// - terms are sorted ascending by term id
     /// - doc_len is recomputed as sum(tf) (clamped to u32::MAX)
-    pub fn from_rows(rows: &[FrameRowV1], chunk_rows: u32) -> Result<FrameSegmentV1, FrameSegmentError> {
+    pub fn from_rows(
+        rows: &[FrameRowV1],
+        chunk_rows: u32,
+    ) -> Result<FrameSegmentV1, FrameSegmentError> {
         let cr = if chunk_rows == 0 { 1024 } else { chunk_rows };
         let mut chunks: Vec<FrameChunkV1> = Vec::new();
 
@@ -60,7 +63,10 @@ impl FrameSegmentV1 {
             i = end;
         }
 
-        Ok(FrameSegmentV1 { chunk_rows: cr, chunks })
+        Ok(FrameSegmentV1 {
+            chunk_rows: cr,
+            chunks,
+        })
     }
 
     /// Encode the segment to canonical bytes.
@@ -125,31 +131,31 @@ impl FrameSegmentV1 {
         out
     }
 
-/// Return the total number of rows in this segment (sum of chunk row counts).
-pub fn row_count(&self) -> u64 {
-    let mut n: u64 = 0;
-    for c in &self.chunks {
-        n = n.saturating_add(c.rows as u64);
-    }
-    n
-}
-
-/// Fetch a single row by absolute row index without expanding the whole segment.
-///
-/// Returns None if the index is out of range or if the underlying packed
-/// columns are inconsistent. This is intended for retrieval/evidence paths
-/// that must remain bounded-memory.
-pub fn get_row(&self, row_ix: u32) -> Option<FrameRowV1> {
-    let mut idx = row_ix as u64;
-    for c in &self.chunks {
-        let cr = c.rows as u64;
-        if idx < cr {
-            return c.row_at(idx as usize);
+    /// Return the total number of rows in this segment (sum of chunk row counts).
+    pub fn row_count(&self) -> u64 {
+        let mut n: u64 = 0;
+        for c in &self.chunks {
+            n = n.saturating_add(c.rows as u64);
         }
-        idx -= cr;
+        n
     }
-    None
-}
+
+    /// Fetch a single row by absolute row index without expanding the whole segment.
+    ///
+    /// Returns None if the index is out of range or if the underlying packed
+    /// columns are inconsistent. This is intended for retrieval/evidence paths
+    /// that must remain bounded-memory.
+    pub fn get_row(&self, row_ix: u32) -> Option<FrameRowV1> {
+        let mut idx = row_ix as u64;
+        for c in &self.chunks {
+            let cr = c.rows as u64;
+            if idx < cr {
+                return c.row_at(idx as usize);
+            }
+            idx -= cr;
+        }
+        None
+    }
 }
 
 /// A chunk of rows within a FrameSegment.
@@ -255,15 +261,15 @@ impl FrameChunkV1 {
         let mut term_tf_pool: Vec<u32> = Vec::new();
 
         for (idx, row) in rows.iter().enumerate() {
-            doc_id.push(row.doc_id.0.0);
-            source_id.push(row.source_id.0.0);
+            doc_id.push(row.doc_id.0 .0);
+            source_id.push(row.source_id.0 .0);
             when_ns.push(row.when_ns);
 
-            section_bits.push_opt_u64(idx, row.section_id.map(|v| v.0.0), &mut section_vals);
-            where_bits.push_opt_u64(idx, row.where_id.map(|v| v.0.0), &mut where_vals);
-            who_bits.push_opt_u64(idx, row.who.map(|v| v.0.0), &mut who_vals);
-            what_bits.push_opt_u64(idx, row.what.map(|v| v.0.0), &mut what_vals);
-            verb_bits.push_opt_u64(idx, row.verb.map(|v| v.0.0), &mut verb_vals);
+            section_bits.push_opt_u64(idx, row.section_id.map(|v| v.0 .0), &mut section_vals);
+            where_bits.push_opt_u64(idx, row.where_id.map(|v| v.0 .0), &mut where_vals);
+            who_bits.push_opt_u64(idx, row.who.map(|v| v.0 .0), &mut who_vals);
+            what_bits.push_opt_u64(idx, row.what.map(|v| v.0 .0), &mut what_vals);
+            verb_bits.push_opt_u64(idx, row.verb.map(|v| v.0 .0), &mut verb_vals);
 
             polarity.push(row.polarity.as_i8() as u8);
             confidence.push(row.confidence.0);
@@ -271,7 +277,7 @@ impl FrameChunkV1 {
             // Canonicalize entity_ids: stable sort by id.
             let mut eids: Vec<u64> = Vec::with_capacity(row.entity_ids.len());
             for e in &row.entity_ids {
-                eids.push(e.0.0);
+                eids.push(e.0 .0);
             }
             eids.sort_unstable();
 
@@ -291,7 +297,7 @@ impl FrameChunkV1 {
             let mut tids: Vec<(u64, u32)> = Vec::with_capacity(row.terms.len());
             let mut sum_tf: u64 = 0;
             for t in &row.terms {
-                let id = t.term.0.0;
+                let id = t.term.0 .0;
                 tids.push((id, t.tf));
                 sum_tf += t.tf as u64;
             }
@@ -313,7 +319,11 @@ impl FrameChunkV1 {
             }
 
             // Recompute doc_len from terms (clamp).
-            let dl = if sum_tf > (u32::MAX as u64) { u32::MAX } else { sum_tf as u32 };
+            let dl = if sum_tf > (u32::MAX as u64) {
+                u32::MAX
+            } else {
+                sum_tf as u32
+            };
             doc_len.push(dl);
         }
 
@@ -497,124 +507,131 @@ impl FrameChunkV1 {
     }
 
     // Fetch a single row by index without expanding the whole chunk.
-//
-// Returns None if the index is out of range or if internal packed columns
-// are inconsistent (malformed data).
-fn row_at(&self, idx: usize) -> Option<FrameRowV1> {
-    let rows = self.rows as usize;
-    if idx >= rows {
-        return None;
-    }
-    if idx >= self.doc_id.len()
-        || idx >= self.source_id.len()
-        || idx >= self.when_ns.len()
-        || idx >= self.polarity.len()
-        || idx >= self.confidence.len()
-        || idx >= self.doc_len.len()
-        || idx >= self.entity_offs.len()
-        || idx >= self.entity_lens.len()
-        || idx >= self.term_offs.len()
-        || idx >= self.term_lens.len()
-    {
-        return None;
-    }
-
-    let doc_id = DocId(Id64(self.doc_id[idx]));
-    let source_id = SourceId(Id64(self.source_id[idx]));
-    let mut row = FrameRowV1::new(doc_id, source_id);
-
-    row.when_ns = self.when_ns[idx];
-
-    row.section_id = if bitmap_has(&self.section_id_bitmap, idx) {
-        let vi = bitmap_rank(&self.section_id_bitmap, idx);
-        if vi >= self.section_id_values.len() {
+    //
+    // Returns None if the index is out of range or if internal packed columns
+    // are inconsistent (malformed data).
+    fn row_at(&self, idx: usize) -> Option<FrameRowV1> {
+        let rows = self.rows as usize;
+        if idx >= rows {
             return None;
         }
-        Some(SectionId(Id64(self.section_id_values[vi])))
-    } else {
-        None
-    };
-
-    row.where_id = if bitmap_has(&self.where_id_bitmap, idx) {
-        let vi = bitmap_rank(&self.where_id_bitmap, idx);
-        if vi >= self.where_id_values.len() {
+        if idx >= self.doc_id.len()
+            || idx >= self.source_id.len()
+            || idx >= self.when_ns.len()
+            || idx >= self.polarity.len()
+            || idx >= self.confidence.len()
+            || idx >= self.doc_len.len()
+            || idx >= self.entity_offs.len()
+            || idx >= self.entity_lens.len()
+            || idx >= self.term_offs.len()
+            || idx >= self.term_lens.len()
+        {
             return None;
         }
-        Some(WhereId(Id64(self.where_id_values[vi])))
-    } else {
-        None
-    };
 
-    row.who = if bitmap_has(&self.who_bitmap, idx) {
-        let vi = bitmap_rank(&self.who_bitmap, idx);
-        if vi >= self.who_values.len() {
+        let doc_id = DocId(Id64(self.doc_id[idx]));
+        let source_id = SourceId(Id64(self.source_id[idx]));
+        let mut row = FrameRowV1::new(doc_id, source_id);
+
+        row.when_ns = self.when_ns[idx];
+
+        row.section_id = if bitmap_has(&self.section_id_bitmap, idx) {
+            let vi = bitmap_rank(&self.section_id_bitmap, idx);
+            if vi >= self.section_id_values.len() {
+                return None;
+            }
+            Some(SectionId(Id64(self.section_id_values[vi])))
+        } else {
+            None
+        };
+
+        row.where_id = if bitmap_has(&self.where_id_bitmap, idx) {
+            let vi = bitmap_rank(&self.where_id_bitmap, idx);
+            if vi >= self.where_id_values.len() {
+                return None;
+            }
+            Some(WhereId(Id64(self.where_id_values[vi])))
+        } else {
+            None
+        };
+
+        row.who = if bitmap_has(&self.who_bitmap, idx) {
+            let vi = bitmap_rank(&self.who_bitmap, idx);
+            if vi >= self.who_values.len() {
+                return None;
+            }
+            Some(EntityId(Id64(self.who_values[vi])))
+        } else {
+            None
+        };
+
+        row.what = if bitmap_has(&self.what_bitmap, idx) {
+            let vi = bitmap_rank(&self.what_bitmap, idx);
+            if vi >= self.what_values.len() {
+                return None;
+            }
+            Some(EntityId(Id64(self.what_values[vi])))
+        } else {
+            None
+        };
+
+        row.verb = if bitmap_has(&self.verb_bitmap, idx) {
+            let vi = bitmap_rank(&self.verb_bitmap, idx);
+            if vi >= self.verb_values.len() {
+                return None;
+            }
+            Some(VerbId(Id64(self.verb_values[vi])))
+        } else {
+            None
+        };
+
+        let p = self.polarity[idx] as i8;
+        row.polarity = Polarity::from_i8(p).unwrap_or(Polarity::Neutral);
+        row.confidence = ConfidenceQ16(self.confidence[idx]);
+        row.doc_len = self.doc_len[idx];
+
+        // entities
+        let eo = self.entity_offs[idx] as usize;
+        let el = self.entity_lens[idx] as usize;
+        if eo
+            .checked_add(el)
+            .map(|end| end <= self.entity_pool.len())
+            .unwrap_or(false)
+        {
+            row.entity_ids = self.entity_pool[eo..eo + el]
+                .iter()
+                .map(|v| EntityId(Id64(*v)))
+                .collect();
+        } else {
             return None;
         }
-        Some(EntityId(Id64(self.who_values[vi])))
-    } else {
-        None
-    };
 
-    row.what = if bitmap_has(&self.what_bitmap, idx) {
-        let vi = bitmap_rank(&self.what_bitmap, idx);
-        if vi >= self.what_values.len() {
+        // terms
+        let to = self.term_offs[idx] as usize;
+        let tl = self.term_lens[idx] as usize;
+        let end = match to.checked_add(tl) {
+            Some(v) => v,
+            None => return None,
+        };
+        if end > self.term_id_pool.len() || end > self.term_tf_pool.len() {
             return None;
         }
-        Some(EntityId(Id64(self.what_values[vi])))
-    } else {
-        None
-    };
 
-    row.verb = if bitmap_has(&self.verb_bitmap, idx) {
-        let vi = bitmap_rank(&self.verb_bitmap, idx);
-        if vi >= self.verb_values.len() {
-            return None;
+        let mut terms: Vec<TermFreq> = Vec::with_capacity(tl);
+        for j in 0..tl {
+            let id = self.term_id_pool[to + j];
+            let tf = self.term_tf_pool[to + j];
+            terms.push(TermFreq {
+                term: TermId(Id64(id)),
+                tf,
+            });
         }
-        Some(VerbId(Id64(self.verb_values[vi])))
-    } else {
-        None
-    };
+        row.terms = terms;
 
-    let p = self.polarity[idx] as i8;
-    row.polarity = Polarity::from_i8(p).unwrap_or(Polarity::Neutral);
-    row.confidence = ConfidenceQ16(self.confidence[idx]);
-    row.doc_len = self.doc_len[idx];
-
-    // entities
-    let eo = self.entity_offs[idx] as usize;
-    let el = self.entity_lens[idx] as usize;
-    if eo.checked_add(el).map(|end| end <= self.entity_pool.len()).unwrap_or(false) {
-        row.entity_ids = self.entity_pool[eo..eo + el]
-            .iter()
-            .map(|v| EntityId(Id64(*v)))
-            .collect();
-    } else {
-        return None;
+        Some(row)
     }
 
-    // terms
-    let to = self.term_offs[idx] as usize;
-    let tl = self.term_lens[idx] as usize;
-    let end = match to.checked_add(tl) {
-        Some(v) => v,
-        None => return None,
-    };
-    if end > self.term_id_pool.len() || end > self.term_tf_pool.len() {
-        return None;
-    }
-
-    let mut terms: Vec<TermFreq> = Vec::with_capacity(tl);
-    for j in 0..tl {
-        let id = self.term_id_pool[to + j];
-        let tf = self.term_tf_pool[to + j];
-        terms.push(TermFreq { term: TermId(Id64(id)), tf });
-    }
-    row.terms = terms;
-
-    Some(row)
-}
-
-fn push_rows(&self, out: &mut Vec<FrameRowV1>) {
+    fn push_rows(&self, out: &mut Vec<FrameRowV1>) {
         let rows = self.rows as usize;
 
         let mut section_i = 0usize;
@@ -678,7 +695,10 @@ fn push_rows(&self, out: &mut Vec<FrameRowV1>) {
             // entities
             let eo = self.entity_offs[idx] as usize;
             let el = self.entity_lens[idx] as usize;
-            row.entity_ids = self.entity_pool[eo..eo + el].iter().map(|v| EntityId(Id64(*v))).collect();
+            row.entity_ids = self.entity_pool[eo..eo + el]
+                .iter()
+                .map(|v| EntityId(Id64(*v)))
+                .collect();
 
             // terms
             let to = self.term_offs[idx] as usize;
@@ -687,7 +707,10 @@ fn push_rows(&self, out: &mut Vec<FrameRowV1>) {
             for j in 0..tl {
                 let id = self.term_id_pool[to + j];
                 let tf = self.term_tf_pool[to + j];
-                terms.push(TermFreq { term: TermId(Id64(id)), tf });
+                terms.push(TermFreq {
+                    term: TermId(Id64(id)),
+                    tf,
+                });
             }
             row.terms = terms;
 
@@ -928,8 +951,14 @@ mod tests {
         a.entity_ids.push(EntityId(Id64(33)));
         a.entity_ids.push(EntityId(Id64(22)));
         // Intentionally unsorted terms; segment builder should sort.
-        a.terms.push(TermFreq { term: TermId(derive_id64(b"t", b"b")), tf: 2 });
-        a.terms.push(TermFreq { term: TermId(derive_id64(b"t", b"a")), tf: 1 });
+        a.terms.push(TermFreq {
+            term: TermId(derive_id64(b"t", b"b")),
+            tf: 2,
+        });
+        a.terms.push(TermFreq {
+            term: TermId(derive_id64(b"t", b"a")),
+            tf: 1,
+        });
         rows.push(a);
 
         let mut b = mk_row(2, 9);
@@ -947,15 +976,15 @@ mod tests {
         assert_eq!(r2.len(), 2);
 
         // Row 0 should have sorted entity ids.
-        assert_eq!(r2[0].entity_ids[0].0.0, 22);
-        assert_eq!(r2[0].entity_ids[1].0.0, 33);
+        assert_eq!(r2[0].entity_ids[0].0 .0, 22);
+        assert_eq!(r2[0].entity_ids[1].0 .0, 33);
 
         // Row 0 terms should be sorted by term id.
-        assert!(r2[0].terms[0].term.0.0 <= r2[0].terms[1].term.0.0);
+        assert!(r2[0].terms[0].term.0 .0 <= r2[0].terms[1].term.0 .0);
 
         // Optional fields preserved.
-        assert_eq!(r2[0].section_id.unwrap().0.0, 77);
-        assert_eq!(r2[0].where_id.unwrap().0.0, 88);
+        assert_eq!(r2[0].section_id.unwrap().0 .0, 77);
+        assert_eq!(r2[0].where_id.unwrap().0 .0, 88);
 
         // Row 1 optional fields are None.
         assert!(r2[1].section_id.is_none());
@@ -969,7 +998,10 @@ mod tests {
         let mut a = mk_row(10, 1);
         a.section_id = Some(SectionId(Id64(123)));
         a.entity_ids.push(EntityId(Id64(9)));
-        a.terms.push(TermFreq { term: TermId(derive_id64(b"t", b"alpha")), tf: 3 });
+        a.terms.push(TermFreq {
+            term: TermId(derive_id64(b"t", b"alpha")),
+            tf: 3,
+        });
         rows.push(a);
 
         let mut b = mk_row(11, 1);
@@ -979,8 +1011,14 @@ mod tests {
         let mut c = mk_row(12, 2);
         c.where_id = Some(WhereId(Id64(555)));
         c.who = Some(EntityId(Id64(77)));
-        c.terms.push(TermFreq { term: TermId(derive_id64(b"t", b"beta")), tf: 1 });
-        c.terms.push(TermFreq { term: TermId(derive_id64(b"t", b"gamma")), tf: 2 });
+        c.terms.push(TermFreq {
+            term: TermId(derive_id64(b"t", b"beta")),
+            tf: 1,
+        });
+        c.terms.push(TermFreq {
+            term: TermId(derive_id64(b"t", b"gamma")),
+            tf: 2,
+        });
         rows.push(c);
 
         // Force multiple chunks.
@@ -998,12 +1036,6 @@ mod tests {
 
         assert!(seg2.get_row(3).is_none());
     }
-
-
-
-
-
-
 
     #[test]
     fn frame_segment_is_deterministic() {
@@ -1052,7 +1084,7 @@ mod tests {
         // polarity, confidence, doc_len,
         // entity_offs, entity_lens, entity_pool,
         // term_offs, term_lens, term_id_pool, term_tf_pool
-                // entity_lens is after entity_offs.
+        // entity_lens is after entity_offs.
 
         fn skip_blob(rr: &mut ByteReader<'_>) {
             let ln = rr.read_u32().unwrap() as usize;

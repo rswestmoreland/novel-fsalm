@@ -68,7 +68,13 @@ pub struct ExpansionKindBudgetV1 {
 
 impl ExpansionKindBudgetV1 {
     /// Construct a new kind budget entry.
-    pub fn new(kind: ExpansionKindV1, max_total: u16, max_per_base: u8, weight_mul_q16: u32, weight_floor: u16) -> Self {
+    pub fn new(
+        kind: ExpansionKindV1,
+        max_total: u16,
+        max_per_base: u8,
+        weight_mul_q16: u32,
+        weight_floor: u16,
+    ) -> Self {
         ExpansionKindBudgetV1 {
             kind,
             max_total,
@@ -114,7 +120,9 @@ impl core::fmt::Display for ExpansionBudgetError {
         match self {
             ExpansionBudgetError::BadVersion => f.write_str("bad expansion budget version"),
             ExpansionBudgetError::MaxTotalZero => f.write_str("max_expansions_total must be >= 1"),
-            ExpansionBudgetError::RequiredExceedsTotal => f.write_str("max_required_total exceeds max_expansions_total"),
+            ExpansionBudgetError::RequiredExceedsTotal => {
+                f.write_str("max_required_total exceeds max_expansions_total")
+            }
             ExpansionBudgetError::TooManyKinds => f.write_str("too many kind entries"),
             ExpansionBudgetError::NotCanonical => f.write_str("kind entries not canonical"),
         }
@@ -255,7 +263,9 @@ impl ExpansionBudgetV1 {
             return Err(DecodeError::new("max_expansions_total must be >= 1"));
         }
         if max_required_total > max_expansions_total {
-            return Err(DecodeError::new("max_required_total exceeds max_expansions_total"));
+            return Err(DecodeError::new(
+                "max_required_total exceeds max_expansions_total",
+            ));
         }
 
         Ok(ExpansionBudgetV1 {

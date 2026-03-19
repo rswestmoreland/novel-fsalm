@@ -19,13 +19,13 @@
 use crate::conversation_pack::{ConversationPackV1, ConversationRole};
 use crate::exemplar_memory::{
     ExemplarMemoryFlagsV1, ExemplarMemoryV1, ExemplarResponseModeV1, ExemplarRowFlagsV1,
-    ExemplarRowV1, ExemplarStructureKindV1, ExemplarSupportRefV1,
-    ExemplarSupportSourceKindV1, ExemplarToneKindV1, EXEMPLAR_MEMORY_V1_MAX_SUPPORT_REFS,
-    EXEMPLAR_MEMORY_V1_MAX_ROWS, EXEMPLAR_MEMORY_V1_VERSION, EXMEM_FLAGS_V1_ALL,
-    EXMEM_FLAG_HAS_CONVERSATION_PACK, EXMEM_FLAG_HAS_GOLDEN_PACK,
-    EXMEM_FLAG_HAS_GOLDEN_PACK_CONVERSATION, EXMEM_FLAG_HAS_MARKOV_TRACE,
-    EXMEM_FLAG_HAS_PROMPT_PACK, EXMEM_FLAG_HAS_REPLAY_LOG, EXROW_FLAG_HAS_CLARIFIER,
-    EXROW_FLAG_HAS_COMPARISON, EXROW_FLAG_HAS_STEPS, EXROW_FLAG_HAS_SUMMARY,
+    ExemplarRowV1, ExemplarStructureKindV1, ExemplarSupportRefV1, ExemplarSupportSourceKindV1,
+    ExemplarToneKindV1, EXEMPLAR_MEMORY_V1_MAX_ROWS, EXEMPLAR_MEMORY_V1_MAX_SUPPORT_REFS,
+    EXEMPLAR_MEMORY_V1_VERSION, EXMEM_FLAGS_V1_ALL, EXMEM_FLAG_HAS_CONVERSATION_PACK,
+    EXMEM_FLAG_HAS_GOLDEN_PACK, EXMEM_FLAG_HAS_GOLDEN_PACK_CONVERSATION,
+    EXMEM_FLAG_HAS_MARKOV_TRACE, EXMEM_FLAG_HAS_PROMPT_PACK, EXMEM_FLAG_HAS_REPLAY_LOG,
+    EXROW_FLAG_HAS_CLARIFIER, EXROW_FLAG_HAS_COMPARISON, EXROW_FLAG_HAS_STEPS,
+    EXROW_FLAG_HAS_SUMMARY,
 };
 use crate::frame::{derive_id64, Id64};
 use crate::golden_pack::GoldenPackReportV1;
@@ -185,15 +185,24 @@ impl<'a> ExemplarSourceArtifactV1<'a> {
     /// Return the canonical build input for this source artifact.
     pub fn build_input(&self) -> ExemplarBuildInputV1 {
         match self {
-            ExemplarSourceArtifactV1::ReplayLog { source_hash, artifact } => {
+            ExemplarSourceArtifactV1::ReplayLog {
+                source_hash,
+                artifact,
+            } => {
                 let _ = artifact.version;
                 ExemplarBuildInputV1::new(ExemplarSupportSourceKindV1::ReplayLog, *source_hash)
             }
-            ExemplarSourceArtifactV1::PromptPack { source_hash, artifact } => {
+            ExemplarSourceArtifactV1::PromptPack {
+                source_hash,
+                artifact,
+            } => {
                 let _ = artifact.version;
                 ExemplarBuildInputV1::new(ExemplarSupportSourceKindV1::PromptPack, *source_hash)
             }
-            ExemplarSourceArtifactV1::GoldenPack { source_hash, artifact } => {
+            ExemplarSourceArtifactV1::GoldenPack {
+                source_hash,
+                artifact,
+            } => {
                 let _ = artifact.version;
                 ExemplarBuildInputV1::new(ExemplarSupportSourceKindV1::GoldenPack, *source_hash)
             }
@@ -207,14 +216,20 @@ impl<'a> ExemplarSourceArtifactV1<'a> {
                     *source_hash,
                 )
             }
-            ExemplarSourceArtifactV1::ConversationPack { source_hash, artifact } => {
+            ExemplarSourceArtifactV1::ConversationPack {
+                source_hash,
+                artifact,
+            } => {
                 let _ = artifact.version;
                 ExemplarBuildInputV1::new(
                     ExemplarSupportSourceKindV1::ConversationPack,
                     *source_hash,
                 )
             }
-            ExemplarSourceArtifactV1::MarkovTrace { source_hash, artifact } => {
+            ExemplarSourceArtifactV1::MarkovTrace {
+                source_hash,
+                artifact,
+            } => {
                 let _ = artifact.version;
                 ExemplarBuildInputV1::new(ExemplarSupportSourceKindV1::MarkovTrace, *source_hash)
             }
@@ -243,9 +258,7 @@ impl core::fmt::Display for ExemplarBuildError {
             ExemplarBuildError::BadConfig => f.write_str("bad exemplar build config"),
             ExemplarBuildError::TooManyInputs => f.write_str("too many exemplar build inputs"),
             ExemplarBuildError::TooManyRows => f.write_str("too many exemplar rows"),
-            ExemplarBuildError::TooManySupportRefs => {
-                f.write_str("too many exemplar support refs")
-            }
+            ExemplarBuildError::TooManySupportRefs => f.write_str("too many exemplar support refs"),
             ExemplarBuildError::InvalidOutput => f.write_str("invalid exemplar build output"),
         }
     }
@@ -286,7 +299,10 @@ struct SourceSlotV1 {
     source_ix: usize,
 }
 
-fn cmp_support_ref_canon(a: &ExemplarSupportRefV1, b: &ExemplarSupportRefV1) -> core::cmp::Ordering {
+fn cmp_support_ref_canon(
+    a: &ExemplarSupportRefV1,
+    b: &ExemplarSupportRefV1,
+) -> core::cmp::Ordering {
     match (a.source_kind as u8).cmp(&(b.source_kind as u8)) {
         core::cmp::Ordering::Equal => {}
         o => return o,
@@ -409,7 +425,9 @@ fn build_query_shape_seed_v1(
         ExemplarResponseModeV1::Summarize
     } else if (flags & INTENT_FLAG_IS_EXPLAIN_REQUEST) != 0 || fallback_explain {
         ExemplarResponseModeV1::Explain
-    } else if (flags & INTENT_FLAG_IS_PROBLEM_SOLVE) != 0 || (flags & INTENT_FLAG_IS_LOGIC_PUZZLE) != 0 {
+    } else if (flags & INTENT_FLAG_IS_PROBLEM_SOLVE) != 0
+        || (flags & INTENT_FLAG_IS_LOGIC_PUZZLE) != 0
+    {
         ExemplarResponseModeV1::Troubleshoot
     } else {
         ExemplarResponseModeV1::Direct
@@ -511,7 +529,10 @@ fn mine_conversation_pack_rows_v1(
     Vec::new()
 }
 
-fn mine_markov_trace_rows_v1(source_hash: Hash32, trace: &MarkovTraceV1) -> Vec<ExemplarMinedSeedV1> {
+fn mine_markov_trace_rows_v1(
+    source_hash: Hash32,
+    trace: &MarkovTraceV1,
+) -> Vec<ExemplarMinedSeedV1> {
     let clarifier_intro0 = derive_id64(b"markov_choice_v1", b"other:clarifier_intro:0");
     let clarifier_intro1 = derive_id64(b"markov_choice_v1", b"other:clarifier_intro:1");
     let append_clarify = derive_id64(b"markov_choice_v1", b"append:clarify_question");
@@ -554,7 +575,10 @@ fn mine_markov_trace_rows_v1(source_hash: Hash32, trace: &MarkovTraceV1) -> Vec<
                 saw_any = true;
             }
         }
-        if tok.choice_id == clarifier_intro0 || tok.choice_id == clarifier_intro1 || tok.choice_id == append_clarify {
+        if tok.choice_id == clarifier_intro0
+            || tok.choice_id == clarifier_intro1
+            || tok.choice_id == append_clarify
+        {
             flags |= EXROW_FLAG_HAS_CLARIFIER;
             response_mode = ExemplarResponseModeV1::Clarify;
             structure_kind = ExemplarStructureKindV1::Clarifier;
@@ -724,10 +748,9 @@ pub fn mine_exemplar_rows_from_sources_v1(
             let exemplar_id = make_exemplar_id_v1(seed.key);
             match rows.iter_mut().find(|r| r.exemplar_id == exemplar_id) {
                 Some(row) => {
-                    let is_new = row
-                        .support_refs
-                        .iter()
-                        .all(|r| cmp_support_ref_canon(r, &seed.support_ref) != core::cmp::Ordering::Equal);
+                    let is_new = row.support_refs.iter().all(|r| {
+                        cmp_support_ref_canon(r, &seed.support_ref) != core::cmp::Ordering::Equal
+                    });
                     if is_new {
                         row.support_count = row.support_count.saturating_add(1);
                         if row.support_refs.len() < plan.max_support_refs_per_row as usize {
@@ -758,7 +781,8 @@ pub fn mine_exemplar_rows_from_sources_v1(
     for row in &mut rows {
         row.support_refs.sort_by(cmp_support_ref_canon);
         if row.support_refs.len() > plan.max_support_refs_per_row as usize {
-            row.support_refs.truncate(plan.max_support_refs_per_row as usize);
+            row.support_refs
+                .truncate(plan.max_support_refs_per_row as usize);
         }
     }
     Ok(rows)
@@ -774,7 +798,8 @@ pub fn build_empty_exemplar_memory_v1(
         flags: plan.flags,
         rows: Vec::new(),
     };
-    out.validate().map_err(|_| ExemplarBuildError::InvalidOutput)?;
+    out.validate()
+        .map_err(|_| ExemplarBuildError::InvalidOutput)?;
     Ok(out)
 }
 
@@ -800,7 +825,8 @@ pub fn finalize_exemplar_memory_v1(
         flags: plan.flags,
         rows,
     };
-    out.validate().map_err(|_| ExemplarBuildError::InvalidOutput)?;
+    out.validate()
+        .map_err(|_| ExemplarBuildError::InvalidOutput)?;
     Ok(out)
 }
 
@@ -896,28 +922,17 @@ mod tests {
     #[test]
     fn build_plan_dedups_and_caps_inputs() {
         let cfg = sample_cfg();
-        let a = ExemplarBuildInputV1::new(
-            ExemplarSupportSourceKindV1::ReplayLog,
-            blake3_hash(b"a"),
-        );
-        let b = ExemplarBuildInputV1::new(
-            ExemplarSupportSourceKindV1::ReplayLog,
-            blake3_hash(b"b"),
-        );
-        let c = ExemplarBuildInputV1::new(
-            ExemplarSupportSourceKindV1::ReplayLog,
-            blake3_hash(b"c"),
-        );
-        let d = ExemplarBuildInputV1::new(
-            ExemplarSupportSourceKindV1::PromptPack,
-            blake3_hash(b"d"),
-        );
-        let (plan, report) = prepare_exemplar_build_plan_v1(
-            blake3_hash(b"build"),
-            vec![c, a, a, d, b],
-            &cfg,
-        )
-        .expect("prepare");
+        let a =
+            ExemplarBuildInputV1::new(ExemplarSupportSourceKindV1::ReplayLog, blake3_hash(b"a"));
+        let b =
+            ExemplarBuildInputV1::new(ExemplarSupportSourceKindV1::ReplayLog, blake3_hash(b"b"));
+        let c =
+            ExemplarBuildInputV1::new(ExemplarSupportSourceKindV1::ReplayLog, blake3_hash(b"c"));
+        let d =
+            ExemplarBuildInputV1::new(ExemplarSupportSourceKindV1::PromptPack, blake3_hash(b"d"));
+        let (plan, report) =
+            prepare_exemplar_build_plan_v1(blake3_hash(b"build"), vec![c, a, a, d, b], &cfg)
+                .expect("prepare");
         assert_eq!(report.inputs_seen, 5);
         assert_eq!(report.inputs_deduped, 1);
         assert_eq!(report.inputs_dropped_by_cap, 1);
@@ -1021,7 +1036,10 @@ mod tests {
             .iter()
             .find(|r| r.response_mode == ExemplarResponseModeV1::Summarize)
             .expect("summary row");
-        assert_eq!(summary.structure_kind, ExemplarStructureKindV1::SummaryFirst);
+        assert_eq!(
+            summary.structure_kind,
+            ExemplarStructureKindV1::SummaryFirst
+        );
         assert_eq!(summary.flags, EXROW_FLAG_HAS_SUMMARY);
         let out = finalize_exemplar_memory_v1(&plan, rows).expect("finalize");
         assert!(out.is_canonical());

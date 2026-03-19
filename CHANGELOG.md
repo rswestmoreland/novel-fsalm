@@ -7,6 +7,11 @@ This file tracks user-visible changes.
 - No user-visible changes recorded yet.
 
 ## 0.1.3
+### Added
+- Exemplar guidance support via `ExemplarMemoryV1`, including exemplar-memory build/runtime flows and bounded answer shaping for tone, structure, and clarifier style.
+- Graph-assisted query expansion via `GraphRelevanceV1`, including graph-relevance build/runtime flows that enrich expansion candidates without outranking lexical evidence.
+- Acceptance and release-audit docs for the new default user-vs-operator presentation split, plus comparison smoke scripts for both surfaces.
+
 ### Changed
 - Default presentation now targets a conversational user-facing surface for `ask`, `chat`, and `answer`, while `--presentation operator` preserves the inspect-friendly workflow.
 - Raw operator diagnostics such as `Answer v1`, `query_id=...`, `routing_trace ...`, `graph_trace ...`, and `exemplar_match ...` are hidden by default and shown only in operator mode.

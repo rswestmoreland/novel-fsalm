@@ -14,7 +14,9 @@
 //! Persistence and cross-turn continuation are handled in a later milestone.
 
 use crate::frame::derive_id64;
-use crate::lexicon::{derive_lemma_key_id, LemmaId, LemmaKeyId, POS_ADJ, POS_ADV, POS_NOUN, POS_PROPER_NOUN, POS_VERB};
+use crate::lexicon::{
+    derive_lemma_key_id, LemmaId, LemmaKeyId, POS_ADJ, POS_ADV, POS_NOUN, POS_PROPER_NOUN, POS_VERB,
+};
 use crate::lexicon_expand_lookup::LexiconExpandLookupV1;
 use crate::lexicon_neighborhoods::{lemma_pos_mask, LexiconCueNeighborhoodsV1};
 use crate::tokenizer::{TokenIter, TokenizerCfg};
@@ -111,7 +113,6 @@ fn is_small_hex_like(s: &str) -> bool {
     false
 }
 
-
 fn prev_nonspace_char(text: &str, start: usize) -> Option<u8> {
     if start == 0 {
         return None;
@@ -176,8 +177,8 @@ fn is_capitalized_name(tok: &str) -> bool {
     // Avoid treating common sentence starters and determiners as entity names.
     // This is a conservative fallback for lexicon-absent mode.
     match tok.to_ascii_lowercase().as_str() {
-        "each" | "every" | "the" | "a" | "an" | "if" | "then" | "and" | "or" | "but" |
-        "in" | "on" | "at" | "from" | "to" | "with" | "without" | "by" | "as" => {
+        "each" | "every" | "the" | "a" | "an" | "if" | "then" | "and" | "or" | "but" | "in"
+        | "on" | "at" | "from" | "to" | "with" | "without" | "by" | "as" => {
             return false;
         }
         _ => {}
@@ -267,10 +268,21 @@ fn find_numeric_range_hint(text: &str) -> Option<(i32, i32)> {
 
 fn has_constraint_operators(text: &str) -> bool {
     // Very small set of structural operators.
-    text.contains("!=") || text.contains("<=") || text.contains(">=") || text.contains("=") || text.contains("<") || text.contains(">")
+    text.contains("!=")
+        || text.contains("<=")
+        || text.contains(">=")
+        || text.contains("=")
+        || text.contains("<")
+        || text.contains(">")
 }
 
-fn token_hits_any_lemma(view: &LexiconExpandLookupV1, set: &[LemmaId], tok: &str, cap: usize, scratch: &mut Vec<LemmaId>) -> bool {
+fn token_hits_any_lemma(
+    view: &LexiconExpandLookupV1,
+    set: &[LemmaId],
+    tok: &str,
+    cap: usize,
+    scratch: &mut Vec<LemmaId>,
+) -> bool {
     if set.is_empty() {
         return false;
     }
@@ -286,7 +298,9 @@ fn token_hits_any_lemma(view: &LexiconExpandLookupV1, set: &[LemmaId], tok: &str
 
 fn ordering_seed_lemma_ids(view: &LexiconExpandLookupV1) -> Vec<LemmaId> {
     // Small, stable seed list. Expansion is handled by the lexicon snapshot.
-    let seeds = ["before", "after", "left", "right", "next", "adjacent", "between", "first", "last"];
+    let seeds = [
+        "before", "after", "left", "right", "next", "adjacent", "between", "first", "last",
+    ];
     let mut out: Vec<LemmaId> = Vec::new();
     for s in seeds.iter() {
         let key = derive_lemma_key_id(s);
@@ -299,7 +313,16 @@ fn ordering_seed_lemma_ids(view: &LexiconExpandLookupV1) -> Vec<LemmaId> {
 }
 
 fn matching_seed_lemma_ids(view: &LexiconExpandLookupV1) -> Vec<LemmaId> {
-    let seeds = ["each", "every", "different", "exactly", "either", "neither", "only", "unique"];
+    let seeds = [
+        "each",
+        "every",
+        "different",
+        "exactly",
+        "either",
+        "neither",
+        "only",
+        "unique",
+    ];
     let mut out: Vec<LemmaId> = Vec::new();
     for s in seeds.iter() {
         let key = derive_lemma_key_id(s);
@@ -313,14 +336,17 @@ fn matching_seed_lemma_ids(view: &LexiconExpandLookupV1) -> Vec<LemmaId> {
 
 fn fallback_ordering_token(tok: &str) -> bool {
     match tok {
-        "before" | "after" | "left" | "right" | "next" | "adjacent" | "between" | "first" | "last" => true,
+        "before" | "after" | "left" | "right" | "next" | "adjacent" | "between" | "first"
+        | "last" => true,
         _ => false,
     }
 }
 
 fn fallback_matching_token(tok: &str) -> bool {
     match tok {
-        "each" | "every" | "different" | "exactly" | "either" | "neither" | "only" | "unique" => true,
+        "each" | "every" | "different" | "exactly" | "either" | "neither" | "only" | "unique" => {
+            true
+        }
         _ => false,
     }
 }
@@ -445,17 +471,35 @@ pub fn build_puzzle_sketch_v1(
 
         if let Some(view) = lex_view_opt {
             if let Some(cues) = cues_opt {
-                if token_hits_any_lemma(view, &cues.logic_puzzle, tok, cfg.lemma_ids_cap_per_token, &mut lemma_scratch) {
+                if token_hits_any_lemma(
+                    view,
+                    &cues.logic_puzzle,
+                    tok,
+                    cfg.lemma_ids_cap_per_token,
+                    &mut lemma_scratch,
+                ) {
                     logic_hits = logic_hits.saturating_add(1);
                 }
             }
             if !ordering_ids.is_empty() {
-                if token_hits_any_lemma(view, &ordering_ids, tok, cfg.lemma_ids_cap_per_token, &mut lemma_scratch) {
+                if token_hits_any_lemma(
+                    view,
+                    &ordering_ids,
+                    tok,
+                    cfg.lemma_ids_cap_per_token,
+                    &mut lemma_scratch,
+                ) {
                     shape_ordering_hits = shape_ordering_hits.saturating_add(1);
                 }
             }
             if !matching_ids.is_empty() {
-                if token_hits_any_lemma(view, &matching_ids, tok, cfg.lemma_ids_cap_per_token, &mut lemma_scratch) {
+                if token_hits_any_lemma(
+                    view,
+                    &matching_ids,
+                    tok,
+                    cfg.lemma_ids_cap_per_token,
+                    &mut lemma_scratch,
+                ) {
                     shape_matching_hits = shape_matching_hits.saturating_add(1);
                 }
             }
@@ -480,7 +524,12 @@ pub fn build_puzzle_sketch_v1(
                 shape_matching_hits = shape_matching_hits.saturating_add(1);
             }
             // Very small fallback: treat "each"+"different" style phrasing as a logic-puzzle signal.
-            if lt == "each" || lt == "different" || lt == "either" || lt == "neither" || lt == "exactly" {
+            if lt == "each"
+                || lt == "different"
+                || lt == "either"
+                || lt == "neither"
+                || lt == "exactly"
+            {
                 logic_hits = logic_hits.saturating_add(1);
             }
         }
@@ -597,7 +646,6 @@ pub fn choose_puzzle_clarify_question_v1(sketch: &PuzzleSketchV1) -> Option<Puzz
     None
 }
 
-
 /// Parsed clarification reply for a pending puzzle sketch.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PuzzleClarifyReplyV1 {
@@ -646,12 +694,16 @@ fn normalize_reply_var_token(tok: &str) -> Option<String> {
 
     // Avoid common function words.
     match t.to_ascii_lowercase().as_str() {
-        "each" | "every" | "the" | "a" | "an" | "if" | "then" | "and" | "or" | "but" => return None,
+        "each" | "every" | "the" | "a" | "an" | "if" | "then" | "and" | "or" | "but" => {
+            return None
+        }
         _ => {}
     }
 
     // Canonicalize: if the token is all-lowercase, titlecase the first letter.
-    let all_lower = b.iter().all(|&x| (b'a' <= x && x <= b'z') || x == b'-' || x == b'\'');
+    let all_lower = b
+        .iter()
+        .all(|&x| (b'a' <= x && x <= b'z') || x == b'-' || x == b'\'');
     if all_lower {
         let mut chars = t.chars();
         if let Some(first) = chars.next() {
@@ -698,7 +750,8 @@ fn parse_shape_hint_from_reply(text: &str) -> Option<PuzzleShapeHintV1> {
 
 fn is_shape_hint_token(tok_lc: &str) -> bool {
     match tok_lc {
-        "ordering" | "order" | "arrange" | "arrangement" | "position" | "positions" | "seating" | "line" => true,
+        "ordering" | "order" | "arrange" | "arrangement" | "position" | "positions" | "seating"
+        | "line" => true,
         "matching" | "match" | "category" | "categories" | "assign" | "pair" | "pairs" => true,
         _ => false,
     }
@@ -837,7 +890,12 @@ mod tests {
         let q = choose_puzzle_clarify_question_v1(&s).expect("clarify");
         assert_eq!(q.kind, PuzzleClarifyKindV1::NeedVars);
 
-        let s2 = build_puzzle_sketch_v1("Alice Bob Carol each has a different fruit.", None, None, cfg);
+        let s2 = build_puzzle_sketch_v1(
+            "Alice Bob Carol each has a different fruit.",
+            None,
+            None,
+            cfg,
+        );
         let q2 = choose_puzzle_clarify_question_v1(&s2).expect("clarify");
         assert_eq!(q2.kind, PuzzleClarifyKindV1::NeedDomain);
     }
@@ -845,7 +903,10 @@ mod tests {
     #[test]
     fn parse_reply_extracts_vars_domain_shape() {
         let r1 = parse_puzzle_clarify_reply_v1("Alice,Bob,carol", 16);
-        assert_eq!(r1.var_names, vec!["Alice".to_string(), "Bob".to_string(), "Carol".to_string()]);
+        assert_eq!(
+            r1.var_names,
+            vec!["Alice".to_string(), "Bob".to_string(), "Carol".to_string()]
+        );
 
         let r2 = parse_puzzle_clarify_reply_v1("1..3", 16);
         assert_eq!(r2.domain_range, Some((1, 3)));
@@ -876,5 +937,4 @@ mod tests {
         assert_eq!(merged.domain_range, prev.domain_range);
         assert_eq!(merged.var_names, prev.var_names);
     }
-
 }

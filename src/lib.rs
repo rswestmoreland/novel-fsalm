@@ -66,10 +66,10 @@ pub mod index_store;
 /// IndexSnapshot manifest linking FrameSegment hashes to IndexSegment hashes.
 pub mod index_snapshot;
 
-/// IndexSnapshot persistence helpers.
-pub mod index_snapshot_store;
 /// Query-time index lookup and scoring.
 pub mod index_query;
+/// IndexSnapshot persistence helpers.
+pub mod index_snapshot_store;
 
 /// Canonical retrieval hit list artifact.
 pub mod hit_list;
@@ -151,8 +151,8 @@ pub mod planner_hints;
 
 /// Forecast schema.
 pub mod forecast;
-pub mod planner_hints_artifact;
 pub mod forecast_artifact;
+pub mod planner_hints_artifact;
 
 /// Context anchor terms derived from conversation history.
 pub mod context_anchors;
@@ -253,10 +253,10 @@ pub mod index_compaction;
 /// Segment signatures used for query-time gating.
 pub mod segment_sig;
 
-/// Root-local workspace defaults (v1).
-pub mod workspace;
 /// SegmentSig persistence helpers.
 pub mod segment_sig_store;
+/// Root-local workspace defaults (v1).
+pub mod workspace;
 
 /// Debug bundle exporter.
 pub mod debug_bundle;
@@ -283,7 +283,6 @@ pub mod evidence_set_artifact;
 /// EvidenceSet verifiers.
 pub mod evidence_set_verify;
 
-
 /// Evidence builder.
 pub mod evidence_builder;
 
@@ -293,9 +292,9 @@ pub mod tokenizer;
 /// Metaphonetic preprocessor.
 pub mod metaphone;
 
+pub mod pragmatics_extract;
 /// Pragmatics control-signal schema.
 pub mod pragmatics_frame;
-pub mod pragmatics_extract;
 /// PragmaticsFrame persistence helpers.
 pub mod pragmatics_frame_store;
 
@@ -348,6 +347,6 @@ pub mod wiki_ingest;
 /// Wiktionary wikitext scanning helpers.
 pub mod wiktionary_ingest;
 
+mod wiki_xml;
 /// Wiktionary XML ingest to lexicon segments and snapshots.
 pub mod wiktionary_build;
-mod wiki_xml;
